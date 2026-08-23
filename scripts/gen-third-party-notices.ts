@@ -262,7 +262,8 @@ export function treeManifest(store: string, name: string): VirtualManifest | und
   const nested = globSync(`*/**/node_modules/${name}/package.json`, { cwd: store })
     .map(path => path.replaceAll('\\', '/'))
     .sort()
-  return nested.length === 0 ? undefined : JSON.parse(readFileSync(resolve(store, nested[0]), 'utf8')) as VirtualManifest
+  const first = nested[0]
+  return first === undefined ? undefined : JSON.parse(readFileSync(resolve(store, first), 'utf8')) as VirtualManifest
 }
 
 /** Resolve one installed external package manifest from either installed tree. */

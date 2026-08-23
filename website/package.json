@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vitepress dev . --host 127.0.0.1 --port 5173",
     "build": "vitepress build .",
+    "build.mpa": "vitepress build . --mpa",
     "preview": "vitepress preview . --host 127.0.0.1 --port 4173"
   },
   "devDependencies": {

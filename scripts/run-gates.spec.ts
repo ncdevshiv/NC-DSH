@@ -239,6 +239,7 @@ describe('gate graph validation', () => {
 describe('package manager invocation', () => {
   it('launches standalone package-manager binaries directly without a node prefix', () => {
     const subject = withBunEntrypoint(() => gatesForMode('ci-lint-contracts-ready')[0])
+    if (subject === undefined) throw new Error('lint gate missing from ci-lint-contracts-ready')
 
     expect(subject.command).toBe('/home/runner/.bun/bin/bun')
     expect(subject.args).toEqual(['run', 'lint:contracts-ready'])

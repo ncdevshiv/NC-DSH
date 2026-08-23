@@ -331,7 +331,9 @@ class SingleExeBuild {
     await mkdir(join(this.staging, 'deps'), { recursive: true })
     const staged = new Map<string, string>()
     for (const name of closure) {
-      const sourceDir = join(root, directories.get(name))
+      const memberDir = directories.get(name)
+      if (memberDir === undefined) throw new Error(`build-exe-for-python-sdk: staged dependency ${name} left the workspace map.`)
+      const sourceDir = join(root, memberDir)
       const destinationDir = name === DEPLOY_ROOT_PACKAGE
         ? join(this.staging, 'closure')
         : join(this.staging, 'deps', name.replace(/[@/]/g, '-'))

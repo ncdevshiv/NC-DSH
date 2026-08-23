@@ -324,6 +324,28 @@ function rescopeTokens(text: string, renames: readonly { from: string; to: strin
 }
 
 /**
+ * Classify one file's text against an edit's source and target forms. An
+ * insertion whose anchor survives inside its target counts as applied at
+ * exactly the expected target count; a deletion whose remainder overlaps its
+ * source stays pending while the source stands. Anything else — including a
+ * duplicated insertion or a moved site missing both forms — is invalid.
+ */
+export function exactEditState(
+  text: string,
+  find: string,
+  replace: string,
+  expect: number,
+): 'pending' | 'applied' | 'invalid' {
+  const sourceCount = text.split(find).length - 1
+  const targetCount = text.split(replace).length - 1
+  if (sourceCount === expect && targetCount === 0) return 'pending'
+  if (targetCount === expect && sourceCount === 0) return 'applied'
+  if (replace.includes(find) && sourceCount === expect && targetCount === expect) return 'applied'
+  if (find.includes(replace) && sourceCount === expect) return 'pending'
+  return 'invalid'
+}
+
+/**
  * Apply every exact edit registered for one file, honoring the direction. An
  * edit whose source text is present is performed; one already in its target
  * state counts as satisfied — that is what makes a second apply a no-op. Any
@@ -336,13 +358,9 @@ function applyExactEdits(file: string, text: string, reverse: boolean): { text: 
     if (edit.file !== file) continue
     const source = reverse ? edit.replace : edit.find
     const target = reverse ? edit.find : edit.replace
-    const sourceCount = out.split(source).length - 1
-    const targetCount = out.split(target).length - 1
-    if (sourceCount === edit.expect && targetCount === 0) {
-      out = out.split(source).join(target)
-    } else if (!(targetCount === edit.expect && sourceCount === 0)) {
-      problems.push(`${edit.id}: expected source ×${String(edit.expect)} → target ×${String(edit.expect)}, found source ×${String(sourceCount)}, target ×${String(targetCount)}`)
-    }
+    const state = exactEditState(out, source, target, edit.expect)
+    if (state === 'pending') out = out.split(source).join(target)
+    else if (state === 'invalid') problems.push(`${edit.id}: source form ×${String(edit.expect)} is neither pending nor applied`)
   }
   return { text: out, problems }
 }
