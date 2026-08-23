@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write python/development.md
-development.md: 617d030294dafa51aea513adb811bb5f377431c9
-development.zh.md: 2049ad12856c4107788aec168e3724965cebd5af
+development.md: 0ad6a68c18ed37cf201ad67b97c7e83443675cd6
+development.zh.md: d7e0a40ed31a6b9d5afae48d3a67a6b761be3846
