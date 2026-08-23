@@ -152,10 +152,11 @@ const stages: StageHandle[] = []
  * @param command - executable, resolved from the workspace bin when local.
  * @param args - command arguments.
  * @param local - whether to resolve `command` from the workspace's installed bins.
+ * @param workingDir - working directory for the stage; defaults to the repository root.
  */
-function spawnStage(stage: string, command: string, args: readonly string[], local: boolean): void {
+function spawnStage(stage: string, command: string, args: readonly string[], local: boolean, workingDir: string = repoRoot): void {
   const child = execa(command, [...args], {
-    cwd: repoRoot,
+    cwd: workingDir,
     stdio: 'inherit',
     preferLocal: local,
     reject: false,
@@ -225,8 +226,10 @@ if (isMain) {
   // repository-root dependency, and more importantly the vite root is its
   // working directory — `resolve.dedupe` resolves react from that root, so
   // running vite from anywhere but apps/web silently switches which react copy
-  // the bundle gets.
-  spawnStage('vite build --watch', 'bun', ['--filter', SHELL_PACKAGE, 'run', 'watch'], false)
+  // the bundle gets. The script is launched with a cwd-scoped `bun run`, not
+  // `--filter`, because the filter form matches no workspace packages under
+  // bun on win32 (any pattern, including "*").
+  spawnStage('vite build --watch', 'bun', ['run', 'watch'], false, join(repoRoot, 'apps/web'))
 
   console.log(
     `dev-web: watching ${String(pluginDirs.length)} dsh.client plugin packages`

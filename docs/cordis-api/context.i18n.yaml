@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/cordis-api/context.md
-context.md: 320b23de1c8d19e2dacdf0ec9f2361037bcf8048
-context.zh.md: 32b513e2a29d2f6bd42c0a12134722691da37080
+context.md: 35cf26080b1c1dae557acfa50418c75b7002db62
+context.zh.md: 858654d9124da1f0ce86ff59cf3b00cfb92ee262

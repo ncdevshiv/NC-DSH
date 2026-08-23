@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write examples/headless-agent/README.md
-README.md: 2f854924d4bfd2bf66b3d6f47433136098d7b762
-README.zh.md: 4128645da8a0f8a84b17d819fc614051b68f2a11
+README.md: eb1014281131572aa3ade8607785c12cdfe046b2
+README.zh.md: ae289d77155680aed24e0f0da9792a02f5afe186

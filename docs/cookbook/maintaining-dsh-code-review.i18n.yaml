@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/cookbook/maintaining-dsh-code-review.md
-maintaining-dsh-code-review.md: a8c2a66c065aaec5c03f0ab6965377d1d1eb14bd
-maintaining-dsh-code-review.zh.md: 60c10ca59d36aa5f36177487c4aa7927397bf2f3
+maintaining-dsh-code-review.md: 8694ed87c3b0ee8a2057cbdf9b284e5904d46a86
+maintaining-dsh-code-review.zh.md: 3054dba3f82398b80285c9689b597b89d0d5cc32

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/subprocess.md
-subprocess.md: af6770e8c04f79ab1981967d5a3bca5a39b954be
-subprocess.zh.md: 19f20e7fcd675d87cf768258d1ab9c37bf80a836
+subprocess.md: 9dda200f3422f544c90f41ed958ba0b6f695091e
+subprocess.zh.md: eb62886b42868d891de2489cc6cd5c15f0b0283a

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/client-modules.md
-client-modules.md: 52fa4ef73766e8e7e7601e604f78aded9940328f
-client-modules.zh.md: e830349be77000759684a76b2834478a803e3e11
+client-modules.md: 03177022831ea11c447ba82be1e3a3c3233c63b8
+client-modules.zh.md: 81c140abb1c947cb704a612b2ca43e110e2bd0ce

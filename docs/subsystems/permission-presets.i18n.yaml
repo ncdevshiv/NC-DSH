@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/permission-presets.md
-permission-presets.md: 16ce29a4c3b00fece089ebcdc959e57f419d35c9
-permission-presets.zh.md: d2e5eff6696d5dc6f925032d7eaafb7b19774f4e
+permission-presets.md: 5a0f25d72cfdfd3c9904244a4a97f8a692bcf9a3
+permission-presets.zh.md: 7bfc8a65770c5d76d7c364d37d8e80857c93c4e5

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/user/develop/basic/index.md
-index.md: 08199624e638aaf4a36b04446c39c228b2af6025
-index.zh.md: c45a30d0bfffaf4a6c78303f9ca043c3397c8a08
+index.md: 22693356b3c0990780b928d0d8736ce7d40d7e25
+index.zh.md: d70fdcdb467640308790566f9519390c3051e9db

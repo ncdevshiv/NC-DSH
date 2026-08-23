@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/compaction.md
-compaction.md: 95a3d4b844c6126a09d4fdaafdedcf987b21d1c6
-compaction.zh.md: 3b72bb4f81675119d869fb2f7439f4640e6a5a86
+compaction.md: f5a971b346ca02613ef24e90afb0cb87258ce8a8
+compaction.zh.md: d505027dcd69ff75ad522437e259edc483dc24c4

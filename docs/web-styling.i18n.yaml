@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/web-styling.md
-web-styling.md: 5296cc7f83f712532262eadda6da098ae9f63ec7
-web-styling.zh.md: ed0906dae28a5a31f2e8e094b634ce6d9b518f31
+web-styling.md: e457bef7d92e8264d50fe923506cc73f3c083d19
+web-styling.zh.md: ebbf28b11c7bc705e079a91835dc7a1ff4436ef3

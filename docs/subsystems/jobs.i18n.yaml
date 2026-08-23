@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/jobs.md
-jobs.md: b11dc7fbe869dcaa9e71e6956a76559476391775
-jobs.zh.md: 03c3ceee8953c8c4c70f060b7e9d88371c1ebd7b
+jobs.md: b8147f4b7617ed3314286bb055b74e7dce52b771
+jobs.zh.md: 0647996535f9f5504f986e56e0b27ec9ead7c5dc

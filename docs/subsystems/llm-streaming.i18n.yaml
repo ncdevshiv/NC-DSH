@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/llm-streaming.md
-llm-streaming.md: 8731a535267bddd2bf99a06a2beee92d3083232d
-llm-streaming.zh.md: b9e71bba7428dafbbc7a366a97c2d7ddc9a87d46
+llm-streaming.md: 7ecbfea82924f751d2a55ebfb28665ba8beaaacb
+llm-streaming.zh.md: 36f078222445c204661a8a2eb1ec45b134e89b9f

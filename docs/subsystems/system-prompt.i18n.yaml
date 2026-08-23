@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/system-prompt.md
-system-prompt.md: 8a6006d0b96552b52d0b050c304a11a95add8d9e
-system-prompt.zh.md: 02be9eed795d3a6c8e43403048f135d493b6509d
+system-prompt.md: 81f0c8351502e931d747dc83f99a1449949f49d9
+system-prompt.zh.md: 7016d498d482940e021fdfc9cb2281a4571f9f1f

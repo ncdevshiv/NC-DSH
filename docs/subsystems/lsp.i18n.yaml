@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/lsp.md
-lsp.md: 18ed0e178c73702534a9964557a3dabf7bb9dd11
-lsp.zh.md: 8b154143057f05d74bf28b715a385a2ec65fbbff
+lsp.md: 4df787772d6465d967597866389847a9ccf55125
+lsp.zh.md: e4b09d15fd5d305ee16940699e133c53f21eae44

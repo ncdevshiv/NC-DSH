@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write packages/runtime-diagnostics/invariants/README.md
-README.md: 1435a7ad9a4e994ad2c89b5a94e18e86889a831f
-README.zh.md: 09ee5006c7d9b43c97468778632239780c49949b
+README.md: e1482ca38848f83f7bc35eaa6554cfc2b32d5089
+README.zh.md: 13c301fa61bfcdd7a5b92f3a0c529a847d4be30e

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/rescope.md
-rescope.md: 3dde39875021e7a4161e1ae66550e9dedf5eb4fa
-rescope.zh.md: a7f355cf651fb063bf2d4c3cefe18babd4a57401
+rescope.md: a9538ea87058806b9f727fc1343250ddddeee978
+rescope.zh.md: d91bd147721bf1ef6e5a13dff5ee6a0d359fd5dc

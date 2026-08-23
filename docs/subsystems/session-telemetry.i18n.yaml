@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/session-telemetry.md
-session-telemetry.md: dd00e428c3ecb1e0158be09cce83d1a262ab0c62
-session-telemetry.zh.md: 835fc0ff2f2daa1f4ac90fe615a62aa36f7fe41d
+session-telemetry.md: 473d488cfaa0521037d23ad5908c5974471bc503
+session-telemetry.zh.md: a502891b22390b439920a60f5b491532d625fac4

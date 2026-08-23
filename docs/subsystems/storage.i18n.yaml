@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/storage.md
-storage.md: 7e7f8d2b5a98b20308ae8115484a25066c045d52
-storage.zh.md: 41d2d1520a846d988c6c7a0b08a7576cee44ff7a
+storage.md: 021011498682b1cf901b27fa4015d056c8dcc67a
+storage.zh.md: 8c680d2ae41bf488d5405be72102712c2171556f
