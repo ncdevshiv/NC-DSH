@@ -1,0 +1,66 @@
+/** Copy dictionaries for the plugin inventory Settings section. */
+
+/** Simplified Chinese dictionary and key source of truth. */
+export const zh = {
+  tab: '插件列表',
+  loading: '正在读取插件…',
+  error: '暂时无法读取插件。',
+  retry: '重试',
+  search: '搜索插件',
+  catalog: '插件列表',
+  empty: '暂无插件。',
+  emptySearch: '没有匹配的插件。',
+  enabledTag: '已启用',
+  disabledTag: '已停用',
+  configuration: '配置状态',
+  cordis: 'Cordis 状态',
+  unobserved: '未挂载',
+  pending: '等待依赖',
+  loadingPhase: '加载中',
+  active: '已挂载',
+  failed: '挂载失败',
+  unloading: '卸载中',
+  summary: '简介',
+  impact: '停用影响',
+  toggleEnable: '启用',
+  toggleDisable: '停用',
+  toggling: '切换中…',
+  toggleFailed: '切换失败：{message}',
+  essentialWarning: '核心插件，停用可能导致界面或连接中断。',
+  enabledHint: '已启用 — 点击可停用',
+  disabledHint: '已停用 — 点击可启用',
+} satisfies Record<string, string>
+
+/** Plugin inventory locale key union. */
+export type PluginInventoryLocaleKey = keyof typeof zh
+
+/** English dictionary checked against the Chinese key set. */
+export const en = {
+  tab: 'Plugin list',
+  loading: 'Reading plugins…',
+  error: 'Plugins are temporarily unavailable.',
+  retry: 'Retry',
+  search: 'Search plugins',
+  catalog: 'Plugin list',
+  empty: 'No plugins are available.',
+  emptySearch: 'No matching plugins.',
+  enabledTag: 'Enabled',
+  disabledTag: 'Disabled',
+  configuration: 'Configuration',
+  cordis: 'Cordis status',
+  unobserved: 'Not mounted',
+  pending: 'Waiting for dependencies',
+  loadingPhase: 'Loading',
+  active: 'Mounted',
+  failed: 'Mount failed',
+  unloading: 'Unloading',
+  summary: 'About',
+  impact: 'If disabled',
+  toggleEnable: 'Enable',
+  toggleDisable: 'Disable',
+  toggling: 'Switching…',
+  toggleFailed: 'Toggle failed: {message}',
+  essentialWarning: 'Essential plugin — disabling may break the UI or connection.',
+  enabledHint: 'Enabled — click to disable',
+  disabledHint: 'Disabled — click to enable',
+} satisfies Record<PluginInventoryLocaleKey, string>

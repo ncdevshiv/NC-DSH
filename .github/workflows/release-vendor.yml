@@ -1,0 +1,120 @@
+# Pack and publish the vendored framework sequence: the nine rescoped Cordis
+# packages under vendor/, each on its own version line. This sequence releases
+# independently of dsh and of the native packages.
+#
+# Pack runs without credentials on every pull request and master push.
+# Publication is a manual dispatch from a vendor-* tag; a vendor release can
+# carry several versions, so each package has its own tag.
+name: Release (vendor)
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the packed tarballs to npm. Must run from a vendor-* tag.
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Pack runs per ref so concurrent pull requests never displace each
+  # other; the publish job below serializes the shared dist-tag state.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  pack:
+    name: Pack npm tarballs
+    runs-on: ubuntu-24.04
+    steps:
+      # Complete history: the release scripts read tags.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-bun-
+
+      - name: Install (immutable)
+        run: bun install --frozen-lockfile
+
+      - name: Verify release version
+        env:
+          RELEASE_PUBLISH: ${{ inputs.publish }}
+        run: bun run release:verify --family vendor
+
+      # The vendored packages publish their own sources and build outputs; the
+      # host build produces what their manifests select.
+      - name: Build
+        run: bun run build:lib:host
+
+      - name: Pack release tarballs
+        run: bun run release:pack --family vendor --out dist/npm-vendor
+
+      - name: Verify packed install
+        run: bun run release:verify-packed-install --family vendor --from dist/npm-vendor
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vendor-npm-tarballs
+          path: dist/npm-vendor/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to npm
+    if: inputs.publish
+    needs: pack
+    runs-on: ubuntu-24.04
+    environment: npm-publish
+    concurrency:
+      group: Release-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      # Checkout and install carry the release scripts only; no build step.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+
+      - name: Install (immutable, no package scripts)
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vendor-npm-tarballs
+          path: dist/npm-vendor
+
+      - name: Publish tarballs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bun run release:publish --family vendor --from dist/npm-vendor

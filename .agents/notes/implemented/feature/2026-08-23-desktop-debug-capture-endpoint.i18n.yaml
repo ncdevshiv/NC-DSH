@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-23-desktop-debug-capture-endpoint.md
+2026-08-23-desktop-debug-capture-endpoint.md: 26872cf0b2ec58efe02fea498171ac6cab51e235
+2026-08-23-desktop-debug-capture-endpoint.zh.md: c6728f4ed72f34e309c0d961e441ef1291955d95

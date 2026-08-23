@@ -1,0 +1,15 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Electron desktop shell: a native window over the dsh web profile's loopback server",
+  "version": "0.1.0-rc.8",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^43.4.1"
+  }
+}

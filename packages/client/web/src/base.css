@@ -1,0 +1,67 @@
+/* Shell-owned mount defaults. Theme tokens arrive with the ui-theme client
+ * plugin before the loader roster activates. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  min-height: 100%;
+}
+
+#root {
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Spectrum Provider renders a wrapping div with height:auto that breaks the
+   100% chain (Provider -> AppFrame height:100%). Force it to fill #root so
+   grid/flex layouts (AppFrame, ConversationRoot) receive a definite height.
+   Electron's viewport height varies with window chrome/DPI; 100dvh keeps the
+   shell at the real window height even when 100% collapses. */
+#root > div {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#root > div > div {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+body {
+  font-family: var(
+    --dsw-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Helvetica Neue',
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  /* Grayscale antialiasing over subpixel rendering: WebKit/Blink and the
+     Firefox macOS equivalent; other engines ignore both lines. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--dsw-alias-label-primary, #0f1115);
+  background: var(--dsw-alias-bg-base, #fff);
+}
+
+/* Form controls don't inherit the body font (UA sheets pin their families —
+   Chrome buttons fall back to Arial, textareas to monospace), so the app
+   stack is re-applied to them explicitly, as upstream's global reset does. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}

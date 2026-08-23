@@ -1,0 +1,154 @@
+# CI for the landlock-run packages under native/landlock-run. A separate
+# workflow from ci.yml keeps the native OS/architecture matrix independent of
+# the harness Node matrix. Release assembly and publication use the companion
+# Landlock Run Release workflow.
+name: Landlock Run
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/landlock-run.yml'
+      - '.github/workflows/landlock-run-release.yml'
+      - 'native/landlock-run/**'
+      - 'package.json'
+      - 'bun.lock'
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/landlock-run.yml'
+      - '.github/workflows/landlock-run-release.yml'
+      - 'native/landlock-run/**'
+      - 'package.json'
+      - 'bun.lock'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # CI runs must never report to the production telemetry endpoint baked
+  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
+  DSH_TELEMETRY_DISABLED: '1'
+
+defaults:
+  run:
+    working-directory: native/landlock-run
+
+jobs:
+  matrix:
+    name: Matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      ci: ${{ steps.matrix.outputs.ci }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: matrix
+        run: echo "ci=$(node ./scripts/github-matrix.mjs ci)" >> "$GITHUB_OUTPUT"
+
+  native:
+    name: ${{ matrix.platform }}
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.ci) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # The lockfile is the repository root's: native/landlock-run is a nested
+      # workspace root without a lockfile of its own.
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq musl-tools
+
+      - name: Build TypeScript
+        run: bun run build:ts
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build native binaries (this architecture is the builder of record)
+        run: bun run build:native
+
+      - name: Entry tests (keyless)
+        run: node ./test/entry.test.js
+
+      # NALR_REQUIRE_LANDLOCK: a self-skip on the very platform that exists to
+      # prove enforcement would be a false green, so an unenforcing kernel
+      # fails the leg instead of skipping.
+      - name: Launcher tests (real kernel enforcement)
+        run: node ./test/launcher.test.js
+        env:
+          NALR_REQUIRE_LANDLOCK: 1
+
+      - name: Pack rehearsal (pack → install → confine, this platform only)
+        run: |
+          node ./scripts/pack-release.mjs .release/npm --current-platform-only
+          node ./scripts/verify-packed-install.mjs .release/npm --current-platform-only
+        env:
+          NALR_REQUIRE_LANDLOCK: 1
+
+  darwin:
+    name: darwin (no platform package — degradation proof)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # The lockfile is the repository root's: native/landlock-run is a nested
+      # workspace root without a lockfile of its own.
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Build TypeScript
+        run: bun run build:ts
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Entry tests (keyless)
+        run: node ./test/entry.test.js
+
+      - name: Launcher tests (must self-skip cleanly)
+        run: node ./test/launcher.test.js
+
+      - name: Pack rehearsal (entry only — fallback resolution + unusable probe)
+        run: |
+          node ./scripts/pack-release.mjs .release/npm --current-platform-only
+          node ./scripts/verify-packed-install.mjs .release/npm --current-platform-only

@@ -1,0 +1,53 @@
+/* Spectrum-variable overrides for the DeepSeek-branded theme. The class is
+ * stamped by Provider on its root element; every value routes through an
+ * existing --dsw-* token so the ui-theme sheets remain the single color
+ * authority and light/dark keeps flipping via body[data-ds-dark-theme].
+ * Coverage: the semantic core consumed by the ported components (grays,
+ * status colors, text/background/border/focus aliases, fonts). */
+
+.dswSpectrumVars {
+  --spectrum-alias-background-color-default: var(--dsw-alias-bg-layer-1);
+  --spectrum-alias-background-color-hover: var(--dsw-alias-interactive-bg-hover-solid);
+  --spectrum-alias-background-color-focus: var(--dsw-alias-bg-layer-2);
+  --spectrum-alias-background-color-alternate: var(--dsw-alias-bg-layer-2);
+  --spectrum-alias-background-color-alternate-hover: var(--dsw-alias-bg-overlay);
+  --spectrum-alias-background-color-transparent: transparent;
+
+  --spectrum-alias-text-color: var(--dsw-alias-label-primary);
+  --spectrum-alias-text-color-hover: var(--dsw-alias-label-primary);
+  --spectrum-alias-text-color-muted: var(--dsw-alias-label-secondary);
+  --spectrum-alias-text-color-disabled: var(--dsw-alias-label-dimmed);
+  --spectrum-alias-text-color-placeholder: var(--dsw-alias-label-caption);
+  --spectrum-alias-icon-color: var(--dsw-alias-label-secondary);
+  --spectrum-alias-icon-color-hover: var(--dsw-alias-label-primary);
+  --spectrum-alias-icon-color-disabled: var(--dsw-alias-label-dimmed);
+
+  --spectrum-alias-border-color: var(--dsw-alias-border-l3);
+  --spectrum-alias-border-color-hover: var(--dsw-alias-border-l4);
+  --spectrum-alias-border-color-disabled: var(--dsw-alias-border-l1);
+  --spectrum-alias-border-color-mid: var(--dsw-alias-border-l2);
+  --spectrum-alias-focus-ring-color: var(--dsw-static-deepseek-450);
+
+  --spectrum-semantic-negative-color-default: var(--dsw-alias-state-error-primary);
+  --spectrum-semantic-negative-color-hover: var(--dsw-alias-state-error-secondary);
+  --spectrum-semantic-negative-color-down: var(--dsw-alias-state-error-primary);
+  --spectrum-semantic-positive-color-default: var(--dsw-alias-state-success-primary);
+  --spectrum-semantic-positive-color-hover: var(--dsw-alias-state-success-secondary);
+  --spectrum-semantic-notice-color-default: var(--dsw-alias-state-warn-primary);
+  --spectrum-semantic-informative-color-default: var(--dsw-alias-button-info-fill);
+
+  --spectrum-global-color-gray-50: var(--dsw-static-neutral-bluish-50);
+  --spectrum-global-color-gray-75: var(--dsw-static-neutral-bluish-60);
+  --spectrum-global-color-gray-100: var(--dsw-static-neutral-bluish-100);
+  --spectrum-global-color-gray-200: var(--dsw-static-neutral-bluish-200);
+  --spectrum-global-color-gray-300: var(--dsw-static-neutral-bluish-300);
+  --spectrum-global-color-gray-400: var(--dsw-static-neutral-bluish-400);
+  --spectrum-global-color-gray-500: var(--dsw-static-neutral-bluish-500);
+  --spectrum-global-color-gray-600: var(--dsw-static-neutral-bluish-600);
+  --spectrum-global-color-gray-700: var(--dsw-static-neutral-bluish-700);
+  --spectrum-global-color-gray-800: var(--dsw-static-neutral-bluish-800);
+  --spectrum-global-color-gray-900: var(--dsw-static-neutral-bluish-900);
+
+  --spectrum-alias-body-text-font-family: var(--dsw-font-family);
+  --spectrum-alias-body-text-font-weight: 500;
+}
