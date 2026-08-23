@@ -1,9 +1,0 @@
-[package]
-license.workspace = true
-name = "moli-structured-clone"
-version = "0.1.0"
-edition = "2024"
-description = "Renderer-neutral structured clone wire payload types for Moli"
-
-[lints]
-workspace = true

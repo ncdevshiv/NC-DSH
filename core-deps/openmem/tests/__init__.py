@@ -1,3 +1,0 @@
-"""
-OpenMem Test Suite
-"""

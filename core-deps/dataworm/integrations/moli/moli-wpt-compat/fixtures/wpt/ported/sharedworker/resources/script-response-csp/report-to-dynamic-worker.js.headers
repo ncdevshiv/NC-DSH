@@ -1,2 +1,0 @@
-Reporting-Endpoints: csp="/wpt/runtime/csp/reporting/collect?token=sharedworker-report-to-report-only-dynamic-import"
-Content-Security-Policy-Report-Only: script-src 'none'; report-to csp

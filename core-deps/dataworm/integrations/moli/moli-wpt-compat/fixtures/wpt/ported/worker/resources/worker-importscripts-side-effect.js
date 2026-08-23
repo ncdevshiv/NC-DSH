@@ -1,1 +1,0 @@
-globalThis.__fetchFirstLoaded = "yes";

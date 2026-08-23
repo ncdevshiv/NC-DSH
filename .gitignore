@@ -37,3 +37,6 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+# Local reference checkouts that are not part of the repository.
+core-deps/

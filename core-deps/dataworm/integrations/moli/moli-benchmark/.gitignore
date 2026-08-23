@@ -1,8 +1,0 @@
-/results/
-/benchmarks/
-/logs/
-/.moli/
-/.venv/
-/.pytest_cache/
-/**/*.pyc
-/**/__pycache__/

@@ -1,7 +1,0 @@
-Error: failed to initialize browser runtime
-
-Caused by:
-    0: failed to open browser profile
-    1: failed to initialize browser profile manifest `C:\Users\Ncdevshiv\AppData\Local\Temp\moli-nc-profile\profile.json`
-    2: failed to sync profile manifest parent directory `C:\Users\Ncdevshiv\AppData\Local\Temp\moli-nc-profile`
-    3: Access is denied. (os error 5)

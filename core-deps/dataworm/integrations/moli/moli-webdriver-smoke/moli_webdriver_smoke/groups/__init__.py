@@ -1,1 +1,0 @@
-"""WebDriver smoke scenario groups."""
