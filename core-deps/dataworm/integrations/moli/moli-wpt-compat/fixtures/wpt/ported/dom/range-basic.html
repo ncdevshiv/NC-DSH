@@ -1,0 +1,423 @@
+<!doctype html>
+<meta charset="utf-8">
+<div id="root">
+  <p id="p1">First paragraph</p>
+  <p id="p2">Second paragraph</p>
+</div>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+function boundary_comparison_ranges() {
+  const host = document.createElement("div");
+  host.append("alpha", document.createElement("span"), "omega");
+  document.body.appendChild(host);
+
+  const range = document.createRange();
+  range.setStart(host.firstChild, 0);
+  range.setEnd(host.lastChild, 5);
+
+  const other = document.createRange();
+  other.setStart(host.firstChild, 2);
+  other.setEnd(host.lastChild, 3);
+
+  return { host, range, other };
+}
+
+test(function () {
+  const range = document.createRange();
+
+  assert_true(range instanceof Range);
+  assert_true(range instanceof AbstractRange);
+  assert_equals(range.startContainer, document);
+  assert_equals(range.startOffset, 0);
+  assert_equals(range.endContainer, document);
+  assert_equals(range.endOffset, 0);
+  assert_true(range.collapsed);
+}, "document.createRange() returns a collapsed Range at the document start");
+
+test(function () {
+  const range = document.createRange();
+  const p1 = document.getElementById("p1");
+  const p2 = document.getElementById("p2");
+
+  range.setStart(p1, 0);
+  assert_equals(range.startContainer, p1);
+  assert_equals(range.startOffset, 0);
+  assert_equals(range.endContainer, p1);
+  assert_equals(range.endOffset, 0);
+  assert_true(range.collapsed);
+
+  range.setEnd(p2, 0);
+  assert_equals(range.endContainer, p2);
+  assert_equals(range.endOffset, 0);
+  assert_false(range.collapsed);
+}, "Range.setStart() and setEnd() update boundaries and collapsed state");
+
+test(function () {
+  const range = document.createRange();
+  const p1 = document.getElementById("p1");
+  const text = p1.firstChild;
+
+  assert_throws_name("TypeError", function () {
+    range.setStart({}, 0);
+  }, "setStart container should require a Node");
+  assert_throws_name("TypeError", function () {
+    range.setEnd({}, 0);
+  }, "setEnd container should require a Node");
+  assert_throws_name("TypeError", function () {
+    range.selectNode();
+  }, "selectNode missing node should throw");
+  assert_throws_name("TypeError", function () {
+    range.selectNodeContents({});
+  }, "selectNodeContents should require a Node");
+  assert_throws_name("TypeError", function () {
+    range.setStartBefore({});
+  }, "relative boundary methods should require a Node");
+  assert_throws_name("TypeError", function () {
+    range.comparePoint({}, 0);
+  }, "comparePoint node should require a Node");
+
+  range.selectNode(text);
+  assert_equals(range.startContainer, p1);
+  assert_equals(range.startOffset, 0);
+  assert_equals(range.endContainer, p1);
+  assert_equals(range.endOffset, 1);
+}, "Range Node-taking boundary methods validate Node arguments through WebIDL");
+
+test(function () {
+  const range = document.createRange();
+  const p1 = document.getElementById("p1");
+
+  range.selectNodeContents(p1);
+  assert_equals(range.startContainer, p1);
+  assert_equals(range.startOffset, 0);
+  assert_equals(range.endContainer, p1);
+  assert_equals(range.endOffset, p1.childNodes.length);
+  assert_false(range.collapsed);
+  assert_equals(range.toString(), "First paragraph");
+}, "Range.selectNodeContents() selects an element subtree");
+
+test(function () {
+  const range = document.createRange();
+  const p1 = document.getElementById("p1");
+  const p2 = document.getElementById("p2");
+
+  range.setStart(p1, 0);
+  range.setEnd(p2, 1);
+  const clone = range.cloneRange();
+
+  assert_false(clone === range);
+  assert_equals(clone.startContainer, range.startContainer);
+  assert_equals(clone.startOffset, range.startOffset);
+  assert_equals(clone.endContainer, range.endContainer);
+  assert_equals(clone.endOffset, range.endOffset);
+
+  clone.collapse(true);
+  assert_true(clone.collapsed);
+  assert_false(range.collapsed);
+}, "Range.cloneRange() copies boundaries without sharing collapsed state");
+
+test(function () {
+  const text = document.getElementById("p1").firstChild;
+  const range = document.createRange();
+  range.setStart(text, 1);
+  range.setEnd(text, 5);
+
+  range.collapse();
+  assert_equals(range.startOffset, 5);
+  assert_equals(range.endOffset, 5);
+  assert_true(range.collapsed);
+
+  range.setStart(text, 1);
+  range.setEnd(text, 5);
+  range.collapse(undefined);
+  assert_equals(range.startOffset, 5);
+  assert_equals(range.endOffset, 5);
+
+  range.setStart(text, 1);
+  range.setEnd(text, 5);
+  range.collapse("non-empty");
+  assert_equals(range.startOffset, 1);
+  assert_equals(range.endOffset, 1);
+}, "Range.collapse() converts optional toStart as WebIDL boolean");
+
+test(function () {
+  const text = document.getElementById("p1").firstChild;
+  const range = document.createRange();
+
+  assert_throws_name("TypeError", function () {
+    range.setStart(text);
+  }, "missing offset must throw");
+
+  range.setStart(text, undefined);
+  assert_equals(range.startOffset, 0);
+  assert_equals(range.endOffset, 0);
+
+  range.setStart(text, null);
+  assert_equals(range.startOffset, 0);
+
+  range.setStart(text, NaN);
+  assert_equals(range.startOffset, 0);
+
+  range.setStart(text, 1.9);
+  assert_equals(range.startOffset, 1);
+
+  range.setStart(text, "2");
+  assert_equals(range.startOffset, 2);
+
+  assert_throws_name("IndexSizeError", function () {
+    range.setStart(text, -1);
+  }, "negative offset wraps to an out-of-range unsigned long");
+
+  range.setStart(text, 4294967296);
+  assert_equals(range.startOffset, 0);
+
+  assert_throws_name("IndexSizeError", function () {
+    range.setStart(text, text.length + 1);
+  }, "too-large offset must fail boundary validation");
+
+  assert_throws_name("TypeError", function () {
+    range.setStart(text, Symbol());
+  }, "Symbol offset must fail unsigned long conversion");
+}, "Range.setStart() offset follows WebIDL unsigned long conversion");
+
+test(function () {
+  const text = document.getElementById("p1").firstChild;
+  const range = document.createRange();
+
+  range.setEnd(text, undefined);
+  assert_equals(range.endOffset, 0);
+
+  range.setEnd(text, 1.9);
+  assert_equals(range.endOffset, 1);
+
+  range.setEnd(text, "2");
+  assert_equals(range.endOffset, 2);
+
+  assert_throws_name("IndexSizeError", function () {
+    range.setEnd(text, -1);
+  }, "negative end offset wraps to an out-of-range unsigned long");
+
+  assert_throws_name("TypeError", function () {
+    range.setEnd(text, Symbol());
+  }, "Symbol end offset must fail unsigned long conversion");
+}, "Range.setEnd() offset follows WebIDL unsigned long conversion");
+
+test(function () {
+  const text = document.getElementById("p1").firstChild;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+
+  assert_true(range.isPointInRange(text, undefined));
+  assert_true(range.isPointInRange(text, 1.9));
+  assert_throws_name("IndexSizeError", function () {
+    range.isPointInRange(text, -1);
+  }, "negative isPointInRange offset wraps to an out-of-range unsigned long");
+  assert_throws_name("TypeError", function () {
+    range.isPointInRange(text, Symbol());
+  }, "Symbol isPointInRange offset must fail unsigned long conversion");
+}, "Range.isPointInRange() offset follows WebIDL unsigned long conversion");
+
+test(function () {
+  const text = document.createTextNode("abcd");
+  document.body.appendChild(text);
+  const range = document.createRange();
+
+  range.setStart(text, undefined);
+  assert_equals(range.startOffset, 0);
+  range.setEnd(text, null);
+  assert_equals(range.endOffset, 0);
+  range.setEnd(text, NaN);
+  assert_equals(range.endOffset, 0);
+  range.setEnd(text, Infinity);
+  assert_equals(range.endOffset, 0);
+  range.setEnd(text, "2.9");
+  assert_equals(range.endOffset, 2);
+  range.setStart(text, -4294967295);
+  assert_equals(range.startOffset, 1);
+  range.setEnd(text, { valueOf() { return 3; } });
+  assert_equals(range.endOffset, 3);
+  range.setStart(text, { toString() { return "2"; } });
+  assert_equals(range.startOffset, 2);
+}, "Range.setStart() and setEnd() convert offsets as WebIDL unsigned long");
+
+test(function () {
+  const text = document.createTextNode("abcd");
+  document.body.appendChild(text);
+  const range = document.createRange();
+  range.setStart(text, 1);
+  range.setEnd(text, 3);
+
+  assert_throws_name("TypeError", function () {
+    range.setStart(text);
+  }, "missing setStart offset should throw");
+  assert_throws_name("IndexSizeError", function () {
+    range.setStart(text, -1);
+  }, "wrapped negative setStart offset should be range-checked");
+  assert_throws_name("IndexSizeError", function () {
+    range.setEnd(text, 5);
+  }, "too large setEnd offset should throw");
+  assert_throws_name("Error", function () {
+    range.setStart(text, { valueOf() { throw new Error("boom"); } });
+  }, "throwing offset conversion should propagate");
+  assert_throws_name("TypeError", function () {
+    range.setStart(text, Symbol("offset"));
+  }, "Symbol offset conversion should throw");
+  assert_throws_name("TypeError", function () {
+    range.setStart(text, 1n);
+  }, "BigInt offset conversion should throw");
+  assert_equals(range.startOffset, 1);
+  assert_equals(range.endOffset, 3);
+}, "Range boundary setters reject invalid converted offsets");
+
+test(function () {
+  const text = document.createTextNode("abcd");
+  document.body.appendChild(text);
+  const range = document.createRange();
+  range.setStart(text, 1);
+  range.setEnd(text, 3);
+
+  assert_equals(range.comparePoint(text, undefined), -1);
+  assert_equals(range.comparePoint(text, null), -1);
+  assert_equals(range.comparePoint(text, NaN), -1);
+  assert_equals(range.comparePoint(text, Infinity), -1);
+  assert_equals(range.comparePoint(text, "2.9"), 0);
+  assert_equals(range.comparePoint(text, -4294967294), 0);
+  assert_equals(range.comparePoint(text, { valueOf() { return 2; } }), 0);
+  assert_equals(range.comparePoint(text, { toString() { return "2"; } }), 0);
+
+  assert_false(range.isPointInRange(text, undefined));
+  assert_false(range.isPointInRange(text, null));
+  assert_false(range.isPointInRange(text, NaN));
+  assert_false(range.isPointInRange(text, Infinity));
+  assert_true(range.isPointInRange(text, "2.9"));
+  assert_true(range.isPointInRange(text, -4294967294));
+  assert_true(range.isPointInRange(text, { valueOf() { return 2; } }));
+  assert_true(range.isPointInRange(text, { toString() { return "2"; } }));
+}, "Range comparePoint() and isPointInRange() convert offsets as WebIDL unsigned long");
+
+test(function () {
+  const text = document.createTextNode("abcd");
+  document.body.appendChild(text);
+  const range = document.createRange();
+  range.setStart(text, 1);
+  range.setEnd(text, 3);
+
+  assert_throws_name("TypeError", function () {
+    range.comparePoint(text);
+  }, "missing comparePoint offset should throw");
+  assert_throws_name("TypeError", function () {
+    range.isPointInRange(text);
+  }, "missing isPointInRange offset should throw");
+  assert_throws_name("IndexSizeError", function () {
+    range.comparePoint(text, -1);
+  }, "wrapped negative comparePoint offset should be range-checked");
+  assert_throws_name("IndexSizeError", function () {
+    range.isPointInRange(text, 5);
+  }, "too large isPointInRange offset should throw");
+  assert_throws_name("Error", function () {
+    range.comparePoint(text, { valueOf() { throw new Error("boom"); } });
+  }, "throwing comparePoint offset conversion should propagate");
+  assert_throws_name("Error", function () {
+    range.isPointInRange(text, { valueOf() { throw new Error("boom"); } });
+  }, "throwing isPointInRange offset conversion should propagate");
+  assert_throws_name("TypeError", function () {
+    range.comparePoint(text, Symbol("offset"));
+  }, "Symbol comparePoint offset conversion should throw");
+  assert_throws_name("TypeError", function () {
+    range.isPointInRange(text, 1n);
+  }, "BigInt isPointInRange offset conversion should throw");
+}, "Range point comparison methods reject invalid converted offsets");
+
+test(function () {
+  const { range, other } = boundary_comparison_ranges();
+  const startToStart = range.compareBoundaryPoints(Range.START_TO_START, other);
+  const startToEnd = range.compareBoundaryPoints(Range.START_TO_END, other);
+
+  assert_equals(range.compareBoundaryPoints(undefined, other), startToStart);
+  assert_equals(range.compareBoundaryPoints(null, other), startToStart);
+  assert_equals(range.compareBoundaryPoints(NaN, other), startToStart);
+  assert_equals(range.compareBoundaryPoints(Infinity, other), startToStart);
+  assert_equals(range.compareBoundaryPoints("1.9", other), startToEnd);
+  assert_equals(range.compareBoundaryPoints(-65535, other), startToEnd);
+  assert_equals(range.compareBoundaryPoints(65537, other), startToEnd);
+  assert_equals(
+    range.compareBoundaryPoints({ valueOf() { return 1; } }, other),
+    startToEnd
+  );
+  assert_equals(
+    range.compareBoundaryPoints({ toString() { return "1"; } }, other),
+    startToEnd
+  );
+}, "Range.compareBoundaryPoints() converts how as WebIDL unsigned short");
+
+test(function () {
+  const { range, other } = boundary_comparison_ranges();
+
+  assert_throws_name("TypeError", function () {
+    range.compareBoundaryPoints();
+  }, "missing arguments should throw");
+  assert_throws_name("TypeError", function () {
+    range.compareBoundaryPoints(0);
+  }, "missing sourceRange should throw");
+  assert_throws_name("Error", function () {
+    range.compareBoundaryPoints({ valueOf() { throw new Error("boom"); } }, other);
+  }, "throwing how conversion should propagate");
+  assert_throws_name("TypeError", function () {
+    range.compareBoundaryPoints(Symbol("how"), other);
+  }, "Symbol how conversion should throw");
+  assert_throws_name("TypeError", function () {
+    range.compareBoundaryPoints(1n, other);
+  }, "BigInt how conversion should throw");
+  assert_throws_name("TypeError", function () {
+    range.compareBoundaryPoints(0, {});
+  }, "sourceRange should require a Range object");
+  assert_throws_name("NotSupportedError", function () {
+    range.compareBoundaryPoints(-1, other);
+  }, "wrapped unsigned short values outside 0..3 should throw");
+  assert_throws_name("NotSupportedError", function () {
+    range.compareBoundaryPoints(4, other);
+  }, "unsupported comparison mode should throw");
+}, "Range.compareBoundaryPoints() rejects invalid arguments");
+
+test(function () {
+  const host = document.createElement("div");
+  host.append("ab");
+  document.body.appendChild(host);
+  const range = document.createRange();
+  range.selectNodeContents(host.firstChild);
+
+  assert_throws_name("TypeError", function () {
+    range.insertNode();
+  }, "insertNode missing node should throw");
+  assert_throws_name("TypeError", function () {
+    range.insertNode({});
+  }, "insertNode should require a Node");
+  assert_throws_name("TypeError", function () {
+    range.surroundContents({});
+  }, "surroundContents should require a Node");
+  assert_throws_name("TypeError", function () {
+    range.createContextualFragment();
+  }, "createContextualFragment missing markup should throw");
+  assert_throws_name("TypeError", function () {
+    range.createContextualFragment(Symbol("markup"));
+  }, "createContextualFragment markup should use DOMString conversion");
+  assert_throws_name("Error", function () {
+    range.createContextualFragment({ toString() { throw new Error("boom"); } });
+  }, "createContextualFragment stringification errors should propagate");
+
+  const fragment = range.createContextualFragment(null);
+  assert_equals(fragment.textContent, "null");
+}, "Range content methods validate WebIDL arguments");
+</script>

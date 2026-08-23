@@ -1,0 +1,51 @@
+<!doctype html>
+<html><body
+  data-fired=""
+  data-constructor=""
+  data-event-from-url=""
+  data-event-from-same-entry=""
+  data-event-navigation-type=""
+  data-current-url=""
+  data-history-state=""
+  data-navigation-state=""
+>
+<script>
+window.addEventListener("load", () => {
+  const entryBefore = navigation.currentEntry;
+
+  navigation.addEventListener("currententrychange", (event) => {
+    document.body.setAttribute("data-fired", "true");
+    document.body.setAttribute(
+      "data-constructor",
+      event?.constructor?.name ?? "null",
+    );
+    document.body.setAttribute(
+      "data-event-from-url",
+      event?.from?.url ?? "null",
+    );
+    document.body.setAttribute(
+      "data-event-from-same-entry",
+      String(event?.from === entryBefore),
+    );
+    document.body.setAttribute(
+      "data-event-navigation-type",
+      String(event?.navigationType ?? "null"),
+    );
+    document.body.setAttribute(
+      "data-current-url",
+      navigation.currentEntry?.url ?? "null",
+    );
+    document.body.setAttribute(
+      "data-history-state",
+      JSON.stringify(history.state),
+    );
+    document.body.setAttribute(
+      "data-navigation-state",
+      JSON.stringify(navigation.currentEntry?.getState?.() ?? null),
+    );
+  });
+
+  history.pushState({ step: 1 }, "", "#one");
+});
+</script>
+</body></html>

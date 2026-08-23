@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function wait(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+function next_worker_event(worker) {
+  return new Promise(function (resolve) {
+    worker.addEventListener("message", resolve, { once: true });
+  });
+}
+
+function next_worker_data_or_null(worker, ms) {
+  return Promise.race([
+    next_worker_event(worker).then(function (event) {
+      return event.data;
+    }),
+    wait(ms).then(function () {
+      return null;
+    }),
+  ]);
+}
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "postMessage('before-close');",
+        "close();",
+        "setTimeout(function () {",
+        "  postMessage('timer-after-close');",
+        "}, 0);",
+      ].join("\n"),
+    ),
+  );
+
+  try {
+    const first = await next_worker_event(worker);
+    assert_equals(first.data, "before-close", "self.close() should not suppress already-sent messages");
+
+    const late = await next_worker_data_or_null(worker, 100);
+    assert_equals(late, null, "self.close() should stop future worker tasks");
+  } finally {
+    worker.terminate();
+  }
+}, "DedicatedWorkerGlobalScope.close stops future worker tasks");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "const channel = new MessageChannel();",
+        "channel.port1.onmessage = function (event) {",
+        "  postMessage({ kind: 'port-message', data: event.data });",
+        "};",
+        "postMessage({ kind: 'ready' }, [channel.port2]);",
+        "close();",
+      ].join("\n"),
+    ),
+  );
+
+  let port = null;
+  try {
+    const ready = await next_worker_event(worker);
+    assert_equals(ready.data.kind, "ready", "worker should transfer a MessagePort before closing");
+    assert_equals(ready.ports.length, 1, "ready message should transfer one port");
+    assert_true(ready.ports[0] instanceof MessagePort, "transferred value should be a MessagePort");
+
+    port = ready.ports[0];
+    port.postMessage("after-close");
+
+    const late = await next_worker_data_or_null(worker, 100);
+    assert_equals(late, null, "messages to a worker-owned port should not revive a closed worker");
+  } finally {
+    if (port) {
+      port.close();
+    }
+    worker.terminate();
+  }
+}, "DedicatedWorkerGlobalScope.close disconnects worker-owned MessagePort callbacks");
+</script>

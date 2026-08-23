@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const t1 = fragment.appendChild(document.createTextNode("1"));
+  const t2 = fragment.appendChild(document.createTextNode("2"));
+  const element = fragment.appendChild(document.createElement("x"));
+  const t3 = element.appendChild(document.createTextNode("3"));
+  const t4 = element.appendChild(document.createTextNode("4"));
+
+  document.normalize();
+  assert_array_equals(Array.from(fragment.childNodes), [t1, t2, element]);
+  assert_array_equals(Array.from(element.childNodes), [t3, t4]);
+
+  fragment.normalize();
+  assert_array_equals(Array.from(fragment.childNodes), [t1, element]);
+  assert_equals(t1.data, "12");
+  assert_equals(t2.data, "2");
+  assert_equals(t2.parentNode, null);
+  assert_array_equals(Array.from(element.childNodes), [t3]);
+  assert_equals(t3.data, "34");
+  assert_equals(t4.data, "4");
+  assert_equals(t4.parentNode, null);
+}, "normalize() merges adjacent Text nodes recursively under the target only");
+
+test(function () {
+  const div = document.createElement("div");
+  const emptyBefore = div.appendChild(document.createTextNode(""));
+  const text = div.appendChild(document.createTextNode("a"));
+  const emptyAfter = div.appendChild(document.createTextNode(""));
+
+  assert_array_equals(Array.from(div.childNodes), [emptyBefore, text, emptyAfter]);
+  div.normalize();
+  assert_array_equals(Array.from(div.childNodes), [text]);
+  assert_equals(text.data, "a");
+  assert_equals(emptyBefore.parentNode, null);
+  assert_equals(emptyAfter.parentNode, null);
+}, "normalize() removes empty Text nodes around a non-empty Text node");
+
+test(function () {
+  const div = document.createElement("div");
+  const emptyA = div.appendChild(document.createTextNode(""));
+  const emptyB = div.appendChild(document.createTextNode(""));
+
+  assert_array_equals(Array.from(div.childNodes), [emptyA, emptyB]);
+  div.normalize();
+  assert_array_equals(Array.from(div.childNodes), []);
+  assert_equals(emptyA.parentNode, null);
+  assert_equals(emptyB.parentNode, null);
+}, "normalize() removes a run of empty Text nodes");
+
+test(function () {
+  const div = document.createElement("div");
+  const textA = div.appendChild(document.createTextNode("a"));
+  const pi = div.appendChild(document.createProcessingInstruction("pi", ""));
+  const textB = div.appendChild(document.createTextNode("b"));
+  const comment = div.appendChild(document.createComment(""));
+  const textC = div.appendChild(document.createTextNode("c"));
+  const child = div.appendChild(document.createElement("el"));
+  const textD = div.appendChild(document.createTextNode("d"));
+
+  div.normalize();
+
+  assert_array_equals(Array.from(div.childNodes), [textA, pi, textB, comment, textC, child, textD]);
+  assert_equals(textA.data, "a");
+  assert_equals(textB.data, "b");
+  assert_equals(textC.data, "c");
+  assert_equals(textD.data, "d");
+}, "normalize() does not merge Text nodes across non-Text nodes with empty textContent");
+
+test(function () {
+  const xml = document.implementation.createDocument(null, "root");
+  const root = xml.documentElement;
+  const textA = root.appendChild(xml.createTextNode("a"));
+  const textB = root.appendChild(xml.createTextNode("b"));
+  const cdata = root.appendChild(xml.createCDATASection("c"));
+  const textD = root.appendChild(xml.createTextNode("d"));
+  const empty = root.appendChild(xml.createTextNode(""));
+  const textE = root.appendChild(xml.createTextNode("e"));
+
+  root.normalize();
+
+  assert_array_equals(Array.from(root.childNodes), [textA, cdata, textD]);
+  assert_equals(textA.data, "ab");
+  assert_equals(textB.parentNode, null);
+  assert_equals(cdata.data, "c");
+  assert_equals(cdata.nodeType, Node.CDATA_SECTION_NODE);
+  assert_true(cdata instanceof CDATASection);
+  assert_equals(cdata.parentNode, root);
+  assert_equals(textD.data, "de");
+  assert_equals(empty.parentNode, null);
+  assert_equals(textE.parentNode, null);
+}, "normalize() preserves XML CDATASection nodes while merging exclusive Text runs");
+
+test(function () {
+  const xml = document.implementation.createDocument(null, "root");
+  const child = xml.createElement("child");
+  const nestedA = child.appendChild(xml.createTextNode("1"));
+  const nestedB = child.appendChild(xml.createTextNode("2"));
+  const nestedCdata = child.appendChild(xml.createCDATASection("3"));
+  const nestedC = child.appendChild(xml.createTextNode("4"));
+  xml.documentElement.appendChild(child);
+
+  xml.normalize();
+
+  assert_array_equals(Array.from(child.childNodes), [nestedA, nestedCdata, nestedC]);
+  assert_equals(nestedA.data, "12");
+  assert_equals(nestedB.parentNode, null);
+  assert_equals(nestedCdata.data, "3");
+  assert_equals(nestedC.data, "4");
+}, "normalize() recurses through detached XML documents");
+</script>

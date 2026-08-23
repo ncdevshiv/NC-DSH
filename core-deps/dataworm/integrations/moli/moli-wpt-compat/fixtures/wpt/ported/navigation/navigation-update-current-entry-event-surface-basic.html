@@ -1,0 +1,140 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function captureError(fn) {
+  try {
+    fn();
+    return null;
+  } catch (error) {
+    return {
+      name: String(error?.name ?? ""),
+      message: String(error?.message ?? ""),
+    };
+  }
+}
+
+promise_test(async function () {
+  if (document.readyState !== "complete") {
+    await new Promise(function (resolve) {
+      addEventListener("load", resolve, { once: true });
+    });
+  }
+
+  const entryBefore = navigation.currentEntry;
+  const order = [];
+  let count = 0;
+  let historyState = "";
+  let navigationState = "";
+  let sameEntry = "";
+  let eventConstructor = "";
+  let eventFromSameEntry = "";
+  let eventNavigationType = "";
+  let eventBubbles = "";
+  let eventCancelable = "";
+  let eventComposed = "";
+  let eventTrusted = "";
+
+  navigation.addEventListener("currententrychange", function (event) {
+    count += 1;
+    order.push("currententrychange");
+    historyState = JSON.stringify(history.state);
+    navigationState = JSON.stringify(navigation.currentEntry?.getState?.() ?? null);
+    sameEntry = String(entryBefore === navigation.currentEntry);
+    eventConstructor = event?.constructor?.name ?? "null";
+    eventFromSameEntry = String(event?.from === entryBefore);
+    eventNavigationType = String(event?.navigationType ?? "null");
+    eventBubbles = String(event?.bubbles);
+    eventCancelable = String(event?.cancelable);
+    eventComposed = String(event?.composed);
+    eventTrusted = String(event?.isTrusted);
+  });
+
+  const missing = captureError(function () {
+    navigation.updateCurrentEntry();
+  });
+  const empty = captureError(function () {
+    navigation.updateCurrentEntry({});
+  });
+  const undefinedState = captureError(function () {
+    navigation.updateCurrentEntry({ state: undefined });
+  });
+
+  navigation.updateCurrentEntry({ state: null });
+  const nullState = JSON.stringify(navigation.currentEntry?.getState?.() ?? null);
+  navigation.updateCurrentEntry({ state: { x: 1 } });
+  const functionState = captureError(function () {
+    navigation.updateCurrentEntry({ state: function nope() {} });
+  });
+  const functionStateUnchanged = JSON.stringify(
+    navigation.currentEntry?.getState?.() ?? null,
+  );
+
+  order.push("after-call");
+
+  assert_array_equals(
+    order,
+    ["currententrychange", "currententrychange", "after-call"],
+    "updateCurrentEntry(null) and updateCurrentEntry(object) should synchronously dispatch currententrychange",
+  );
+  assert_equals(count, 2, "two successful updateCurrentEntry() calls should fire two events");
+  assert_equals(missing?.name, "TypeError", "missing options should throw TypeError");
+  assert_true(
+    Boolean(missing?.message.includes("1 argument required")),
+    "missing options should report the required argument error",
+  );
+  assert_equals(empty?.name, "TypeError", "missing state member should throw TypeError");
+  assert_true(
+    Boolean(empty?.message.includes("Required member is undefined")),
+    "empty options should report the missing state member",
+  );
+  assert_equals(
+    undefinedState?.name,
+    "TypeError",
+    "undefined state member should throw TypeError",
+  );
+  assert_true(
+    Boolean(undefinedState?.message.includes("Required member is undefined")),
+    "undefined state should report the missing required member",
+  );
+  assert_equals(nullState, "null", "updateCurrentEntry({ state: null }) should store a null navigation state");
+  assert_equals(
+    functionState?.name,
+    "DataCloneError",
+    "non-cloneable state should throw DataCloneError",
+  );
+  assert_equals(
+    functionStateUnchanged,
+    JSON.stringify({ x: 1 }),
+    "failed state updates should leave the previous navigation state intact",
+  );
+  assert_equals(sameEntry, "true", "updateCurrentEntry should not replace the current entry object");
+  assert_equals(historyState, "null", "updateCurrentEntry should not populate history.state");
+  assert_equals(
+    navigationState,
+    JSON.stringify({ x: 1 }),
+    "updateCurrentEntry should store the cloned state on navigation.currentEntry",
+  );
+  assert_equals(
+    eventConstructor,
+    "NavigationCurrentEntryChangeEvent",
+    "updateCurrentEntry should dispatch NavigationCurrentEntryChangeEvent",
+  );
+  assert_equals(
+    eventFromSameEntry,
+    "true",
+    "updateCurrentEntry event.from should reference the same entry object",
+  );
+  assert_equals(
+    eventNavigationType,
+    "null",
+    "updateCurrentEntry should not synthesize a navigationType",
+  );
+  assert_equals(eventBubbles, "false", "updateCurrentEntry currententrychange should not bubble");
+  assert_equals(eventCancelable, "false", "updateCurrentEntry currententrychange should not be cancelable");
+  assert_equals(eventComposed, "false", "updateCurrentEntry currententrychange should not be composed");
+  assert_equals(eventTrusted, "true", "updateCurrentEntry currententrychange should be trusted");
+}, "navigation.updateCurrentEntry validates input, updates state, and dispatches currententrychange on the current entry");
+</script>

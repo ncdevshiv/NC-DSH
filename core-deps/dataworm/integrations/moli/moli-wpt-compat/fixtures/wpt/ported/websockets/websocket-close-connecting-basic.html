@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function websocket_url(path) {
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return scheme + "//" + location.host + path;
+}
+
+promise_test(async function () {
+  const socket = new WebSocket(websocket_url("/wpt/runtime/websocket/slow-handshake"));
+  const events = [];
+
+  assert_equals(socket.readyState, WebSocket.CONNECTING, "socket should start in CONNECTING");
+
+  const closed = new Promise(function (resolve, reject) {
+    socket.addEventListener("open", function () {
+      reject(new Error("open should not fire after close() during CONNECTING"));
+    }, { once: true });
+    socket.addEventListener("error", function () {
+      events.push("error:" + socket.readyState);
+    }, { once: true });
+    socket.addEventListener("close", function (event) {
+      events.push("close:" + socket.readyState + ":" + event.code + ":" + event.wasClean);
+      resolve(event);
+    }, { once: true });
+  });
+
+  socket.close();
+  assert_true(
+    socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED,
+    "close() during CONNECTING should leave the socket closing or closed",
+  );
+
+  const closeEvent = await closed;
+  assert_equals(closeEvent.code, 1006, "failed opening handshake should report abnormal closure");
+  assert_false(closeEvent.wasClean, "failed opening handshake should not be clean");
+  assert_equals(socket.readyState, WebSocket.CLOSED, "socket should end CLOSED");
+  assert_array_equals(events, [
+    "error:3",
+    "close:3:1006:false",
+  ], "close() during CONNECTING should fail the connection before open");
+}, "WebSocket.close() during CONNECTING fails the opening connection");
+</script>

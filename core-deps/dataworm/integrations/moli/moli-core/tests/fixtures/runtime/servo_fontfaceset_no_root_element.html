@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <body data-load-called="">
+    <script>
+      document.documentElement.remove();
+      const face = new FontFace('Ahem', 'url(/fonts/Ahem.ttf)');
+      document.fonts.add(face);
+      document.fonts.load('12px Ahem');
+      const html = document.createElement('html');
+      const body = document.createElement('body');
+      body.setAttribute('data-load-called', 'true');
+      html.appendChild(body);
+      document.appendChild(html);
+    </script>
+  </body>
+</html>

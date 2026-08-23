@@ -1,0 +1,12 @@
+[package]
+license.workspace = true
+name = "moli-script"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+moli-page-types = { path = "../moli-page-types" }
+moli-web-mime = { path = "../moli-web-mime" }
+
+[lints]
+workspace = true

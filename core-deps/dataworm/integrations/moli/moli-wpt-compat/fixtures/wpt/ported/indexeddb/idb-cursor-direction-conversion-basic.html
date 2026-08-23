@@ -1,0 +1,141 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+function wait_request(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function cursor_keys(request) {
+  return new Promise((resolve, reject) => {
+    const keys = [];
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(keys);
+        return;
+      }
+      keys.push(cursor.key);
+      cursor.continue();
+    };
+  });
+}
+
+function object_store(db, storeName) {
+  return db.transaction(storeName).objectStore(storeName);
+}
+
+function index_store(db, storeName, indexName) {
+  return object_store(db, storeName).index(indexName);
+}
+
+promise_test(async () => {
+  const dbname = "idb-cursor-direction-conversion-" + Math.random();
+  const storeName = "store";
+  const indexName = "byGroup";
+  const throwingDirection = {
+    toString() {
+      throw new RangeError("cursor direction conversion");
+    },
+  };
+
+  const openRequest = indexedDB.open(dbname, 1);
+  openRequest.onupgradeneeded = () => {
+    const store = openRequest.result.createObjectStore(storeName);
+    store.createIndex(indexName, "group");
+    store.add({ id: 1, group: "a" }, 1);
+    store.add({ id: 2, group: "a" }, 2);
+    store.add({ id: 3, group: "b" }, 3);
+  };
+
+  const db = await wait_request(openRequest);
+  const store = object_store(db, storeName);
+
+  assert_throws_name(
+    "TypeError",
+    () => store.openCursor(undefined, Symbol("direction")),
+    "openCursor rejects Symbol direction"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => store.openCursor(undefined, "forward"),
+    "openCursor rejects unknown enum token"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => store.openCursor(undefined, null),
+    "openCursor converts null to an invalid enum token"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => store.openCursor(undefined, throwingDirection),
+    "openCursor propagates direction stringification errors"
+  );
+
+  assert_array_equals(
+    await cursor_keys(object_store(db, storeName).openCursor(undefined, undefined)),
+    [1, 2, 3],
+    "present undefined direction uses the default next direction"
+  );
+
+  let conversions = 0;
+  const directionObject = {
+    toString() {
+      ++conversions;
+      return "prev";
+    },
+  };
+  const deferredRequest = object_store(db, storeName).openCursor(
+    undefined,
+    directionObject
+  );
+  assert_equals(conversions, 1, "direction converts synchronously once");
+  assert_array_equals(
+    await cursor_keys(deferredRequest),
+    [3, 2, 1],
+    "objectStore.openCursor uses converted object direction"
+  );
+  assert_equals(conversions, 1, "deferred cursor task reuses normalized direction");
+
+  assert_array_equals(
+    await cursor_keys(object_store(db, storeName).openKeyCursor(undefined, "prevunique")),
+    [3, 2, 1],
+    "objectStore.openKeyCursor parses direction enum"
+  );
+  assert_array_equals(
+    await cursor_keys(index_store(db, storeName, indexName).openCursor(undefined, "prev")),
+    ["b", "a", "a"],
+    "index.openCursor parses direction enum"
+  );
+  assert_array_equals(
+    await cursor_keys(index_store(db, storeName, indexName).openKeyCursor(undefined, "nextunique")),
+    ["a", "b"],
+    "index.openKeyCursor parses unique direction enum"
+  );
+
+  db.close();
+  await wait_request(indexedDB.deleteDatabase(dbname));
+}, "IDB openCursor/openKeyCursor direction follows WebIDL enum conversion");
+</script>

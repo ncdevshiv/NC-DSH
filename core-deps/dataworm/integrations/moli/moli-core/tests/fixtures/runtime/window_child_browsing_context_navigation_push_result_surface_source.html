@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      let committed = false;
+      let finished = false;
+      let listenerCount = 0;
+      let propertyCount = 0;
+      navigation.addEventListener("currententrychange", () => {
+        listenerCount += 1;
+      });
+      navigation.oncurrententrychange = () => {
+        propertyCount += 1;
+      };
+      const sourceActivation = () =>
+        [
+          String(navigation.activation?.entry?.url ?? ""),
+          String(navigation.activation?.from?.url ?? ""),
+          String(navigation.activation?.navigationType ?? ""),
+          String(navigation.transition === null),
+        ].join("|");
+      const beforeEntry = navigation.currentEntry;
+      const result = navigation.navigate(
+        "/compat/window-child-browsing-context-navigation-push-result-surface-destination",
+        { history: "push" }
+      );
+      parent.document.body.setAttribute("data-source-before", sourceActivation());
+
+      parent.document.body.setAttribute(
+        "data-source-sync",
+        [
+          String(committed),
+          String(finished),
+          String(location.href),
+          String(history.length),
+          String(navigation.currentEntry?.index ?? -1),
+          sourceActivation(),
+          `${listenerCount}|${propertyCount}`,
+        ].join("|")
+      );
+
+      setTimeout(() => {
+        parent.document.body.setAttribute(
+          "data-source-timeout",
+          [
+            String(committed),
+            String(finished),
+            String(location.href),
+            String(history.length),
+            String(navigation.currentEntry?.index ?? -1),
+            sourceActivation(),
+            `${listenerCount}|${propertyCount}`,
+          ].join("|")
+        );
+      }, 0);
+
+      result.committed.then((entry) => {
+        committed = true;
+        parent.document.body.setAttribute(
+          "data-committed",
+          [
+            Object.prototype.toString.call(entry),
+            String(entry?.url ?? ""),
+            String(entry === navigation.currentEntry),
+            String(entry === beforeEntry),
+          ].join("|")
+        );
+      });
+
+      result.finished.then((entry) => {
+        finished = true;
+        parent.document.body.setAttribute(
+          "data-finished",
+          [
+            Object.prototype.toString.call(entry),
+            String(entry?.url ?? ""),
+            String(entry === navigation.currentEntry),
+            String(entry === beforeEntry),
+          ].join("|")
+        );
+      });
+    </script>
+  </body>
+</html>

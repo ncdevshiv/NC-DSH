@@ -1,0 +1,7 @@
+{
+  "name": "http-json",
+  "nested": {
+    "value": 7
+  },
+  "items": ["alpha", "beta"]
+}

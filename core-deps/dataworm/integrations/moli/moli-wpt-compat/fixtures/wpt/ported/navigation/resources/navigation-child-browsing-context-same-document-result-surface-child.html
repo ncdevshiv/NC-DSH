@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<script>
+const params = new URL(location.href).searchParams;
+const mode = params.get("mode") || "push";
+const step = Number(params.get("step") || "7");
+
+const topHrefBefore = parent.location.href;
+const topHistoryBefore = parent.history.length;
+const order = [];
+let listenerCount = 0;
+let propertyCount = 0;
+let committed = false;
+let finished = false;
+let from = "unset";
+let propertyFrom = "unset";
+let navType = "unset";
+let propertyNavType = "unset";
+
+navigation.addEventListener("currententrychange", function (event) {
+  listenerCount += 1;
+  from = event.from ? event.from.url : "null";
+  navType = String(event.navigationType);
+  order.push("cec:" + String(event.navigationType ?? "null") + ":" + String(event.from?.url ?? ""));
+  queueMicrotask(function () {
+    order.push("cec-micro:" + new URL(location.href).hash + ":" + String(history.state?.step ?? "null"));
+  });
+});
+
+navigation.oncurrententrychange = function (event) {
+  propertyCount += 1;
+  propertyFrom = event.from ? event.from.url : "null";
+  propertyNavType = String(event.navigationType);
+};
+
+addEventListener("popstate", function () {
+  order.push("popstate:" + new URL(location.href).hash);
+});
+
+addEventListener("hashchange", function () {
+  order.push("hashchange:" + new URL(location.href).hash);
+});
+
+const result = navigation.navigate("#dest", {
+  history: mode,
+  state: { step: step },
+});
+
+result.committed.then(function (entry) {
+  committed = true;
+  order.push("committed:" + new URL(entry.url).hash + ":" + String(entry === navigation.currentEntry));
+});
+
+result.finished.then(function (entry) {
+  finished = true;
+  order.push("finished:" + new URL(entry.url).hash + ":" + String(entry === navigation.currentEntry));
+});
+
+parent.document.body.setAttribute("data-top-location-unchanged", String(parent.location.href === topHrefBefore));
+parent.document.body.setAttribute("data-top-history-unchanged", String(parent.history.length === topHistoryBefore));
+parent.document.body.setAttribute(
+  "data-sync",
+  [
+    "hash=" + new URL(location.href).hash,
+    "len=" + history.length,
+    "committed=" + committed,
+    "finished=" + finished,
+    "history=" + JSON.stringify(history.state),
+    "entry=" + JSON.stringify(navigation.currentEntry.getState()),
+    "listener=" + listenerCount,
+    "property=" + propertyCount,
+    "from=" + from,
+    "propertyFrom=" + propertyFrom,
+    "navType=" + navType,
+    "propertyNavType=" + propertyNavType,
+    "order=" + order.join(","),
+  ].join("|"),
+);
+
+setTimeout(function () {
+  parent.document.body.setAttribute(
+    "data-timeout",
+    [
+      "hash=" + new URL(location.href).hash,
+      "len=" + history.length,
+      "committed=" + committed,
+      "finished=" + finished,
+      "history=" + JSON.stringify(history.state),
+      "entry=" + JSON.stringify(navigation.currentEntry.getState()),
+      "listener=" + listenerCount,
+      "property=" + propertyCount,
+      "from=" + from,
+      "propertyFrom=" + propertyFrom,
+      "navType=" + navType,
+      "propertyNavType=" + propertyNavType,
+      "order=" + order.join(","),
+    ].join("|"),
+  );
+}, 0);
+</script>

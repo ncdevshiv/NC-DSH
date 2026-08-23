@@ -1,0 +1,286 @@
+{
+  "engine": "moli",
+  "name": "wasm-moli-current",
+  "categories": {
+    "wpt-core-harness-table64": {
+      "tracking_doc": "docs/wasm-wpt-compat-followups-current.md#14",
+      "scope": "The upstream async core harness does not provide the spectest.table64 import required by table64.wast.js.",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "docs/wasm-wpt-compat-followups-current.md#14",
+          "note": "Focused Moli and Chromium comparison after declared-limit normalization."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/core/memory64/table64.wast.js.html",
+          "note": "Imports spectest.table64 in its final instantiation case."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/core/js/harness/async_index.js",
+          "note": "Defines spectest.table and spectest.memory but no spectest.table64."
+        }
+      ]
+    },
+    "wasm-global-live-binding": {
+      "tracking_doc": "docs/wasm-global-live-binding-design-current.md",
+      "scope": "Mutable wasm global export live bindings require V8/module-binding support, not Rust wrapper refreshes.",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "docs/wasm-global-live-binding-design-current.md",
+          "note": "V8 cell-load design boundary and ignored acceptance tests."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/jsapi/esm-integration/global-exports-live-bindings.tentative.any.js",
+          "note": "WPT mutable global live-binding expectation."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-core/tests/scripts.rs",
+          "note": "Window ignored acceptance tests for mutable wasm global live bindings and re-exports."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-renderer-v8/src/worker/thread/tests/modules.rs",
+          "note": "Worker ignored acceptance tests for mutable wasm global live bindings and re-exports."
+        }
+      ]
+    },
+    "wpt-idl-source-phase-skew": {
+      "tracking_doc": "docs/wasm-module-script-current.md",
+      "scope": "WPT IDL expectations that lag the source-phase AbstractModuleSource prototype chain.",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "docs/wasm-module-script-current.md",
+          "note": "Source-phase AbstractModuleSource prototype chain tradeoff."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/jsapi/idlharness.any.js",
+          "note": "Current IDL harness expectation that conflicts with the source-phase prototype chain."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/jsapi/esm-integration/source-phase.tentative.any.js",
+          "note": "Source-phase WPT coverage that current runtime keeps passing instead of reverting the prototype chain."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-core/tests/scripts.rs",
+          "note": "Document source-phase wasm import locks AbstractModuleSource inheritance and hidden global shape."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-renderer-v8/src/worker/thread/tests/modules.rs",
+          "note": "Module worker source-phase wasm import locks AbstractModuleSource inheritance and hidden global shape."
+        }
+      ]
+    },
+    "wpt-webapi-global-shape-skew": {
+      "tracking_doc": "docs/wasm-wpt-compat-followups-current.md",
+      "scope": "Tentative webapi ESM cases expecting raw WebAssembly.Global where jsapi ESM expects unwrapped values.",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "docs/wasm-wpt-compat-followups-current.md#7",
+          "note": "Comparison of jsapi unwrapped global expectations with webapi tentative raw-global assertions."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/webapi/esm-integration/exported-names.tentative.html",
+          "note": "WebAPI tentative raw-global expectation for exported names."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/webapi/esm-integration/js-wasm-cycle.tentative.html",
+          "note": "WebAPI tentative raw-global assertion encountered before the final cycle assertion."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-core/tests/scripts.rs",
+          "note": "Window static/dynamic wasm imports expose global exports as unwrapped numbers, not WebAssembly.Global wrappers."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-renderer-v8/src/worker/thread/tests/modules.rs",
+          "note": "Module worker wasm imports expose global exports as unwrapped numbers, not WebAssembly.Global wrappers."
+        }
+      ]
+    },
+    "wpt-webapi-cycle-no-stable-baseline": {
+      "tracking_doc": "docs/wasm-js-cycle-design-current.md",
+      "scope": "Tentative webapi JS/WASM cycle shape without a stable Chromium/Blink passing baseline; recursive SyntheticModule evaluation is not acceptable.",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "docs/wasm-js-cycle-design-current.md",
+          "note": "Why this tentative cycle is outside the current Chromium-aligned runtime target."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/webapi/esm-integration/wasm-js-cycle.tentative.html",
+          "note": "WPT wasm-higher JS/WASM cycle shape that Chromium/Blink does not provide as a stable passing baseline."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-core/tests/scripts.rs",
+          "note": "Window ignored cycle acceptance and current guard regression."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-renderer-v8/src/worker/thread/tests/modules.rs",
+          "note": "Worker ignored cycle acceptance and current guard regression."
+        }
+      ]
+    },
+    "wpt-worker-message-shape-skew": {
+      "tracking_doc": "docs/wasm-wpt-compat-followups-current.md",
+      "scope": "Tentative worker message assertions that conflict with browser MessageEvent/postMessage semantics.",
+      "evidence": [
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/webapi/esm-integration/worker.tentative.html",
+          "note": "Compares Worker.onmessage's MessageEvent parameter with 42."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/webapi/esm-integration/worker-import.tentative.html",
+          "note": "Compares worker-import helper object payload with 42."
+        },
+        {
+          "kind": "wpt",
+          "path": "../wpt/wasm/webapi/esm-integration/resources/worker-helper.js",
+          "note": "Posts { value, checks } for worker-import.tentative.html."
+        },
+        {
+          "kind": "doc",
+          "path": "docs/wasm-wpt-compat-followups-current.md#8",
+          "note": "Chromium comparison and local MessageEvent regression."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-renderer-v8/src/runtime/page_vm/tests/worker.rs",
+          "note": "Parent Worker.onmessage receives a MessageEvent with data, toStringTag, and message type."
+        },
+        {
+          "kind": "local-test",
+          "path": "moli-renderer-v8/src/worker/thread/tests/postmessage.rs",
+          "note": "WorkerGlobalScope onmessage receives a MessageEvent with data, toStringTag, and message type."
+        }
+      ]
+    }
+  },
+  "rules": [
+    {
+      "case_path": "wasm/core/memory64/table64.wast.js.html",
+      "category": "wpt-core-harness-table64",
+      "expected_status": "fail",
+      "message_contains": [
+        "table import requires a WebAssembly.Table"
+      ],
+      "reason": "The upstream async core harness omits spectest.table64; Chromium fails the same import with the same LinkError."
+    },
+    {
+      "case_path": "wasm/jsapi/esm-integration/global-exports-live-bindings.tentative.any.js?moli-wpt-any=dedicatedworker",
+      "category": "wasm-global-live-binding",
+      "expected_status": "fail",
+      "message_contains": [
+        "Local mutable global exports should be live bindings",
+        "expected 555 but got 100",
+        "Dep module mutable global exports should be live bindings",
+        "expected 3001 but got 2001"
+      ],
+      "reason": "Mutable wasm global exports are still SyntheticModule snapshot values instead of V8-aware live bindings."
+    },
+    {
+      "case_path": "wasm/jsapi/esm-integration/global-exports-live-bindings.tentative.any.js?moli-wpt-any=window",
+      "category": "wasm-global-live-binding",
+      "expected_status": "fail",
+      "message_contains": [
+        "Local mutable global exports should be live bindings",
+        "expected 555 but got 100",
+        "Dep module mutable global exports should be live bindings",
+        "expected 3001 but got 2001"
+      ],
+      "reason": "Mutable wasm global exports are still SyntheticModule snapshot values instead of V8-aware live bindings."
+    },
+    {
+      "case_path": "wasm/jsapi/idlharness.any.js?moli-wpt-any=dedicatedworker",
+      "category": "wpt-idl-source-phase-skew",
+      "expected_status": "fail",
+      "message_contains": [
+        "prototype of self's property \"Module\" is not Function.prototype",
+        "AbstractModuleSource",
+        "prototype of Module.prototype is not Object.prototype"
+      ],
+      "reason": "Current source-phase runtime prototype chain intentionally extends the hidden AbstractModuleSource constructor while this IDL harness still expects the old Module chain."
+    },
+    {
+      "case_path": "wasm/jsapi/idlharness.any.js?moli-wpt-any=window",
+      "category": "wpt-idl-source-phase-skew",
+      "expected_status": "fail",
+      "message_contains": [
+        "prototype of self's property \"Module\" is not Function.prototype",
+        "AbstractModuleSource",
+        "prototype of Module.prototype is not Object.prototype"
+      ],
+      "reason": "Current source-phase runtime prototype chain intentionally extends the hidden AbstractModuleSource constructor while this IDL harness still expects the old Module chain."
+    },
+    {
+      "case_path": "wasm/webapi/esm-integration/exported-names.tentative.html",
+      "category": "wpt-webapi-global-shape-skew",
+      "expected_status": "fail",
+      "message_contains": [
+        "Exported names from a WebAssembly module",
+        "assert_true: expected true got false"
+      ],
+      "reason": "This webapi tentative case still expects raw WebAssembly.Global where jsapi ESM integration expects an unwrapped JS value."
+    },
+    {
+      "case_path": "wasm/webapi/esm-integration/js-wasm-cycle.tentative.html",
+      "category": "wpt-webapi-global-shape-skew",
+      "expected_status": "fail",
+      "message_contains": [
+        "testharness completed without reporting any subtests",
+        "Unhandled rejection: assert_true: expected true got false"
+      ],
+      "reason": "The current failure is in the webapi tentative raw-global/cycle expectation area, not a reason to roll back jsapi global unwrapping."
+    },
+    {
+      "case_path": "wasm/webapi/esm-integration/wasm-js-cycle.tentative.html",
+      "category": "wpt-webapi-cycle-no-stable-baseline",
+      "expected_status": "fail",
+      "message_contains": [
+        "testharness completed without reporting any subtests",
+        "Unhandled rejection: cyclic WebAssembly module evaluation through JavaScript dependencies is not supported yet"
+      ],
+      "reason": "This tentative webapi cycle has no stable Chromium/Blink passing baseline; recursive SyntheticModule evaluation is not acceptable."
+    },
+    {
+      "case_path": "wasm/webapi/esm-integration/worker-import.tentative.html",
+      "category": "wpt-worker-message-shape-skew",
+      "expected_status": "fail",
+      "message_contains": [
+        "Testing import of WebAssembly from JavaScript worker",
+        "expected (number) 42 but got (object)",
+        "[object Object]"
+      ],
+      "reason": "The local WPT worker helper posts an object payload while the page asserts number 42; do not change Worker message semantics to satisfy this case."
+    },
+    {
+      "case_path": "wasm/webapi/esm-integration/worker.tentative.html",
+      "category": "wpt-worker-message-shape-skew",
+      "expected_status": "fail",
+      "message_contains": [
+        "Testing WebAssembly worker",
+        "expected (number) 42 but got (object)",
+        "[object MessageEvent]"
+      ],
+      "reason": "Worker.onmessage receives a MessageEvent by browser semantics; do not pass bare data to satisfy this tentative case."
+    }
+  ]
+}

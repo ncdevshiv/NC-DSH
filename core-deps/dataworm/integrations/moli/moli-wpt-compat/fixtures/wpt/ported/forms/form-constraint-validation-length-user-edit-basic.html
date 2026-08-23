@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body>
+  <form id="form">
+    <input id="field" minlength="3" maxlength="4" value="seed">
+    <textarea id="bio" minlength="2" maxlength="3">seed</textarea>
+    <input id="emoji" maxlength="1">
+  </form>
+</body>
+<script>
+test(function () {
+  const field = document.getElementById("field");
+  const bio = document.getElementById("bio");
+
+  field.value = "a";
+  bio.value = "a";
+
+  assert_false(field.validity.tooShort, "script-set input value should not trip tooShort");
+  assert_true(field.validity.valid, "script-set short input should remain valid");
+  assert_false(bio.validity.tooShort, "script-set textarea value should not trip tooShort");
+  assert_true(bio.validity.valid, "script-set short textarea should remain valid");
+}, "script-set length values do not create user-edit provenance");
+
+window.__lmAssertLengthState = function (expression, description) {
+  if (!expression) {
+    throw new Error(description);
+  }
+};
+</script>

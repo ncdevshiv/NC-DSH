@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.dynamicInOrderScriptOrder = [];
+      window.dynamicInOrderScriptLoads = 0;
+
+      window.addEventListener("load", () => {
+        window.dynamicInOrderScriptOrder.push("window-load");
+        if (window.dynamicInOrderScriptLoads === 2) {
+          window.dynamicInOrderScriptFinalOrder =
+            window.dynamicInOrderScriptOrder.join(",");
+        }
+      });
+
+      function recordDynamicInOrderLoad() {
+        window.dynamicInOrderScriptLoads += 1;
+        if (window.dynamicInOrderScriptLoads === 2) {
+          window.dynamicInOrderScriptOrderResult =
+            window.dynamicInOrderScriptOrder.join(",");
+          if (document.readyState === "complete") {
+            window.dynamicInOrderScriptFinalOrder =
+              window.dynamicInOrderScriptOrder.join(",");
+          }
+        }
+      }
+
+      const slowFirst = document.createElement("script");
+      slowFirst.async = false;
+      slowFirst.src = "/assets/dynamic_taxonomy_in_order_slow.js";
+      slowFirst.addEventListener("load", recordDynamicInOrderLoad);
+      document.head.appendChild(slowFirst);
+
+      const fastSecond = document.createElement("script");
+      fastSecond.async = false;
+      fastSecond.src = "/assets/dynamic_taxonomy_in_order_fast.js";
+      fastSecond.addEventListener("load", recordDynamicInOrderLoad);
+      document.head.appendChild(fastSecond);
+    </script>
+  </head>
+  <body></body>
+</html>

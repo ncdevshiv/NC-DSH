@@ -1,0 +1,456 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function worker_fixture_url() {
+  return new URL(
+    "/wpt/ported/worker/resources/worker-global-surface-worker.js",
+    location.href,
+  ).href;
+}
+
+function data_worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function assert_scope_branding(data, label) {
+  assert_equals(data.hasWorkerGlobalScope, true, label + " exposes WorkerGlobalScope");
+  assert_equals(
+    data.hasDedicatedWorkerGlobalScope,
+    true,
+    label + " exposes DedicatedWorkerGlobalScope",
+  );
+  assert_equals(data.workerCtorType, "function", label + " WorkerGlobalScope type");
+  assert_equals(
+    data.dedicatedCtorType,
+    "function",
+    label + " DedicatedWorkerGlobalScope type",
+  );
+  assert_equals(data.workerCtorName, "WorkerGlobalScope", label + " WorkerGlobalScope name");
+  assert_equals(
+    data.dedicatedCtorName,
+    "DedicatedWorkerGlobalScope",
+    label + " DedicatedWorkerGlobalScope name",
+  );
+  assert_equals(
+    data.selfIsWorkerGlobalScope,
+    true,
+    label + " self instanceof WorkerGlobalScope",
+  );
+  assert_equals(
+    data.selfIsDedicatedWorkerGlobalScope,
+    true,
+    label + " self instanceof DedicatedWorkerGlobalScope",
+  );
+  assert_equals(
+    data.dedicatedExtendsWorker,
+    true,
+    label + " DedicatedWorkerGlobalScope extends WorkerGlobalScope",
+  );
+  assert_equals(
+    data.globalPrototypeIsDedicated,
+    true,
+    label + " global prototype is DedicatedWorkerGlobalScope.prototype",
+  );
+  assert_equals(
+    data.dedicatedPrototypeParentIsWorker,
+    true,
+    label + " DedicatedWorkerGlobalScope prototype parent",
+  );
+  assert_equals(data.workerTag, "[object WorkerGlobalScope]", label + " worker prototype tag");
+  assert_equals(
+    data.dedicatedTag,
+    "[object DedicatedWorkerGlobalScope]",
+    label + " dedicated prototype tag",
+  );
+  assert_equals(
+    data.selfTag,
+    "[object DedicatedWorkerGlobalScope]",
+    label + " global object tag",
+  );
+  assert_equals(
+    data.constructorOnWorkerPrototype,
+    true,
+    label + " WorkerGlobalScope prototype constructor",
+  );
+  assert_equals(
+    data.constructorOnDedicatedPrototype,
+    true,
+    label + " DedicatedWorkerGlobalScope prototype constructor",
+  );
+  assert_equals(
+    data.dedicatedConstructorInheritsWorker,
+    true,
+    label + " DedicatedWorkerGlobalScope constructor inheritance",
+  );
+  assert_equals(
+    data.workerConstructorError,
+    "TypeError",
+    label + " WorkerGlobalScope constructor is illegal",
+  );
+  assert_equals(
+    data.dedicatedConstructorError,
+    "TypeError",
+    label + " DedicatedWorkerGlobalScope constructor is illegal",
+  );
+}
+
+function scope_branding_source() {
+  return [
+    "let workerConstructorError = null;",
+    "let dedicatedConstructorError = null;",
+    "try { new WorkerGlobalScope(); } catch (error) { workerConstructorError = error && error.name; }",
+    "try { new DedicatedWorkerGlobalScope(); } catch (error) { dedicatedConstructorError = error && error.name; }",
+    "postMessage({",
+    "  hasWorkerGlobalScope: Object.prototype.hasOwnProperty.call(self, 'WorkerGlobalScope'),",
+    "  hasDedicatedWorkerGlobalScope: Object.prototype.hasOwnProperty.call(self, 'DedicatedWorkerGlobalScope'),",
+    "  workerCtorType: typeof WorkerGlobalScope,",
+    "  dedicatedCtorType: typeof DedicatedWorkerGlobalScope,",
+    "  workerCtorName: WorkerGlobalScope && WorkerGlobalScope.name,",
+    "  dedicatedCtorName: DedicatedWorkerGlobalScope && DedicatedWorkerGlobalScope.name,",
+    "  selfIsWorkerGlobalScope: self instanceof WorkerGlobalScope,",
+    "  selfIsDedicatedWorkerGlobalScope: self instanceof DedicatedWorkerGlobalScope,",
+    "  dedicatedExtendsWorker: DedicatedWorkerGlobalScope.prototype instanceof WorkerGlobalScope,",
+    "  globalPrototypeIsDedicated: Object.getPrototypeOf(self) === DedicatedWorkerGlobalScope.prototype,",
+    "  dedicatedPrototypeParentIsWorker: Object.getPrototypeOf(DedicatedWorkerGlobalScope.prototype) === WorkerGlobalScope.prototype,",
+    "  workerTag: Object.prototype.toString.call(WorkerGlobalScope.prototype),",
+    "  dedicatedTag: Object.prototype.toString.call(DedicatedWorkerGlobalScope.prototype),",
+    "  selfTag: Object.prototype.toString.call(self),",
+    "  constructorOnWorkerPrototype: WorkerGlobalScope.prototype.constructor === WorkerGlobalScope,",
+    "  constructorOnDedicatedPrototype: DedicatedWorkerGlobalScope.prototype.constructor === DedicatedWorkerGlobalScope,",
+    "  dedicatedConstructorInheritsWorker: Object.getPrototypeOf(DedicatedWorkerGlobalScope) === WorkerGlobalScope,",
+    "  workerConstructorError: workerConstructorError,",
+    "  dedicatedConstructorError: dedicatedConstructorError",
+    "});",
+    "close();",
+  ].join("\n");
+}
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "global-scope" });
+    const message = await next_message(worker);
+    assert_scope_branding(message.data, "classic worker");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated classic workers expose WorkerGlobalScope branding");
+
+promise_test(async function () {
+  const worker = new Worker(data_worker_url(scope_branding_source()), { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_scope_branding(message.data, "module worker");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers expose WorkerGlobalScope branding");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+  const expectedRequestUrl = new URL(
+    "/wpt/ported/worker/resources/data.txt",
+    location.href,
+  ).href;
+  const expectedResolvedUrl = new URL(
+    "/wpt/ported/worker/resources/data.txt?x=1&x=2",
+    location.href,
+  );
+
+  try {
+    worker.postMessage({ mode: "request-url" });
+    const message = await next_message(worker);
+    assert_equals(
+      message.data.requestUrl,
+      expectedRequestUrl,
+      "Request should resolve relative URLs against the worker script URL",
+    );
+    assert_equals(message.data.urlCtor, "function", "URL should exist in workers");
+    assert_equals(
+      message.data.searchParamsCtor,
+      "function",
+      "URLSearchParams should exist in workers",
+    );
+    assert_equals(message.data.href, expectedResolvedUrl.href, "resolved URL href");
+    assert_equals(message.data.origin, expectedResolvedUrl.origin, "resolved URL origin");
+    assert_equals(
+      message.data.pathname,
+      expectedResolvedUrl.pathname,
+      "resolved URL pathname",
+    );
+    assert_equals(message.data.search, "?x=1&x=2", "resolved URL search");
+    assert_array_equals(message.data.xValues, ["1", "2"], "search params getAll()");
+    assert_equals(message.data.paramsString, "a=1&a=2&b=3", "URLSearchParams serialization");
+    assert_equals(message.data.canParseRelative, true, "URL.canParse relative");
+    assert_equals(message.data.canParseInvalidBase, false, "URL.canParse invalid base");
+    assert_equals(message.data.urlTag, "[object URL]", "URL object brand");
+    assert_equals(
+      message.data.paramsTag,
+      "[object URLSearchParams]",
+      "URLSearchParams object brand",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose Request, URL, and URLSearchParams relative-URL surface");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "navigator" });
+    const message = await next_message(worker);
+    assert_equals(message.data.navigatorOwn, true, "worker should expose navigator");
+    assert_equals(message.data.ctorOwn, true, "worker should expose WorkerNavigator");
+    assert_equals(message.data.navigatorType, "object", "navigator type");
+    assert_equals(message.data.ctorType, "function", "WorkerNavigator type");
+    assert_equals(message.data.ctorName, "WorkerNavigator", "navigator constructor name");
+    assert_equals(message.data.protoCtor, "WorkerNavigator", "navigator prototype constructor");
+    assert_equals(message.data.tag, "[object WorkerNavigator]", "navigator object brand");
+    assert_equals(
+      message.data.instanceofWorkerNavigator,
+      true,
+      "navigator instanceof WorkerNavigator",
+    );
+    assert_equals(message.data.ownUserAgent, false, "userAgent should live on the prototype");
+    assert_equals(
+      message.data.userAgentGetterType,
+      "function",
+      "userAgent should be exposed by a prototype getter",
+    );
+    assert_equals(message.data.probeError, undefined, "UAData probe should not reject");
+    assert_equals(
+      message.data.userAgentDataGetterType,
+      "function",
+      "userAgentData should be exposed by a prototype getter",
+    );
+    assert_equals(message.data.appCodeName, "Mozilla", "navigator.appCodeName");
+    assert_equals(message.data.appName, "Netscape", "navigator.appName");
+    assert_equals(message.data.platformType, "string", "navigator.platform type");
+    assert_equals(message.data.product, "Gecko", "navigator.product");
+    assert_equals(message.data.language, "en-US", "navigator.language");
+    assert_array_equals(message.data.languages, ["en-US", "en"], "navigator.languages");
+    assert_equals(message.data.onLineType, "boolean", "navigator.onLine type");
+    assert_equals(
+      message.data.hardwareConcurrencyPositive,
+      true,
+      "navigator.hardwareConcurrency should be positive",
+    );
+    assert_equals(
+      message.data.deviceMemoryPositive,
+      true,
+      "navigator.deviceMemory should be positive",
+    );
+    assert_equals(message.data.uaDataCtorOwn, true, "worker should expose NavigatorUAData");
+    assert_equals(message.data.uaDataCtorType, "function", "NavigatorUAData type");
+    assert_equals(message.data.uaDataType, "object", "navigator.userAgentData type");
+    assert_equals(message.data.uaDataSameObject, true, "userAgentData should be SameObject");
+    assert_equals(
+      message.data.uaDataInstance,
+      true,
+      "userAgentData instanceof NavigatorUAData",
+    );
+    assert_equals(
+      message.data.uaDataTag,
+      "[object NavigatorUAData]",
+      "NavigatorUAData object brand",
+    );
+    assert_array_equals(
+      message.data.uaDataJsonKeys,
+      ["brands", "mobile", "platform"],
+      "NavigatorUAData low entropy keys",
+    );
+    assert_array_equals(
+      message.data.emptyHighEntropyKeys,
+      ["brands", "mobile", "platform"],
+      "empty high entropy request only returns base fields",
+    );
+    assert_array_equals(
+      message.data.architectureHighEntropyKeys,
+      ["architecture", "brands", "mobile", "platform"],
+      "selective high entropy request only adds the requested supported field",
+    );
+    assert_equals(message.data.architectureType, "string", "architecture value type");
+    assert_equals(
+      message.data.architectureOmitsFormFactors,
+      true,
+      "unrequested formFactors should be omitted",
+    );
+    assert_equals(
+      message.data.assignError,
+      "TypeError",
+      "readonly navigator properties should reject assignment in strict mode",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose WorkerNavigator and NavigatorUAData");
+
+promise_test(async function () {
+  const workerUrl = worker_fixture_url() + "?srch%20";
+  const worker = new Worker(workerUrl);
+
+  try {
+    worker.postMessage({ mode: "location" });
+    const message = await next_message(worker);
+    assert_equals(message.data.locationOwn, true, "worker should expose location");
+    assert_equals(message.data.ctorOwn, true, "worker should expose WorkerLocation");
+    assert_equals(message.data.ctorType, "function", "WorkerLocation type");
+    assert_equals(message.data.ctorName, "WorkerLocation", "location constructor name");
+    assert_equals(message.data.protoCtor, "WorkerLocation", "location prototype constructor");
+    assert_equals(message.data.tag, "[object WorkerLocation]", "location object brand");
+    assert_equals(
+      message.data.stringified,
+      workerUrl,
+      "String(location) should preserve the worker script URL",
+    );
+    assert_equals(
+      message.data.instanceofWorkerLocation,
+      true,
+      "location instanceof WorkerLocation",
+    );
+    assert_equals(message.data.ownHref, false, "href should live on the prototype");
+    assert_equals(
+      message.data.hrefGetterType,
+      "function",
+      "href should be exposed by a prototype getter",
+    );
+    assert_equals(message.data.href, workerUrl, "location.href");
+    assert_equals(message.data.origin, location.origin, "location.origin");
+    assert_equals(message.data.protocol, location.protocol, "location.protocol");
+    assert_equals(message.data.host, location.host, "location.host");
+    assert_equals(message.data.hostname, location.hostname, "location.hostname");
+    assert_equals(message.data.port, location.port, "location.port");
+    assert_equals(
+      message.data.pathname,
+      "/wpt/ported/worker/resources/worker-global-surface-worker.js",
+      "location.pathname",
+    );
+    assert_equals(message.data.search, "?srch%20", "location.search");
+    assert_equals(message.data.hash, "", "worker script URL fragments should not survive construction");
+    assert_equals(
+      message.data.unchanged,
+      true,
+      "assigning to WorkerLocation.href should not navigate the worker",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose WorkerLocation for HTTP workers");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "domexception" });
+    const message = await next_message(worker);
+    assert_equals(message.data.ctorType, "function", "DOMException constructor type");
+    assert_true(message.data.instance, "DOMException instance check");
+    assert_equals(message.data.name, "InvalidCharacterError", "DOMException name");
+    assert_equals(message.data.message, "bad data", "DOMException message");
+    assert_equals(message.data.code, 5, "DOMException legacy code");
+    assert_equals(message.data.constructorConstant, 5, "constructor constant");
+    assert_equals(message.data.prototypeConstant, 5, "prototype constant");
+    assert_equals(message.data.inheritedConstant, 5, "instance inherited constant");
+    assert_false(message.data.writable, "constant writable descriptor");
+    assert_true(message.data.enumerable, "constant enumerable descriptor");
+    assert_false(message.data.configurable, "constant configurable descriptor");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose DOMException legacy constants");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "base64" });
+    const message = await next_message(worker);
+    assert_equals(message.data.atobType, "function", "atob type");
+    assert_equals(message.data.btoaType, "function", "btoa type");
+    assert_equals(message.data.atobLength, 1, "atob length");
+    assert_equals(message.data.btoaLength, 1, "btoa length");
+    assert_equals(message.data.encoded, "d29ya2Vy", "btoa string encoding");
+    assert_equals(message.data.binaryEncoded, "AP8=", "btoa Latin-1 bytes");
+    assert_equals(message.data.decoded, "worker", "atob string decoding");
+    assert_equals(message.data.whitespaceDecoded, "a", "atob ignores ASCII whitespace");
+    assert_equals(message.data.omittedPaddingDecoded, "a", "atob accepts omitted padding");
+    assert_true(
+      message.data.errorIsDomException,
+      "btoa invalid input should throw DOMException",
+    );
+    assert_equals(message.data.errorName, "InvalidCharacterError", "exception name");
+    assert_equals(message.data.errorCode, 5, "exception legacy code");
+    assert_equals(message.data.errorLegacyConstant, 5, "DOMException legacy constant");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose atob() and btoa()");
+
+promise_test(async function () {
+  const worker = new Worker(
+    data_worker_url([
+      "postMessage({",
+      "  href: location.href,",
+      "  origin: location.origin,",
+      "  protocol: location.protocol,",
+      "  host: location.host,",
+      "  pathname: location.pathname,",
+      "  search: location.search,",
+      "  stringified: location.toString()",
+      "});",
+      "close();",
+    ].join("\n")),
+  );
+
+  try {
+    const message = await next_message(worker);
+    assert_true(
+      String(message.data.href).indexOf("data:text/javascript,") === 0,
+      "data URL worker location.href should preserve the data: URL",
+    );
+    assert_equals(message.data.origin, "null", "data URL workers should use a null origin");
+    assert_equals(message.data.protocol, "data:", "data URL worker protocol");
+    assert_equals(message.data.host, "", "data URL worker host");
+    assert_true(
+      String(message.data.pathname).indexOf("text/javascript,") === 0,
+      "data URL worker pathname should expose the payload path component",
+    );
+    assert_equals(message.data.search, "", "data URL worker search");
+    assert_equals(
+      message.data.stringified,
+      message.data.href,
+      "data URL worker toString() should match href",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose WorkerLocation for data URL workers");
+</script>

@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const headers = new Headers([["X-Test", "one"], ["x-test", "two"]]);
+  assert_true(headers.has("x-test"));
+  assert_true(headers.has("X-Test"));
+  assert_equals(headers.get("x-test"), "one, two");
+
+  headers.append("Accept", "text/html");
+  headers.append("accept", "application/json");
+  assert_equals(headers.get("ACCEPT"), "text/html, application/json");
+
+  headers.set("x-test", "three");
+  assert_equals(headers.get("X-Test"), "three");
+  headers.delete("x-test");
+  assert_false(headers.has("x-test"));
+}, "Headers supports case-insensitive get/has/append/set/delete");
+
+test(function () {
+  const headers = new Headers({
+    "X-Record": "one",
+    "X-Other": { toString() { return "two"; } },
+  });
+  assert_equals(headers.get("x-record"), "one");
+  assert_equals(headers.get("x-other"), "two");
+
+  assert_throws_js(TypeError, function () {
+    new Headers({ "X-Bad": "\u0100" });
+  }, "record values should use ByteString conversion");
+
+  assert_throws_js(TypeError, function () {
+    new Headers([["X-Symbol", Symbol("value")]]);
+  }, "sequence values should use ByteString conversion");
+}, "Headers constructor parses record and sequence values through WebIDL ByteString boundaries");
+</script>

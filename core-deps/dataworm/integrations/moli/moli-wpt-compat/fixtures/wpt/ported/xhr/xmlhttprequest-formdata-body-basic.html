@@ -1,0 +1,183 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const ECHO_BODY_URL = "/wpt/runtime/xhr/echo-body";
+const MULTIPART_CONTENT_TYPE_PREFIX = "multipart/form-data; boundary=";
+
+function sendBody(body, configure) {
+  return new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      resolve({ status: xhr.status, response: xhr.response });
+    };
+    xhr.open("POST", ECHO_BODY_URL);
+    xhr.responseType = "json";
+    if (configure) {
+      configure(xhr);
+    }
+    xhr.send(body);
+  });
+}
+
+function multipartBoundary(result) {
+  assert_equals(result.status, 200, "FormData request status");
+  assert_true(
+    result.response.content_type.startsWith(MULTIPART_CONTENT_TYPE_PREFIX + "----MoliFormDataBoundary"),
+    "FormData should install a multipart Content-Type with a generated boundary",
+  );
+  return result.response.content_type.slice(MULTIPART_CONTENT_TYPE_PREFIX.length);
+}
+
+function countOccurrences(value, needle) {
+  let count = 0;
+  let index = 0;
+  while (true) {
+    index = value.indexOf(needle, index);
+    if (index === -1) {
+      return count;
+    }
+    count += 1;
+    index += needle.length;
+  }
+}
+
+function assertBoundaryOnlyDelimitsMultipartBody(body, boundary, partCount) {
+  assert_equals(
+    countOccurrences(body, boundary),
+    partCount + 1,
+    "the selected multipart boundary should only appear in part delimiters",
+  );
+  assert_equals(
+    countOccurrences(body, `--${boundary}`),
+    partCount + 1,
+    "the selected multipart boundary delimiters should match the part count",
+  );
+  assert_true(
+    body.endsWith(`--${boundary}--\r\n`),
+    "the multipart body should end with the selected closing boundary",
+  );
+}
+
+promise_test(async function () {
+  const data = new FormData();
+  data.append("alpha", "one");
+  data.append("line\nname", "line\nvalue");
+  data.append('quote"name', 'quote"value');
+
+  const result = await sendBody(data);
+  const boundary = multipartBoundary(result);
+
+  assert_equals(
+    result.response.body,
+    `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="alpha"\r\n\r\n' +
+      "one\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="line%0Aname"\r\n\r\n' +
+      "line\nvalue\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="quote%22name"\r\n\r\n' +
+      'quote"value\r\n' +
+      `--${boundary}--\r\n`,
+    "FormData string fields should serialize in insertion order",
+  );
+}, "XMLHttpRequest serializes FormData string fields as multipart/form-data");
+
+promise_test(async function () {
+  const data = new FormData();
+  data.append("before", "text");
+  data.append("blob", new Blob(["blob-body"], { type: "text/plain" }));
+  data.append('file"name', new File(["file-body"], 'report"name.txt', { type: "text/custom" }));
+
+  const result = await sendBody(data);
+  const boundary = multipartBoundary(result);
+
+  assert_equals(
+    result.response.body,
+    `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="before"\r\n\r\n' +
+      "text\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="blob"; filename="blob"\r\n' +
+      "Content-Type: text/plain\r\n\r\n" +
+      "blob-body\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="file%22name"; filename="report%22name.txt"\r\n' +
+      "Content-Type: text/custom\r\n\r\n" +
+      "file-body\r\n" +
+      `--${boundary}--\r\n`,
+    "FormData Blob and File values should serialize as file parts",
+  );
+}, "XMLHttpRequest serializes FormData Blob and File parts");
+
+promise_test(async function () {
+  const data = new FormData();
+  data.append("empty-blob", new Blob(["blob-body"]));
+  data.append("empty-file", new File(["file-body"], "empty.bin"));
+
+  const result = await sendBody(data);
+  const boundary = multipartBoundary(result);
+
+  assert_equals(
+    result.response.body,
+    `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="empty-blob"; filename="blob"\r\n' +
+      "Content-Type: application/octet-stream\r\n\r\n" +
+      "blob-body\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="empty-file"; filename="empty.bin"\r\n' +
+      "Content-Type: application/octet-stream\r\n\r\n" +
+      "file-body\r\n" +
+      `--${boundary}--\r\n`,
+    "XMLHttpRequest FormData should default empty Blob/File MIME types to application/octet-stream",
+  );
+}, "XMLHttpRequest serializes empty-MIME FormData Blob and File parts with the default Content-Type");
+
+promise_test(async function () {
+  const probes = [
+    "----MoliFormDataBoundary0000000000000000",
+    "----MoliFormDataBoundary0123456789abcdef",
+    "----MoliFormDataBoundaryffffffffffffffff",
+  ];
+  const data = new FormData();
+  data.append(`field ${probes[0]}`, `text value ${probes[1]}`);
+  data.append("file", new File([`file bytes ${probes[2]}`], `report ${probes[0]}.txt`, {
+    type: "application/x-moliformdataboundary",
+  }));
+  data.append("tail", probes.join("|"));
+
+  const result = await sendBody(data);
+  const boundary = multipartBoundary(result);
+
+  assertBoundaryOnlyDelimitsMultipartBody(result.response.body, boundary, 3);
+  for (const probe of probes) {
+    assert_true(
+      result.response.body.includes(probe),
+      "boundary-like field data should be preserved in the multipart body",
+    );
+  }
+}, "XMLHttpRequest avoids choosing a FormData boundary that appears in multipart parts");
+
+promise_test(async function () {
+  const data = new FormData();
+  data.append("alpha", "one");
+
+  const result = await sendBody(data, function (xhr) {
+    xhr.setRequestHeader("Content-Type", "text/plain;charset=utf-8");
+  });
+
+  assert_equals(result.status, 200, "explicit Content-Type status");
+  assert_equals(
+    result.response.content_type,
+    "text/plain;charset=utf-8",
+    "explicit Content-Type should not be overwritten for FormData",
+  );
+  assert_true(
+    result.response.body.startsWith("------MoliFormDataBoundary"),
+    "FormData body should still use the generated multipart boundary",
+  );
+}, "XMLHttpRequest preserves an explicit Content-Type for FormData bodies");
+</script>

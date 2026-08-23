@@ -1,0 +1,197 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve) {
+    worker.addEventListener("message", resolve, { once: true });
+  });
+}
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url([
+      "addEventListener('message', function (event) {",
+      "  postMessage({",
+      "    isMessageEvent: event instanceof MessageEvent,",
+      "    typeString: Object.prototype.toString.call(event),",
+      "    data: event.data,",
+      "    origin: event.origin,",
+      "    lastEventId: event.lastEventId,",
+      "    sourceIsNull: event.source === null,",
+      "    portsLength: event.ports.length,",
+      "    portsStable: event.ports === event.ports,",
+      "    bubbles: event.bubbles,",
+      "    cancelable: event.cancelable,",
+      "  });",
+      "  close();",
+      "});",
+    ].join("\n")),
+  );
+
+  try {
+    worker.postMessage("ping");
+    const event = await next_message(worker);
+    assert_true(event instanceof MessageEvent, "page-side worker delivery should use MessageEvent");
+    assert_equals(event.origin, "", "page-side worker delivery should use the empty origin default");
+    assert_equals(event.lastEventId, "", "page-side worker delivery should use the empty lastEventId default");
+    assert_equals(event.source, null, "page-side worker delivery should not expose a source object");
+    assert_equals(event.ports.length, 0, "page-side worker delivery should not expose transferred ports");
+    assert_equals(event.ports, event.ports, "page-side worker delivery ports should be stable");
+    assert_equals(event.data.isMessageEvent, true, "worker listener should receive MessageEvent");
+    assert_equals(event.data.typeString, "[object MessageEvent]", "worker listener event brand");
+    assert_equals(event.data.data, "ping", "worker listener event.data");
+    assert_equals(event.data.origin, "", "worker listener event.origin");
+    assert_equals(event.data.lastEventId, "", "worker listener event.lastEventId");
+    assert_equals(event.data.sourceIsNull, true, "worker listener event.source");
+    assert_equals(event.data.portsLength, 0, "worker listener event.ports");
+    assert_equals(event.data.portsStable, true, "worker listener event.ports should be stable");
+    assert_equals(event.data.bubbles, false, "worker listener event should not bubble");
+    assert_equals(event.data.cancelable, false, "worker listener event should not be cancelable");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker message delivery uses MessageEvent defaults in both directions");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url([
+      "addEventListener('error', function (event) {",
+      "  postMessage({",
+      "    isErrorEvent: event instanceof ErrorEvent,",
+      "    typeString: Object.prototype.toString.call(event),",
+      "    message: event.message,",
+      "    filename: event.filename,",
+      "  });",
+      "  event.preventDefault();",
+      "  close();",
+      "});",
+      "onmessage = function () {",
+      "  throw new Error('boom-message');",
+      "};",
+    ].join("\n")),
+  );
+
+  try {
+    worker.postMessage("go");
+    const event = await next_message(worker);
+    assert_equals(event.data.isErrorEvent, true, "worker error listeners should receive ErrorEvent");
+    assert_equals(event.data.typeString, "[object ErrorEvent]", "worker error event brand");
+    assert_equals(event.data.message, "Uncaught Error: boom-message", "worker error event.message");
+    assert_true(
+      String(event.data.filename).indexOf("data:text/javascript,") === 0,
+      "worker error event.filename should point at the worker source",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker error listeners receive ErrorEvent instances");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url([
+      "onerror = function (message, filename, lineno, colno, error) {",
+      "  postMessage({",
+      "    messageIncludesBoom: String(message).includes('boom-message'),",
+      "    filename: filename,",
+      "    linenoType: typeof lineno,",
+      "    colnoType: typeof colno,",
+      "    errorMessage: error && error.message,",
+      "  });",
+      "  close();",
+      "  return true;",
+      "};",
+      "onmessage = function () {",
+      "  throw new Error('boom-message');",
+      "};",
+    ].join("\n")),
+  );
+
+  try {
+    worker.postMessage("go");
+    const event = await next_message(worker);
+    assert_equals(event.data.messageIncludesBoom, true, "worker onerror message");
+    assert_true(
+      String(event.data.filename).indexOf("data:text/javascript,") === 0,
+      "worker onerror filename should point at the worker source",
+    );
+    assert_equals(event.data.linenoType, "number", "worker onerror lineno type");
+    assert_equals(event.data.colnoType, "number", "worker onerror colno type");
+    assert_equals(event.data.errorMessage, "boom-message", "worker onerror error object message");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker global onerror receives worker runtime exceptions");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url([
+      "let tick = 0;",
+      "const intervalId = setInterval(function () {",
+      "  tick += 1;",
+      "  if (tick === 1) {",
+      "    throw new Error('tick-boom');",
+      "  }",
+      "  postMessage('tick:' + tick);",
+      "  clearInterval(intervalId);",
+      "  close();",
+      "}, 10);",
+      "onerror = function (message, filename, lineno, colno, error) {",
+      "  postMessage({",
+      "    phase: 'onerror',",
+      "    messageIncludesBoom: String(message).includes('tick-boom'),",
+      "    filename: filename,",
+      "    linenoType: typeof lineno,",
+      "    colnoType: typeof colno,",
+      "    errorMessage: error && error.message,",
+      "  });",
+      "  return true;",
+      "};",
+    ].join("\n")),
+  );
+
+  try {
+    const first = await next_message(worker);
+    assert_equals(first.data.phase, "onerror", "timer exception should route through worker onerror first");
+    assert_equals(first.data.messageIncludesBoom, true, "timer exception message");
+    assert_true(
+      String(first.data.filename).indexOf("data:text/javascript,") === 0,
+      "timer exception filename should point at the worker source",
+    );
+    assert_equals(first.data.linenoType, "number", "timer exception lineno type");
+    assert_equals(first.data.colnoType, "number", "timer exception colno type");
+    assert_equals(first.data.errorMessage, "tick-boom", "timer exception error object message");
+
+    const second = await next_message(worker);
+    assert_equals(second.data, "tick:2", "handled timer exception should not stop later interval ticks");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker handled timer exceptions do not stop later interval ticks");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url([
+      "const order = [];",
+      "queueMicrotask(function () {",
+      "  order.push('microtask');",
+      "  postMessage(order.join(','));",
+      "});",
+      "order.push('sync');",
+    ].join("\n")),
+  );
+
+  try {
+    const event = await next_message(worker);
+    assert_equals(event.data, "sync,microtask", "queueMicrotask should run after the current worker stack");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker queueMicrotask runs after the current stack");
+</script>

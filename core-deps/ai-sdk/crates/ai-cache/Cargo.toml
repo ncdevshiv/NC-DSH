@@ -1,0 +1,27 @@
+[package]
+name = "ai-cache"
+description = "Caching: in-memory cache with TTL, semantic cache interface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-core = { path = "../ai-core" }
+ai-errors = { path = "../ai-errors" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+futures-core.workspace = true
+ai-types = { path = "../ai-types" }

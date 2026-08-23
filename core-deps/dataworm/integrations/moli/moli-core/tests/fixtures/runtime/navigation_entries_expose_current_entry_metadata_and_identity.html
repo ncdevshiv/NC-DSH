@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+  <body
+    data-navigation-type=""
+    data-current-entry-type=""
+    data-current-id-type=""
+    data-current-key-type=""
+    data-current-url-type=""
+    data-current-same-document-type=""
+    data-current-same-document=""
+    data-current-index=""
+    data-entries-type=""
+    data-entries-length=""
+    data-last-entry-same=""
+    data-last-entry-same-document=""
+    data-last-entry-url=""
+    data-last-entry-index=""
+  >
+    <script>
+      const entries = navigation.entries();
+      const current = navigation.currentEntry;
+      const last = entries[entries.length - 1];
+
+      document.body.setAttribute("data-navigation-type", typeof navigation);
+      document.body.setAttribute("data-current-entry-type", typeof current);
+      document.body.setAttribute("data-current-id-type", typeof current?.id);
+      document.body.setAttribute("data-current-key-type", typeof current?.key);
+      document.body.setAttribute("data-current-url-type", typeof current?.url);
+      document.body.setAttribute(
+        "data-current-same-document-type",
+        typeof current?.sameDocument
+      );
+      document.body.setAttribute(
+        "data-current-same-document",
+        String(current?.sameDocument)
+      );
+      document.body.setAttribute(
+        "data-current-index",
+        String(current?.index ?? -1)
+      );
+      document.body.setAttribute("data-entries-type", typeof entries);
+      document.body.setAttribute("data-entries-length", String(entries.length));
+      document.body.setAttribute("data-last-entry-same", String(last === current));
+      document.body.setAttribute(
+        "data-last-entry-same-document",
+        String(last?.sameDocument)
+      );
+      document.body.setAttribute("data-last-entry-url", String(last?.url ?? "null"));
+      document.body.setAttribute(
+        "data-last-entry-index",
+        String(last?.index ?? -1)
+      );
+    </script>
+  </body>
+</html>

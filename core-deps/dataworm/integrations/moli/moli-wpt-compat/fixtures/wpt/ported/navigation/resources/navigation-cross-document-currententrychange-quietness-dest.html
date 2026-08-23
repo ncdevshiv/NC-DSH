@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+const params = new URLSearchParams(location.search);
+const sourceUrl = params.get("sourceUrl") ?? "";
+const storagePrefix = params.get("storagePrefix") ?? "";
+const testName =
+  params.get("testName") ??
+  "Cross-document navigation keeps currententrychange quiet during document takeover";
+
+function key(suffix) {
+  return storagePrefix + suffix;
+}
+
+let listenerCount = 0;
+let propertyCount = 0;
+
+navigation.addEventListener("currententrychange", function () {
+  listenerCount += 1;
+});
+
+navigation.oncurrententrychange = function () {
+  propertyCount += 1;
+};
+
+test(function () {
+  assert_equals(
+    sessionStorage.getItem(key("navlog")),
+    "before|after-call",
+    "source currententrychange hooks should stay quiet before the destination document takes over",
+  );
+  assert_equals(
+    navigation.currentEntry?.url,
+    location.href,
+    "destination currentEntry should point at the committed destination URL",
+  );
+  assert_equals(
+    String(listenerCount),
+    "0",
+    "destination should not dispatch currententrychange during bootstrap",
+  );
+  assert_equals(
+    String(propertyCount),
+    "0",
+    "destination oncurrententrychange should stay quiet during bootstrap",
+  );
+  assert_equals(
+    JSON.stringify(history.state),
+    "null",
+    "cross-document navigation should not populate history.state by default",
+  );
+  assert_equals(
+    JSON.stringify(navigation.currentEntry?.getState?.() ?? null),
+    "null",
+    "cross-document navigation should not populate navigation state by default",
+  );
+  assert_equals(
+    navigation.activation?.entry?.url,
+    location.href,
+    "destination activation entry should point at the committed destination",
+  );
+  assert_equals(
+    navigation.activation?.from?.url,
+    sourceUrl,
+    "destination activation.from should point at the source document",
+  );
+  assert_equals(
+    String(navigation.activation?.navigationType ?? ""),
+    "push",
+    "cross-document navigation should report activation navigationType=push by default after load",
+  );
+}, testName);
+</script>

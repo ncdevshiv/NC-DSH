@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script>
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "/assets/blocking_stylesheet_slow.css?phase=two";
+      link.addEventListener("load", () => {
+        location.replace("/location-nav/target?from=style-load");
+      });
+      document.head.appendChild(link);
+    </script>
+  </head>
+  <body>
+    <main id="source">style-load-source</main>
+  </body>
+</html>

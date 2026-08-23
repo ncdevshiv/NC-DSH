@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function websocket_url(path) {
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return scheme + "//" + location.host + path;
+}
+
+promise_test(async function () {
+  document.cookie = "ws_response_cookie=; Path=/; Max-Age=0";
+
+  const socket = new WebSocket(websocket_url("/wpt/runtime/websocket/response-cookie"));
+  const events = [];
+
+  await new Promise(function (resolve, reject) {
+    socket.addEventListener("open", function () {
+      events.push("open:" + socket.readyState);
+    }, { once: true });
+    socket.addEventListener("close", function (event) {
+      events.push("close:" + event.code + ":" + event.wasClean);
+      resolve();
+    }, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+
+  assert_array_equals(events, [
+    "open:" + WebSocket.OPEN,
+    "close:1000:true",
+  ], "the server should complete a clean WebSocket close");
+  assert_true(
+    document.cookie.split(";").map(function (cookie) {
+      return cookie.trim();
+    }).includes("ws_response_cookie=ok"),
+    "Set-Cookie from the WebSocket opening handshake should update document.cookie"
+  );
+}, "WebSocket opening handshake Set-Cookie is stored in the document cookie jar");
+</script>

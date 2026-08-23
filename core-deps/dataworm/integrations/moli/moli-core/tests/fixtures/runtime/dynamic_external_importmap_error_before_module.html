@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head></head>
+  <body>
+    <script>
+      window.dynamicExternalImportMapOrder = [];
+      window.dynamicExternalImportMapErrorCount = 0;
+
+      const importmap = document.createElement("script");
+      importmap.type = "importmap";
+      importmap.src = "/assets/dynamic_importmap.json";
+      importmap.addEventListener("error", () => {
+        window.dynamicExternalImportMapErrorCount += 1;
+        window.dynamicExternalImportMapOrder.push("error");
+        window.dynamicExternalImportMapOrderResult =
+          window.dynamicExternalImportMapOrder.join(",");
+      });
+
+      const moduleScript = document.createElement("script");
+      moduleScript.type = "module";
+      moduleScript.text = `
+        window.dynamicExternalImportMapOrder.push("module");
+        window.dynamicExternalImportMapOrderResult =
+          window.dynamicExternalImportMapOrder.join(",");
+      `;
+
+      document.head.appendChild(importmap);
+      document.head.appendChild(moduleScript);
+    </script>
+  </body>
+</html>

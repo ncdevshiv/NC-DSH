@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="after">after</main>
+    <script>
+      const observer = new ResizeObserver(() => {
+        throw new Error("resize observer boom");
+      });
+      observer.observe(document.body);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+[package]
+name = "ai-security"
+description = "Security: secret redaction, PII detection, SSRF/URL guards, validation, permissions"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-errors = { path = "../ai-errors" }
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+url.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

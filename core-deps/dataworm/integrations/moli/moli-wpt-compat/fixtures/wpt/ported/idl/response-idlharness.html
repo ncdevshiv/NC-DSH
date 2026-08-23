@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface Response {
+  constructor(optional object body = null, optional object init = {});
+  static Response error();
+  static Response redirect(USVString url, optional unsigned short status = 302);
+  static Response json(any data, optional ResponseInit init = {});
+  Promise<ArrayBuffer> arrayBuffer();
+  Promise<Blob> blob();
+  Promise<Uint8Array> bytes();
+  Promise<any> json();
+  Promise<USVString> text();
+  readonly attribute boolean bodyUsed;
+  readonly attribute ResponseType type;
+  readonly attribute USVString url;
+  readonly attribute boolean redirected;
+  readonly attribute unsigned short status;
+  readonly attribute boolean ok;
+  readonly attribute ByteString statusText;
+  readonly attribute Headers headers;
+  Response clone();
+  readonly attribute ReadableStream? body;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    Response: ["new Response('ok')"]
+  });
+});
+
+test(function () {
+  const error = Response.error();
+  assert_true(error instanceof Response);
+  assert_equals(error.type, "error");
+  assert_equals(error.status, 0);
+
+  const redirect = Response.redirect("https://example.test/next");
+  assert_true(redirect instanceof Response);
+  assert_equals(redirect.status, 302);
+
+  const json = Response.json({ ok: true });
+  assert_true(json instanceof Response);
+
+  const response = new Response("ok");
+  assert_false(response.bodyUsed);
+  assert_false(Object.prototype.hasOwnProperty.call(response, "text"));
+  assert_false(Object.prototype.hasOwnProperty.call(response, "json"));
+  assert_false(Object.prototype.hasOwnProperty.call(response, "arrayBuffer"));
+  assert_false(Object.prototype.hasOwnProperty.call(response, "blob"));
+  assert_false(Object.prototype.hasOwnProperty.call(response, "bytes"));
+}, "Response static constructors return Response instances");
+</script>

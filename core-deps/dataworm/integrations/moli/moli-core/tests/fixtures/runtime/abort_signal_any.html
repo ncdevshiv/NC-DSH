@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<body
+  data-any-type=""
+  data-empty-aborted=""
+  data-empty-reason=""
+  data-before-aborted=""
+  data-before-reason=""
+  data-after-aborted=""
+  data-after-reason=""
+  data-after-event-count=""
+  data-after-late-reason=""
+  data-after-late-event-count=""
+  data-pre-aborted=""
+  data-pre-reason=""
+>
+<script>
+document.body.setAttribute('data-any-type', typeof AbortSignal.any);
+
+const empty = AbortSignal.any([]);
+document.body.setAttribute('data-empty-aborted', String(empty.aborted));
+document.body.setAttribute('data-empty-reason', String(empty.reason));
+
+const first = new AbortController();
+const second = new AbortController();
+const combined = AbortSignal.any([first.signal, second.signal]);
+let eventCount = 0;
+combined.addEventListener('abort', () => {
+  eventCount++;
+});
+
+document.body.setAttribute('data-before-aborted', String(combined.aborted));
+document.body.setAttribute('data-before-reason', String(combined.reason));
+
+second.abort('second');
+
+document.body.setAttribute('data-after-aborted', String(combined.aborted));
+document.body.setAttribute('data-after-reason', String(combined.reason));
+document.body.setAttribute('data-after-event-count', String(eventCount));
+
+first.abort('first');
+
+document.body.setAttribute('data-after-late-reason', String(combined.reason));
+document.body.setAttribute('data-after-late-event-count', String(eventCount));
+
+const preAborted = AbortSignal.any([AbortSignal.abort('ready'), new AbortController().signal]);
+document.body.setAttribute('data-pre-aborted', String(preAborted.aborted));
+document.body.setAttribute('data-pre-reason', String(preAborted.reason));
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+[package]
+name = "ai-runtime"
+description = "Parallel execution engine: concurrency limits, retries, backoff, circuit breaker, fan-out/fan-in"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-core = { path = "../ai-core" }
+ai-errors = { path = "../ai-errors" }
+ai-observability = { path = "../ai-observability" }
+async-trait.workspace = true
+tokio.workspace = true
+futures.workspace = true
+tracing.workspace = true
+rand.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+ai-types = { path = "../ai-types" }
+criterion.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+
+[[bench]]
+name = "runtime_bench"
+harness = false

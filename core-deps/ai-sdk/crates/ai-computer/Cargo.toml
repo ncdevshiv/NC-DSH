@@ -1,0 +1,23 @@
+[package]
+name = "ai-computer"
+description = "Native plugins for real browser (OmniChrome CDP bridge) and desktop (Native Computer Use) automation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-tools = { path = "../ai-tools" }
+ai-errors = { path = "../ai-errors" }
+tokio.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+futures.workspace = true

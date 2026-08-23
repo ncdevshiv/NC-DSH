@@ -1,0 +1,97 @@
+{
+  "version": "1.0.0",
+  "description": "Golden retrieval-quality queries for OpenMem. Relevance is judged by exact memory id against the hermetic corpus built by eval/golden_corpus.py (ids 'golden-*'). Three classes: exact_term (queries sharing surface terms with targets), paraphrase (same intent, partially overlapping wording -- keyword mode must still hit via shared substrings), negative/distractor (zero relevant docs exist; any hit is fallout).",
+  "judgment_convention": {
+    "relevant_ids": "exact fixture ids; a result counts as relevant iff its id is in this set",
+    "negative_queries": "relevant_ids is intentionally empty; recall/MRR/nDCG are trivially 0.0 and fallout@5 is the meaningful metric",
+    "score_threshold": "keyword-fallback results always carry score > 0.0 (>=1 distinct term matched), so any returned row above the default threshold counts as a hit"
+  },
+  "classes": {
+    "exact_term": {
+      "description": "Queries using words that literally appear in the target fixtures.",
+      "queries": [
+        {
+          "id": "ex-01",
+          "query": "deepseek harness",
+          "relevant_ids": [
+            "golden-dsh-01", "golden-dsh-02", "golden-dsh-03",
+            "golden-dsh-04", "golden-dsh-05", "golden-dsh-06"
+          ],
+          "note": "Topic-wide judgment: every harness fixture answers 'what is the deepseek harness'. Six relevant ids cap recall@5 at 5/6 -- deliberate exercise of partial recall."
+        },
+        {
+          "id": "ex-02",
+          "query": "harness web GUI boot payload",
+          "relevant_ids": ["golden-dsh-01"],
+          "note": "Tight judgment: only the GUI/porting fixture covers web boot payload."
+        },
+        {
+          "id": "ex-03",
+          "query": "nc-code repo commit safe.directory",
+          "relevant_ids": ["golden-ncc-01", "golden-ncc-02"]
+        },
+        {
+          "id": "ex-04",
+          "query": "branch protection pull request merge",
+          "relevant_ids": ["golden-ncc-05"]
+        },
+        {
+          "id": "ex-05",
+          "query": "keyword fallback scoring term frequency",
+          "relevant_ids": ["golden-ret-02"]
+        },
+        {
+          "id": "ex-06",
+          "query": "fixed-size vector schema ANN search",
+          "relevant_ids": ["golden-ret-01"]
+        }
+      ]
+    },
+    "paraphrase": {
+      "description": "Same intent as a target fixture but reworded; keyword mode must still retrieve via shared substrings (e.g. 'port' matching 'Ported'). Some share only one term, which honestly exposes tie-break behavior.",
+      "queries": [
+        {
+          "id": "pa-01",
+          "query": "port codebase principles",
+          "relevant_ids": ["golden-dsh-01"],
+          "note": "Mission's canonical paraphrase: hits via shared term 'port' ('Ported'); known lexical traps 'passport'/'Airport' also match 'port' and are expected fallout."
+        },
+        {
+          "id": "pa-02",
+          "query": "session transcript storage layout",
+          "relevant_ids": ["golden-ncc-04"]
+        },
+        {
+          "id": "pa-03",
+          "query": "approximate nearest neighbor index training rows",
+          "relevant_ids": ["golden-ret-05"]
+        },
+        {
+          "id": "pa-04",
+          "query": "floating point score drift",
+          "relevant_ids": ["golden-ret-03"]
+        },
+        {
+          "id": "pa-05",
+          "query": "compost kitchen scraps recycling",
+          "relevant_ids": ["golden-grd-01", "golden-grd-02"]
+        },
+        {
+          "id": "pa-06",
+          "query": "keep travel documents dry",
+          "relevant_ids": ["golden-trv-05"],
+          "note": "Single shared term ('travel'); insertion-order ties may rank it below other single-term matches -- an intentional exposure of keyword-mode weakness."
+        }
+      ]
+    },
+    "negative": {
+      "description": "Distractor queries about topics absent from the corpus. Every returned row is fallout. Terms are validated at runtime to be substring-disjoint from all fixture content.",
+      "queries": [
+        { "id": "ng-01", "query": "quantum knitting patterns", "relevant_ids": [] },
+        { "id": "ng-02", "query": "blockchain cryptocurrency wallet", "relevant_ids": [] },
+        { "id": "ng-03", "query": "salsa dance lessons", "relevant_ids": [] },
+        { "id": "ng-04", "query": "stock portfolio diversification", "relevant_ids": [] }
+      ]
+    }
+  }
+}

@@ -1,0 +1,188 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+
+  input.value = "2024-03-10T12:34";
+  assert_equals(input.value, "2024-03-10T12:34", "valid datetime-local values should be preserved");
+
+  input.value = "2024-02-30T00:00";
+  assert_equals(input.value, "", "invalid dates should sanitize to empty");
+  assert_true(input.validity.valid, "empty non-required datetime-local input should remain valid");
+
+  input.value = "2024-01-01T24:00";
+  assert_equals(input.value, "", "hour 24 should sanitize to empty");
+
+  input.value = "2024-01-01T00:60";
+  assert_equals(input.value, "", "minute 60 should sanitize to empty");
+
+  input.value = "2024-01-01";
+  assert_equals(input.value, "", "date-only strings should sanitize to empty");
+
+  input.value = "2024-01-01T00:00Z";
+  assert_equals(input.value, "", "timezone-bearing strings should sanitize to empty");
+
+  input.value = "0000-01-01T00:00";
+  assert_equals(input.value, "", "year zero is not a valid datetime-local input value");
+}, "datetime-local input value setter sanitizes invalid local date-time strings");
+
+test(function () {
+  withHost(
+    `<input id="dt" type="datetime-local" value="2024-02-30T00:00">`,
+    function (host) {
+      const input = host.querySelector("#dt");
+      assert_equals(input.getAttribute("value"), "2024-02-30T00:00", "content attribute should keep the original datetime-local text");
+      assert_equals(input.value, "", "invalid initial datetime-local content value should sanitize to empty");
+
+      input.setAttribute("value", "2024-03-10T12:34");
+      assert_equals(input.value, "2024-03-10T12:34", "non-dirty valid datetime-local attribute changes should update the current value");
+
+      input.setAttribute("value", "2024-03-10T25:00");
+      assert_equals(input.value, "", "non-dirty invalid datetime-local attribute changes should sanitize the current value");
+    },
+  );
+}, "datetime-local input initial value and non-dirty value attribute sync use datetime-local sanitization");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "not-a-local-date-time";
+  assert_equals(input.value, "not-a-local-date-time", "text input should keep the script-set value");
+
+  input.type = "datetime-local";
+  assert_equals(input.value, "", "switching to datetime-local should sanitize the existing value");
+}, "changing an input to type=datetime-local sanitizes the current value");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+  input.min = "2024-01-01T00:00";
+  input.max = "2024-01-01T12:00";
+
+  input.value = "2023-12-31T23:59";
+  assert_true(input.validity.rangeUnderflow, "datetime-local below min should set rangeUnderflow");
+  assert_false(input.validity.rangeOverflow, "datetime-local below min should not set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeUnderflow should fail checkValidity");
+
+  input.value = "2024-01-01T12:01";
+  assert_false(input.validity.rangeUnderflow, "datetime-local above max should not set rangeUnderflow");
+  assert_true(input.validity.rangeOverflow, "datetime-local above max should set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeOverflow should fail checkValidity");
+
+  input.value = "2024-01-01T00:00";
+  assert_false(input.validity.rangeUnderflow, "datetime-local equal to min should pass");
+  assert_false(input.validity.rangeOverflow, "datetime-local equal to min should not overflow");
+  assert_true(input.validity.valid, "datetime-local at min should be valid");
+
+  input.min = "bad";
+  input.max = "also-bad";
+  input.value = "2024-12-31T23:59";
+  assert_false(input.validity.rangeUnderflow, "invalid datetime-local min should be ignored");
+  assert_false(input.validity.rangeOverflow, "invalid datetime-local max should be ignored");
+  assert_true(input.validity.valid, "invalid datetime-local range attributes should not make the control invalid");
+}, "datetime-local input validity reflects min/max range constraints");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+  input.min = "2024-01-01T00:00";
+  input.step = "120";
+
+  input.value = "2024-01-01T00:02";
+  assert_false(input.validity.stepMismatch, "datetime-local aligned to min + n * step seconds should pass");
+  assert_true(input.checkValidity(), "aligned datetime-local should pass checkValidity");
+
+  input.value = "2024-01-01T00:01";
+  assert_true(input.validity.stepMismatch, "datetime-local not aligned to min + n * step seconds should set stepMismatch");
+  assert_false(input.validity.valid, "stepMismatch should make the datetime-local invalid");
+
+  input.step = "bad";
+  assert_false(input.validity.stepMismatch, "invalid datetime-local step should fall back to the 60 second default");
+  assert_true(input.validity.valid, "default datetime-local step should allow whole-minute values");
+
+  input.step = "0";
+  assert_false(input.validity.stepMismatch, "zero datetime-local step should fall back to the 60 second default");
+
+  input.step = "any";
+  assert_false(input.validity.stepMismatch, "datetime-local step=any should disable stepMismatch");
+}, "datetime-local input validity reflects stepMismatch in second units");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+
+  input.value = "1970-01-01T00:00:30";
+  assert_true(input.validity.stepMismatch, "default datetime-local step should reject sub-minute values");
+
+  input.step = "1";
+  assert_false(input.validity.stepMismatch, "step=1 should allow whole-second values");
+}, "datetime-local input default step is 60 seconds with millisecond scale");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+
+  assert_true(Number.isNaN(input.valueAsNumber), "empty datetime-local input should expose NaN");
+
+  input.value = "1970-01-01T00:00";
+  assert_equals(input.valueAsNumber, 0, "1970-01-01T00:00 should be the datetime-local valueAsNumber epoch");
+
+  input.value = "1970-01-01T00:01";
+  assert_equals(input.valueAsNumber, 60000, "datetime-local valueAsNumber should expose elapsed milliseconds");
+
+  input.value = "1969-12-31T23:59";
+  assert_equals(input.valueAsNumber, -60000, "datetime-local valueAsNumber should support values before the epoch");
+
+  input.valueAsNumber = 0;
+  assert_equals(input.value, "1970-01-01T00:00", "datetime-local valueAsNumber setter should write the epoch value");
+
+  input.valueAsNumber = 1000;
+  assert_equals(input.value, "1970-01-01T00:00:01", "datetime-local valueAsNumber setter should preserve seconds");
+
+  input.valueAsNumber = -60000;
+  assert_equals(input.value, "1969-12-31T23:59", "datetime-local valueAsNumber setter should write negative offsets");
+
+  input.valueAsNumber = NaN;
+  assert_equals(input.value, "", "NaN datetime-local valueAsNumber setter should clear the value");
+  assert_true(Number.isNaN(input.valueAsNumber), "cleared datetime-local input should expose NaN");
+}, "datetime-local input valueAsNumber getter and setter round-trip local date-time milliseconds");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+  input.value = "1970-01-01T00:01";
+
+  assert_throws_name("TypeError", function () {
+    input.valueAsNumber = Infinity;
+  }, "setting datetime-local valueAsNumber to Infinity should throw TypeError");
+  assert_equals(input.value, "1970-01-01T00:01", "failed infinite valueAsNumber setter should not change datetime-local value");
+}, "datetime-local input valueAsNumber setter rejects infinite values");
+</script>

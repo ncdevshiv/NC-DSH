@@ -1,0 +1,134 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<div id="fixture" data-foo="bar" data-hello-world="test"></div>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+test(function () {
+  const element = document.getElementById("fixture");
+
+  assert_true(element.dataset instanceof DOMStringMap);
+  assert_equals(typeof element.dataset, "object");
+  assert_equals(element.dataset, element.dataset);
+  assert_equals(element.dataset.foo, "bar");
+  assert_equals(element.dataset.helloWorld, "test");
+  assert_equals(element.dataset["helloWorld"], "test");
+  assert_equals(element.dataset.missing, undefined);
+}, "HTMLElement.dataset exposes a stable DOMStringMap for existing data attributes");
+
+test(function () {
+  const element = document.createElement("div");
+
+  element.dataset.newAttr = "value";
+  assert_equals(element.dataset.newAttr, "value");
+  assert_equals(element.getAttribute("data-new-attr"), "value");
+
+  element.setAttribute("data-foo", "original");
+  element.dataset.foo = "updated";
+  assert_equals(element.dataset.foo, "updated");
+  assert_equals(element.getAttribute("data-foo"), "updated");
+
+  element.dataset.fooBarBaz = "qux";
+  assert_equals(element.getAttribute("data-foo-bar-baz"), "qux");
+}, "DOMStringMap writes reflect to kebab-case data attributes");
+
+test(function () {
+  const element = document.createElement("div");
+
+  element.setAttribute("data-x", "single");
+  element.setAttribute("data-foo-bar-baz", "multiple");
+  element.setAttribute("data-", "empty");
+  element.setAttribute("data--", "dash");
+  element.setAttribute("data--foo", "capital");
+  element.setAttribute("data---foo", "dash-capital");
+
+  assert_equals(element.dataset.x, "single");
+  assert_equals(element.dataset.fooBarBaz, "multiple");
+  assert_equals(element.dataset[""], "empty");
+  assert_equals(element.dataset["-"], "dash");
+  assert_equals(element.dataset.Foo, "capital");
+  assert_equals(element.dataset["-Foo"], "dash-capital");
+}, "DOMStringMap maps supported data attribute names to property names");
+
+test(function () {
+  const element = document.createElement("div");
+
+  element.dataset[""] = "empty";
+  element.dataset["-"] = "dash";
+  element.dataset.Foo = "capital";
+  element.dataset["-Foo"] = "dash-capital";
+
+  assert_equals(element.getAttribute("data-"), "empty");
+  assert_equals(element.getAttribute("data--"), "dash");
+  assert_equals(element.getAttribute("data--foo"), "capital");
+  assert_equals(element.getAttribute("data---foo"), "dash-capital");
+}, "DOMStringMap maps supported property names to data attribute names");
+
+test(function () {
+  const element = document.createElement("div");
+  element.setAttribute("data-foo", "bar");
+  element.setAttribute("data-hello-world", "test");
+
+  assert_true(delete element.dataset.foo);
+  assert_equals(element.dataset.foo, undefined);
+  assert_equals(element.getAttribute("data-foo"), null);
+
+  assert_true(delete element.dataset["helloWorld"]);
+  assert_equals(element.dataset.helloWorld, undefined);
+  assert_equals(element.getAttribute("data-hello-world"), null);
+
+  assert_true(delete element.dataset.missing);
+}, "Deleting DOMStringMap properties removes reflected data attributes");
+
+test(function () {
+  const element = document.createElement("div");
+
+  element.setAttribute("data-beta", "2");
+  element.setAttribute("data-alpha", "1");
+  element.setAttribute("data-foo-bar", "3");
+  element.setAttribute("dataFoo", "ignored");
+
+  const keys = Object.keys(element.dataset).sort();
+  assert_array_equals(keys, ["alpha", "beta", "fooBar"]);
+  assert_array_equals(
+    keys.map((key) => key + ":" + element.dataset[key]),
+    ["alpha:1", "beta:2", "fooBar:3"],
+  );
+  assert_false("dataFoo" in element.dataset);
+}, "DOMStringMap enumerates supported data attributes");
+
+test(function () {
+  const one = document.createElement("div");
+  const two = document.createElement("div");
+
+  one.dataset.test1 = "value1";
+  two.dataset.test2 = "value2";
+
+  assert_equals(one.dataset.test1, "value1");
+  assert_equals(one.dataset.test2, undefined);
+  assert_equals(two.dataset.test1, undefined);
+  assert_equals(two.dataset.test2, "value2");
+}, "DOMStringMap instances are per element");
+
+test(function () {
+  const element = document.createElement("div");
+
+  assert_throws_name("SyntaxError", () => {
+    element.dataset["-foo"] = "bad";
+  });
+  assert_throws_name("InvalidCharacterError", () => {
+    element.dataset["foo bar"] = "bad";
+  });
+}, "DOMStringMap rejects unsupported property names on write");
+</script>

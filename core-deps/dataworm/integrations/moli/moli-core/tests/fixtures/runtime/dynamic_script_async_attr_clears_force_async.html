@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.dynamicInOrderScriptOrder = [];
+
+      const slow = document.createElement("script");
+      slow.async = false;
+      slow.src = "/assets/dynamic_taxonomy_in_order_slow.js";
+      document.head.appendChild(slow);
+
+      const toggled = document.createElement("script");
+      toggled.setAttribute("async", "");
+      toggled.removeAttribute("async");
+      toggled.src = "/assets/dynamic_taxonomy_in_order_fast.js";
+      document.head.appendChild(toggled);
+    </script>
+  </head>
+  <body>
+    <script>
+      testing.eventually(() => {
+        testing.expectEqual(
+          "in-order-slow,in-order-fast",
+          window.dynamicInOrderScriptOrderResult,
+        );
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+[package]
+license.workspace = true
+name = "moli-owner-queue"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+parking_lot = "0.12"
+tokio = { version = "1.51.0", features = ["macros", "rt", "sync"] }
+
+[lints]
+workspace = true

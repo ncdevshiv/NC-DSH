@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+  <body
+    data-type=""
+    data-escape-basic=""
+    data-escape-leading-digit=""
+    data-escape-special=""
+    data-escape-null=""
+    data-supports-pair=""
+    data-supports-condition=""
+    data-style-container-in=""
+    data-style-container-type-in=""
+    data-style-container-name-in=""
+    data-computed-container-default=""
+    data-computed-container-type-default=""
+    data-computed-container-name-default=""
+    data-supports-container-type=""
+    data-supports-container-name=""
+    data-supports-container-name-double-hyphen=""
+    data-supports-container-name-hyphen=""
+    data-supports-container-name-hyphen-digit=""
+    data-supports-container-shorthand=""
+    data-supports-container-shorthand-normal=""
+    data-supports-container-shorthand-multi-name=""
+    data-supports-container-invalid=""
+    data-supports-container-name-invalid=""
+    data-supports-container-shorthand-missing-name=""
+  >
+    <script>
+      document.body.setAttribute('data-type', typeof CSS);
+      document.body.setAttribute('data-escape-basic', CSS.escape('hello world'));
+      document.body.setAttribute('data-escape-leading-digit', CSS.escape('0abc'));
+      document.body.setAttribute('data-escape-special', CSS.escape('a(b)'));
+      document.body.setAttribute('data-escape-null', CSS.escape('\x00abc'));
+      document.body.setAttribute(
+        'data-supports-pair',
+        String(CSS.supports('display', 'block')),
+      );
+      document.body.setAttribute(
+        'data-supports-condition',
+        String(CSS.supports('display: flex')),
+      );
+      document.body.setAttribute(
+        'data-style-container-in',
+        String('container' in document.documentElement.style),
+      );
+      document.body.setAttribute(
+        'data-style-container-type-in',
+        String('containerType' in document.documentElement.style),
+      );
+      document.body.setAttribute(
+        'data-style-container-name-in',
+        String('containerName' in document.documentElement.style),
+      );
+      const computedStyle = getComputedStyle(document.documentElement);
+      document.body.setAttribute(
+        'data-computed-container-default',
+        computedStyle.container,
+      );
+      document.body.setAttribute(
+        'data-computed-container-type-default',
+        computedStyle.containerType,
+      );
+      document.body.setAttribute(
+        'data-computed-container-name-default',
+        computedStyle.containerName,
+      );
+      document.body.setAttribute(
+        'data-supports-container-type',
+        String(CSS.supports('container-type', 'inline-size')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-name',
+        String(CSS.supports('container-name', 'card')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-name-double-hyphen',
+        String(CSS.supports('container-name', '--')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-name-hyphen',
+        String(CSS.supports('container-name', '-')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-name-hyphen-digit',
+        String(CSS.supports('container-name', '-1')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-shorthand',
+        String(CSS.supports('container', 'card / inline-size')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-shorthand-normal',
+        String(CSS.supports('container', 'normal')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-shorthand-multi-name',
+        String(CSS.supports('container', 'card sidebar / size')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-invalid',
+        String(CSS.supports('container-type', 'banana')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-name-invalid',
+        String(CSS.supports('container-name', 'none card')),
+      );
+      document.body.setAttribute(
+        'data-supports-container-shorthand-missing-name',
+        String(CSS.supports('container', '/ inline-size')),
+      );
+    </script>
+  </body>
+</html>

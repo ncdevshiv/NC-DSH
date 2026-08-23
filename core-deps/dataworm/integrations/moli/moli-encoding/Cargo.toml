@@ -1,0 +1,12 @@
+[package]
+license.workspace = true
+name = "moli-encoding"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+encoding_rs = "0.8"
+moli-charset-parser = { path = "../moli-charset-parser" }
+
+[lints]
+workspace = true

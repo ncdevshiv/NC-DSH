@@ -1,0 +1,86 @@
+use super::*;
+
+pub(in crate::native_bridge) fn node_create_attribute_callback<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    args: v8::FunctionCallbackArguments<'s>,
+    mut rv: v8::ReturnValue<'_, v8::Value>,
+) {
+    if detached_document_receiver_kind(scope, &args).is_some() {
+        detached_create_attribute_method_callback(scope, args, rv);
+        return;
+    }
+    let Ok((runtime_ptr, handle)) = node_runtime_and_handle_from_args(scope, &args) else {
+        rv.set_null();
+        return;
+    };
+    if !node_is_document(unsafe { &*runtime_ptr }, handle) {
+        rv.set_null();
+        return;
+    }
+    let Some(parsed) = webidl::parse_args::<DocumentCreateAttributeArgs>(scope, &args) else {
+        return;
+    };
+    if !validate_attribute_name(&parsed.name) {
+        throw_dom_exception(
+            scope,
+            "InvalidCharacterError",
+            5,
+            "String contains an invalid character",
+        );
+        return;
+    }
+    let runtime = unsafe { &*runtime_ptr };
+    let name = if is_html_document(runtime, handle) {
+        parsed.name.to_ascii_lowercase()
+    } else {
+        parsed.name
+    };
+    match new_attr_object(scope, &name, "", None, Some(args.this()), None, None, &name) {
+        Some(attr) => rv.set(attr.into()),
+        None => rv.set_null(),
+    }
+}
+
+pub(in crate::native_bridge) fn node_create_attribute_ns_callback<'s>(
+    scope: &mut v8::PinScope<'s, '_>,
+    args: v8::FunctionCallbackArguments<'s>,
+    mut rv: v8::ReturnValue<'_, v8::Value>,
+) {
+    if detached_document_receiver_kind(scope, &args).is_some() {
+        detached_create_attribute_ns_method_callback(scope, args, rv);
+        return;
+    }
+    let Ok((runtime_ptr, handle)) = node_runtime_and_handle_from_args(scope, &args) else {
+        rv.set_null();
+        return;
+    };
+    if !node_is_document(unsafe { &*runtime_ptr }, handle) {
+        rv.set_null();
+        return;
+    }
+    let Some(parsed) = webidl::parse_args::<DocumentCreateAttributeNsArgs>(scope, &args) else {
+        return;
+    };
+    let namespace = normalize_namespace(parsed.namespace);
+    let (prefix, local_name) =
+        match validate_qualified_name_and_namespace(namespace.as_deref(), &parsed.qualified_name) {
+            Ok(parts) => parts,
+            Err((name, code, message)) => {
+                throw_dom_exception(scope, name, code, message);
+                return;
+            }
+        };
+    match new_attr_object(
+        scope,
+        &parsed.qualified_name,
+        "",
+        None,
+        Some(args.this()),
+        namespace.as_deref(),
+        prefix.as_deref(),
+        &local_name,
+    ) {
+        Some(attr) => rv.set(attr.into()),
+        None => rv.set_null(),
+    }
+}

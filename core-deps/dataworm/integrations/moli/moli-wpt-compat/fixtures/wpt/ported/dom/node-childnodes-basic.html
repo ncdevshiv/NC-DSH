@@ -1,0 +1,162 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<div id="fixture"><p id="p1"></p><p id="p2"></p></div>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+function assert_child_nodes_live_collection(parentFactory, label) {
+  test(function () {
+    const parent = parentFactory();
+    assert_equals(parent.childNodes, parent.childNodes);
+    assert_array_equals(Array.from(parent.childNodes), []);
+
+    const children = parent.childNodes;
+    const first = document.createElement("p");
+    const second = document.createComment("comment");
+
+    parent.appendChild(first);
+    assert_equals(parent.childNodes, children);
+    assert_array_equals(Array.from(children), [first]);
+    assert_equals(children.length, 1);
+    assert_equals(children[0], first);
+    assert_equals(children.item(0), first);
+
+    parent.appendChild(second);
+    assert_array_equals(Array.from(children), [first, second]);
+    assert_equals(children.length, 2);
+    assert_equals(children[1], second);
+    assert_equals(children.item(1), second);
+    assert_false(2 in children);
+    assert_equals(children[2], undefined);
+    assert_equals(children.item(2), null);
+
+    parent.removeChild(first);
+    assert_array_equals(Array.from(children), [second]);
+    assert_equals(children[0], second);
+  }, label + ".childNodes is cached and live");
+}
+
+test(function () {
+  const node = document.getElementById("fixture");
+  const children = node.childNodes;
+  const first = document.getElementById("p1");
+  const second = document.getElementById("p2");
+
+  assert_true(children instanceof NodeList);
+  assert_equals(children.constructor.name, "NodeList");
+  assert_equals(children.length, 2);
+  assert_equals(children[0], first);
+  assert_equals(children[1], second);
+  assert_equals(children.item(0), first);
+  assert_equals(children.item(1), second);
+  assert_equals(children.item(10), null);
+  assert_equals(children[10], undefined);
+  assert_false(10 in children);
+}, "Element.childNodes exposes indexed NodeList access and item()");
+
+test(function () {
+  const node = document.getElementById("fixture");
+  const children = node.childNodes;
+  const first = document.getElementById("p1");
+  const second = document.getElementById("p2");
+
+  assert_throws_name("TypeError", function () {
+    children.item();
+  }, "NodeList.item requires an index");
+  assert_equals(children.item(NaN), first, "NaN should convert to unsigned long 0");
+  assert_equals(children.item("1"), second, "string index should convert to unsigned long");
+  assert_equals(children.item(-1), null, "negative index should convert to an out-of-range unsigned long");
+}, "NodeList.item uses WebIDL unsigned long conversion");
+
+test(function () {
+  const node = document.createElement("div");
+  const first = node.appendChild(document.createElement("p"));
+  const text = node.appendChild(document.createTextNode("text"));
+  const last = node.appendChild(document.createElement("span"));
+  const list = node.childNodes;
+
+  assert_array_equals(Array.from(list), [first, text, last]);
+  assert_array_equals(Array.from(list.keys()), [0, 1, 2]);
+  assert_array_equals(Array.from(list.values()), [first, text, last]);
+
+  const entries = Array.from(list.entries());
+  assert_equals(entries.length, 3);
+  assert_array_equals(entries[0], [0, first]);
+  assert_array_equals(entries[1], [1, text]);
+  assert_array_equals(entries[2], [2, last]);
+
+  const seen = [];
+  const thisObject = {};
+  list.forEach(function (value, key, listObject) {
+    assert_equals(this, thisObject);
+    assert_equals(listObject, list);
+    seen.push([key, value]);
+  }, thisObject);
+  assert_array_equals(seen[0], [0, first]);
+  assert_array_equals(seen[1], [1, text]);
+  assert_array_equals(seen[2], [2, last]);
+}, "Node.childNodes supports iterator helpers and forEach()");
+
+test(function () {
+  const node = document.getElementById("fixture");
+  const children = node.childNodes;
+  const extra = document.createElement("p");
+
+  assert_equals(children.length, 2);
+  node.appendChild(extra);
+  assert_equals(children.length, 3);
+  assert_equals(children[2], extra);
+  node.removeChild(extra);
+  assert_equals(children.length, 2);
+  assert_equals(children[2], undefined);
+}, "Node.childNodes live collection length tracks mutations");
+
+test(function () {
+  const node = document.createElement("div");
+  const first = node.appendChild(document.createElement("p"));
+  const second = node.appendChild(document.createTextNode("text"));
+  const third = node.appendChild(document.createElement("span"));
+  const children = node.childNodes;
+
+  assert_equals(children.length, 3);
+  assert_equals(children.item(0), first);
+  assert_equals(children.item(1), second);
+  assert_equals(children.item(3), null, "out-of-range item() should return null");
+  assert_equals(children.item(-1), null, "wrapped negative index should return null when out of range");
+  assert_throws_name("TypeError", () => children.item(), "item() should require its index argument");
+  assert_equals(children.item(undefined), first, "explicit undefined should convert to zero");
+  assert_equals(children.item(null), first, "null should convert to zero");
+  assert_equals(children.item("1.9"), second, "string decimals should truncate through unsigned long conversion");
+  assert_equals(children.item(NaN), first, "NaN should convert to zero");
+  assert_equals(children.item(Infinity), first, "Infinity should convert to zero");
+  assert_equals(children.item(-4294967295), second, "negative values should wrap through unsigned long conversion");
+  assert_equals(children.item(4294967297), second, "large values should wrap through unsigned long conversion");
+  assert_equals(
+    children.item({
+      valueOf() { return {}; },
+      toString() { return "2"; },
+    }),
+    third,
+    "object values should fall back to toString during unsigned long conversion",
+  );
+  assert_throws_name("Error", () => {
+    children.item({ valueOf() { throw new Error("item conversion failed"); } });
+  }, "item() should propagate object conversion exceptions");
+  assert_throws_name("TypeError", () => children.item(Symbol("index")), "item() should reject Symbol conversion");
+  assert_throws_name("TypeError", () => children.item(1n), "item() should reject BigInt conversion");
+}, "NodeList item() uses WebIDL unsigned long conversion");
+
+assert_child_nodes_live_collection(() => document.createElement("section"), "Element");
+assert_child_nodes_live_collection(() => document.createDocumentFragment(), "DocumentFragment");
+</script>

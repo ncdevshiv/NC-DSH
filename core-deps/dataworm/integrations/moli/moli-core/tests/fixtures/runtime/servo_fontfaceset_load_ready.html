@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <body
+    data-ready-stable=""
+    data-ready-replaced=""
+    data-load-promise=""
+    data-after-ready-status=""
+    data-css-wide-keyword=""
+    data-css-wide-keyword-prefixed=""
+  >
+    <script>
+      (async () => {
+        const body = document.body;
+        const ready1 = document.fonts.ready;
+        body.setAttribute('data-ready-stable', String(ready1 === document.fonts.ready));
+
+        const loadPromise = document.fonts.load('10px FixtureFace');
+        const ready2 = document.fonts.ready;
+        body.setAttribute('data-ready-replaced', String(ready1 !== ready2));
+        body.setAttribute('data-load-promise', String(typeof loadPromise?.then === 'function'));
+
+        await ready2;
+        body.setAttribute('data-after-ready-status', String(document.fonts.status));
+
+        try {
+          await document.fonts.load('initial');
+          body.setAttribute('data-css-wide-keyword', 'no-reject');
+        } catch (error) {
+          body.setAttribute('data-css-wide-keyword', error.name);
+        }
+
+        try {
+          await document.fonts.load('medium inherit');
+          body.setAttribute('data-css-wide-keyword-prefixed', 'no-reject');
+        } catch (error) {
+          body.setAttribute('data-css-wide-keyword-prefixed', error.name);
+        }
+      })();
+    </script>
+  </body>
+</html>

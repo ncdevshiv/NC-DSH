@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "email";
+
+  assert_true(input.willValidate, "email input should be a validation candidate");
+  assert_false(input.validity.typeMismatch, "empty email input should not be typeMismatch");
+  assert_true(input.validity.valid, "empty non-required email input should be valid");
+
+  input.value = "not-an-email";
+  assert_true(input.validity.typeMismatch, "malformed email should set typeMismatch");
+  assert_false(input.validity.valid, "typeMismatch should make the email input invalid");
+  assert_false(input.checkValidity(), "checkValidity should fail for malformed email");
+  assert_true(input.validationMessage.length > 0, "typeMismatch should expose a validation message");
+
+  input.value = "user@example.com";
+  assert_false(input.validity.typeMismatch, "well-formed email should clear typeMismatch");
+  assert_true(input.validity.valid, "well-formed email should be valid");
+  assert_equals(input.validationMessage, "", "valid email should clear validationMessage");
+}, "email input validity reflects typeMismatch");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "email";
+  input.multiple = true;
+
+  input.value = "a@example.com, b@example.test";
+  assert_false(input.validity.typeMismatch, "comma-separated valid email tokens should pass");
+  assert_true(input.validity.valid, "valid multiple email tokens should be valid");
+
+  input.value = "a@example.com,broken";
+  assert_true(input.validity.typeMismatch, "malformed token should fail multiple email");
+  assert_false(input.validity.valid, "malformed token should make multiple email invalid");
+}, "multiple email input validates each comma-separated token");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "url";
+
+  assert_false(input.validity.typeMismatch, "empty URL input should not be typeMismatch");
+  assert_true(input.validity.valid, "empty non-required URL input should be valid");
+
+  input.value = "relative/path";
+  assert_true(input.validity.typeMismatch, "relative URL should set typeMismatch");
+  assert_false(input.validity.valid, "typeMismatch should make the URL input invalid");
+
+  input.value = "https://example.com/path?q=1#hash";
+  assert_false(input.validity.typeMismatch, "absolute URL should clear typeMismatch");
+  assert_true(input.validity.valid, "absolute URL should be valid");
+}, "url input validity reflects typeMismatch");
+
+test(function () {
+  withHost(
+    `<form id="form">
+       <input id="email" type="email" value="broken">
+       <input id="url" type="url" value="https://example.com/">
+     </form>`,
+    function (host) {
+      const form = host.querySelector("#form");
+      const email = host.querySelector("#email");
+      const url = host.querySelector("#url");
+      const events = [];
+
+      email.addEventListener("invalid", function () {
+        events.push("email");
+      });
+      url.addEventListener("invalid", function () {
+        events.push("url");
+      });
+
+      assert_false(form.checkValidity(), "form should fail when an email control has typeMismatch");
+      assert_array_equals(events, ["email"], "form checkValidity should dispatch invalid only for failing controls");
+
+      events.length = 0;
+      email.value = "fixed@example.com";
+      assert_true(form.reportValidity(), "form should pass once typeMismatch is cleared");
+      assert_array_equals(events, [], "valid form reportValidity should not dispatch invalid");
+    },
+  );
+}, "form validation aggregates typeMismatch controls");
+</script>

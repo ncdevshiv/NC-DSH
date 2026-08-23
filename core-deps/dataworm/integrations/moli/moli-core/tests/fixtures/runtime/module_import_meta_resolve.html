@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "comment-target": "/assets/module-dynamic-import-comments-target.mjs"
+        }
+      }
+    </script>
+    <script>
+      window.moduleImportMetaResolveOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleImportMetaResolveOrder.push("dcl");
+        window.moduleImportMetaResolveFinalOrder =
+          window.moduleImportMetaResolveOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      window.moduleImportMetaResolveOrder.push("module");
+
+      const mapped = import.meta.resolve("comment-target");
+      const concatenated = import.meta.resolve(
+        "/assets/" + "module-dynamic-import-comments-target.mjs"
+      );
+
+      let threw = false;
+      try {
+        import.meta.resolve("missing-bare-specifier");
+      } catch (error) {
+        threw =
+          !!error &&
+          typeof error.message === "string" &&
+          error.message.includes("bare module specifier");
+      }
+
+      window.moduleImportMetaResolveMapped = mapped;
+      window.moduleImportMetaResolveConcat = concatenated;
+      window.moduleImportMetaResolveThrew = threw;
+      window.moduleImportMetaResolveOrder.push("resolved");
+      window.moduleImportMetaResolveFinalOrder =
+        window.moduleImportMetaResolveOrder.join(",");
+    </script>
+  </body>
+</html>

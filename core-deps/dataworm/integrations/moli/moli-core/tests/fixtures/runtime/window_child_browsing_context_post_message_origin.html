@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <body data-delivered="" data-blocked="pending">
+    <script>
+      const iframe = document.createElement('iframe');
+      const childOrigin = location.origin.replace('127.0.0.1', 'localhost');
+      iframe.src = childOrigin + '/compat/window-child-browsing-context-post-message-origin-child';
+      document.body.appendChild(iframe);
+      const child = iframe.contentWindow;
+      if (child) {
+        const delivered = [];
+        window.addEventListener('message', event => {
+          if (
+            event.source !== child ||
+            event.origin !== childOrigin ||
+            event.data?.type !== 'echo'
+          ) {
+            return;
+          }
+          delivered.push(String(event.data.value));
+          document.body.dataset.delivered = delivered.join(',');
+          if (event.data.value === 'deliver') {
+            document.body.dataset.blocked = String(delivered.includes('blocked'));
+          }
+        });
+        iframe.addEventListener('load', () => {
+          child.postMessage('blocked', location.origin);
+          child.postMessage('deliver', childOrigin);
+        });
+      } else {
+        document.body.dataset.delivered = 'no-child-window';
+        document.body.dataset.blocked = 'false';
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<body>
+  <script>
+    let callbackEntries = null;
+    let callbackMeasureEntries = null;
+    let callbackNamedEntries = null;
+    const observer = new PerformanceObserver((list) => {
+      callbackEntries = list.getEntries();
+      callbackMeasureEntries = list.getEntriesByType("measure");
+      callbackNamedEntries = list.getEntriesByName("duration");
+      observer.disconnect();
+    });
+    observer.observe({ type: "measure" });
+
+    performance.clearMarks();
+    performance.clearMeasures();
+    performance.mark("start", { startTime: 10 });
+    performance.mark("end", { startTime: 42 });
+
+    const detail = { kind: "demo" };
+    const mark = performance.mark("named-mark", { startTime: 10 });
+    const measure = performance.measure("duration", {
+      start: "named-mark",
+      end: "end",
+      detail,
+    });
+    const legacyMeasure = performance.measure("legacy-duration", "fetchStart", "end");
+    const allEntries = performance.getEntries();
+    const markEntries = performance.getEntriesByType("mark");
+    const namedEntries = performance.getEntriesByName("named-mark");
+    const multiTypeObserver = new PerformanceObserver(() => {});
+    multiTypeObserver.observe({ entryTypes: ["mark", "measure", "mark"], buffered: true });
+    const multiTypeRecords = multiTypeObserver.takeRecords();
+    multiTypeObserver.disconnect();
+    const bufferedMarkObserver = new PerformanceObserver(() => {});
+    bufferedMarkObserver.observe({ type: "mark", buffered: true });
+    const bufferedMarkRecords = bufferedMarkObserver.takeRecords();
+    bufferedMarkObserver.disconnect();
+
+    Promise.resolve().then(() => {
+      window.performanceMarkInstance = mark instanceof PerformanceMark;
+      window.performanceMeasureInstance = measure instanceof PerformanceMeasure;
+      window.performanceGetEntriesCount = allEntries.length;
+      window.performanceGetEntriesByTypeCount = markEntries.length;
+      window.performanceGetEntriesByNameCount = namedEntries.length;
+      window.performanceTimingSameObject = performance.timing === performance.timing;
+      window.performanceTimingNavigationStart = performance.timing.navigationStart;
+      window.performanceNavigationType = performance.navigation.type;
+      window.performanceLegacyMeasureDuration = legacyMeasure.duration >= 0;
+      window.performanceMeasureName = measure.name;
+      window.performanceMeasureEntryType = measure.entryType;
+      window.performanceMeasureStartTime = measure.startTime;
+      window.performanceMeasureDuration = measure.duration;
+      window.performanceMeasureDetailKind = measure.detail && measure.detail.kind;
+      window.performanceMeasureObservedCount = callbackEntries && callbackEntries.length;
+      window.performanceMeasureObservedName =
+        callbackEntries && callbackEntries[0] && callbackEntries[0].name;
+      window.performanceMeasureObservedType =
+        callbackEntries && callbackEntries[0] && callbackEntries[0].entryType;
+      window.performanceMeasureObservedByTypeCount =
+        callbackMeasureEntries && callbackMeasureEntries.length;
+      window.performanceMeasureObservedByNameCount =
+        callbackNamedEntries && callbackNamedEntries.length;
+      window.performanceMeasureObservedByNameType =
+        callbackNamedEntries && callbackNamedEntries[0] && callbackNamedEntries[0].entryType;
+      window.performanceEntryTypesBufferedCount = multiTypeRecords.length;
+      window.performanceBufferedMarkCount = bufferedMarkRecords.length;
+      window.performanceBufferedMarkTypes =
+        JSON.stringify(bufferedMarkRecords.map((entry) => entry.entryType));
+      window.performanceBufferedMarkNames =
+        JSON.stringify(bufferedMarkRecords.map((entry) => entry.name));
+      window.performanceEntryTypesBufferedTypes =
+        JSON.stringify(multiTypeRecords.map((entry) => entry.entryType));
+      window.performanceEntryTypesBufferedNames =
+        JSON.stringify(multiTypeRecords.map((entry) => entry.name));
+
+      performance.clearMeasures("duration");
+      performance.clearMeasures();
+      const bufferedObserver = new PerformanceObserver((list) => {
+        bufferedObserver.disconnect();
+      });
+      bufferedObserver.observe({ type: "measure", buffered: true });
+      window.performanceMeasureBufferedAfterClear = bufferedObserver.takeRecords().length;
+    });
+  </script>
+</body>
+</html>

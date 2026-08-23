@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.moduleExportGeneratorOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleExportGeneratorOrder.push("dcl");
+        window.moduleExportGeneratorFinalOrder =
+          window.moduleExportGeneratorOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import defaultGenerator, {
+        values,
+        asyncValues,
+      } from "/assets/module-export-generator-functions.mjs";
+
+      const syncValues = [...values()].join(":");
+      const asyncCollected = [];
+      for await (const value of asyncValues()) {
+        asyncCollected.push(value);
+      }
+      const defaultValues = [...defaultGenerator()].join(":");
+
+      window.moduleExportGeneratorResult = [
+        syncValues,
+        asyncCollected.join(":"),
+        defaultValues,
+      ].join("|");
+      window.moduleExportGeneratorDefaultName = defaultGenerator.name;
+      window.moduleExportGeneratorOrder.push("module");
+      window.moduleExportGeneratorFinalOrder =
+        window.moduleExportGeneratorOrder.join(",");
+    </script>
+  </head>
+  <body>
+    <main>module export generator functions</main>
+  </body>
+</html>

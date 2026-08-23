@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <body
+    data-oncurrententrychange-fired="false"
+    data-order=""
+    data-sync-hash=""
+    data-sync-state=""
+    data-timeout-hash=""
+    data-timeout-state=""
+    data-from-url=""
+    data-navigation-type=""
+  >
+    <script>
+      history.pushState({ n: 1 }, "", "#one");
+      history.pushState({ n: 2 }, "", "#two");
+
+      const order = [];
+
+      navigation.oncurrententrychange = (event) => {
+        if (location.hash !== "#two" && history.state?.n !== 2) {
+          return;
+        }
+        document.body.setAttribute("data-oncurrententrychange-fired", "true");
+        document.body.setAttribute(
+          "data-from-url",
+          event.from ? event.from.url : "null"
+        );
+        document.body.setAttribute(
+          "data-navigation-type",
+          String(event.navigationType)
+        );
+        order.push("currententrychange");
+        queueMicrotask(() => {
+          order.push("currententrychange-microtask:" + location.hash);
+        });
+        setTimeout(() => {
+          document.body.setAttribute("data-order", order.join(","));
+          document.body.setAttribute("data-timeout-hash", location.hash);
+          document.body.setAttribute(
+            "data-timeout-state",
+            JSON.stringify(history.state)
+          );
+        }, 0);
+      };
+
+      window.addEventListener("hashchange", () => {
+        if (location.hash !== "#one") {
+          return;
+        }
+        order.length = 0;
+        navigation.forward();
+        document.body.setAttribute("data-sync-hash", location.hash);
+        document.body.setAttribute("data-sync-state", JSON.stringify(history.state));
+      });
+
+      history.back();
+    </script>
+  </body>
+</html>

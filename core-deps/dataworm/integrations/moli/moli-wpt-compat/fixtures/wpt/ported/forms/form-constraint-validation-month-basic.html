@@ -1,0 +1,171 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "month";
+
+  input.value = "2024-02";
+  assert_equals(input.value, "2024-02", "valid month values should be preserved");
+
+  input.value = "2024-13";
+  assert_equals(input.value, "", "month 13 should sanitize to empty");
+  assert_true(input.validity.valid, "empty non-required month input should remain valid");
+
+  input.value = "2024-00";
+  assert_equals(input.value, "", "month 00 should sanitize to empty");
+
+  input.value = "2024-1";
+  assert_equals(input.value, "", "non-normalized month strings should sanitize to empty");
+
+  input.value = "0000-01";
+  assert_equals(input.value, "", "year zero is not a valid month input value");
+}, "month input value setter sanitizes invalid month strings");
+
+test(function () {
+  withHost(
+    `<input id="month" type="month" value="2024-13">`,
+    function (host) {
+      const input = host.querySelector("#month");
+      assert_equals(input.getAttribute("value"), "2024-13", "content attribute should keep the original month text");
+      assert_equals(input.value, "", "invalid initial month content value should sanitize to empty");
+
+      input.setAttribute("value", "2024-02");
+      assert_equals(input.value, "2024-02", "non-dirty valid month attribute changes should update the current value");
+
+      input.setAttribute("value", "2024-99");
+      assert_equals(input.value, "", "non-dirty invalid month attribute changes should sanitize the current value");
+    },
+  );
+}, "month input initial value and non-dirty value attribute sync use month sanitization");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "not-a-month";
+  assert_equals(input.value, "not-a-month", "text input should keep the script-set value");
+
+  input.type = "month";
+  assert_equals(input.value, "", "switching to month should sanitize the existing value");
+}, "changing an input to type=month sanitizes the current value");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "month";
+  input.min = "2024-01";
+  input.max = "2024-06";
+
+  input.value = "2023-12";
+  assert_true(input.validity.rangeUnderflow, "month below min should set rangeUnderflow");
+  assert_false(input.validity.rangeOverflow, "month below min should not set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeUnderflow should fail checkValidity");
+
+  input.value = "2024-07";
+  assert_false(input.validity.rangeUnderflow, "month above max should not set rangeUnderflow");
+  assert_true(input.validity.rangeOverflow, "month above max should set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeOverflow should fail checkValidity");
+
+  input.value = "2024-01";
+  assert_false(input.validity.rangeUnderflow, "month equal to min should pass");
+  assert_false(input.validity.rangeOverflow, "month equal to min should not overflow");
+  assert_true(input.validity.valid, "month at min should be valid");
+
+  input.min = "bad";
+  input.max = "also-bad";
+  input.value = "2024-12";
+  assert_false(input.validity.rangeUnderflow, "invalid month min should be ignored");
+  assert_false(input.validity.rangeOverflow, "invalid month max should be ignored");
+  assert_true(input.validity.valid, "invalid month range attributes should not make the control invalid");
+}, "month input validity reflects min/max range constraints");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "month";
+  input.min = "2024-01";
+  input.step = "2";
+
+  input.value = "2024-03";
+  assert_false(input.validity.stepMismatch, "month aligned to min + n * step months should pass");
+  assert_true(input.checkValidity(), "aligned month should pass checkValidity");
+
+  input.value = "2024-02";
+  assert_true(input.validity.stepMismatch, "month not aligned to min + n * step months should set stepMismatch");
+  assert_false(input.validity.valid, "stepMismatch should make the month invalid");
+
+  input.step = "bad";
+  assert_false(input.validity.stepMismatch, "invalid month step should fall back to the 1 month default");
+  assert_true(input.validity.valid, "default month step should allow every whole month value");
+
+  input.step = "0";
+  assert_false(input.validity.stepMismatch, "zero month step should fall back to the 1 month default");
+
+  input.step = "any";
+  assert_false(input.validity.stepMismatch, "month step=any should disable stepMismatch");
+}, "month input validity reflects stepMismatch in month units");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "month";
+
+  assert_true(Number.isNaN(input.valueAsNumber), "empty month input should expose NaN");
+
+  input.value = "1970-01";
+  assert_equals(input.valueAsNumber, 0, "1970-01 should be the month valueAsNumber epoch");
+
+  input.value = "1970-02";
+  assert_equals(input.valueAsNumber, 1, "month valueAsNumber should expose months since 1970-01");
+
+  input.value = "1969-12";
+  assert_equals(input.valueAsNumber, -1, "months before 1970-01 should expose negative offsets");
+
+  input.valueAsNumber = 0;
+  assert_equals(input.value, "1970-01", "month valueAsNumber setter should write the epoch month");
+
+  input.valueAsNumber = 650;
+  assert_equals(input.value, "2024-03", "month valueAsNumber setter should write positive month offsets");
+
+  input.valueAsNumber = -1;
+  assert_equals(input.value, "1969-12", "month valueAsNumber setter should write negative month offsets");
+
+  input.valueAsNumber = NaN;
+  assert_equals(input.value, "", "NaN month valueAsNumber setter should clear the value");
+  assert_true(Number.isNaN(input.valueAsNumber), "cleared month input should expose NaN");
+}, "month input valueAsNumber getter and setter round-trip month offsets");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "month";
+  input.value = "1970-02";
+
+  assert_throws_name("TypeError", function () {
+    input.valueAsNumber = Infinity;
+  }, "setting month valueAsNumber to Infinity should throw TypeError");
+  assert_equals(input.value, "1970-02", "failed infinite valueAsNumber setter should not change month value");
+}, "month input valueAsNumber setter rejects infinite values");
+</script>

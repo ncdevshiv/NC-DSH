@@ -1,0 +1,23 @@
+[package]
+name = "ai-storage"
+description = "Storage backends: KV, document and vector store interfaces with sqlite adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-errors = { path = "../ai-errors" }
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

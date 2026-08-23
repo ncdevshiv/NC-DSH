@@ -1,0 +1,2 @@
+[2m2026-08-22T10:24:47.616363Z[0m [32m INFO[0m raw streaming fetch_internal completed [3mpage_id[0m[2m=[0m1 [3murl[0m[2m=[0mhttp://127.0.0.1:53542/ [3melapsed_ms[0m[2m=[0m217
+[2m2026-08-22T10:25:32.409473Z[0m [33m WARN[0m fetch readiness wait timed out; returning best-effort page [3mpage_id[0m[2m=[0m1 [3murl[0m[2m=[0mhttp://127.0.0.1:53542/ [3mfinal_url[0m[2m=[0mhttp://127.0.0.1:53542/ [3mwait_until[0m[2m=[0mNetworkIdle [3mtimeout_ms[0m[2m=[0m45000 [3mremaining_ms[0m[2m=[0m44778 [3merror[0m[2m=[0mdeadline has elapsed

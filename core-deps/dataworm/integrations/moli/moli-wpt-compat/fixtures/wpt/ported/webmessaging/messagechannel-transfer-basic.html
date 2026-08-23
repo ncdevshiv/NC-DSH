@@ -1,0 +1,156 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_port_message(port, predicate) {
+  port.start();
+  return new Promise(function (resolve) {
+    function onmessage(event) {
+      if (predicate && !predicate(event.data)) {
+        return;
+      }
+      port.removeEventListener("message", onmessage);
+      resolve(event);
+    }
+
+    port.addEventListener("message", onmessage);
+  });
+}
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  try {
+    const buffer = new Uint8Array([1, 2, 3]).buffer;
+    const delivered = next_port_message(channel.port2, function (data) {
+      return data && data.kind === "buffer";
+    });
+
+    channel.port1.postMessage({ kind: "buffer", buffer: buffer }, [buffer]);
+
+    assert_equals(buffer.byteLength, 0, "array transfer list should detach the sender ArrayBuffer");
+
+    const event = await delivered;
+    assert_true(event.data.buffer instanceof ArrayBuffer, "receiver should get an ArrayBuffer");
+    assert_equals(event.data.buffer.byteLength, 3, "receiver should get the original byte length");
+    assert_array_equals(Array.from(new Uint8Array(event.data.buffer)), [1, 2, 3]);
+    assert_equals(event.ports.length, 0, "ArrayBuffer-only transfer should not populate event.ports");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+  }
+}, "MessagePort.postMessage transfers ArrayBuffers with an array transfer list");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  try {
+    const buffer = new Uint8Array([4, 5]).buffer;
+    const delivered = next_port_message(channel.port2, function (data) {
+      return data && data.kind === "iterable-buffer";
+    });
+    const iterable = {
+      [Symbol.iterator]: function* () {
+        yield buffer;
+      },
+    };
+
+    channel.port1.postMessage({ kind: "iterable-buffer", buffer: buffer }, iterable);
+
+    assert_equals(buffer.byteLength, 0, "raw iterable transfer list should detach the sender ArrayBuffer");
+
+    const event = await delivered;
+    assert_array_equals(Array.from(new Uint8Array(event.data.buffer)), [4, 5]);
+    assert_equals(event.ports.length, 0, "raw iterable ArrayBuffer transfer should not populate event.ports");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+  }
+}, "MessagePort.postMessage accepts raw iterable transfer lists");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  try {
+    const buffer = new Uint8Array([6, 7]).buffer;
+    const delivered = next_port_message(channel.port2, function (data) {
+      return data && data.kind === "options-buffer";
+    });
+    const iterable = {
+      [Symbol.iterator]: function* () {
+        yield buffer;
+      },
+    };
+
+    channel.port1.postMessage({ kind: "options-buffer", buffer: buffer }, { transfer: iterable });
+
+    assert_equals(buffer.byteLength, 0, "iterable options.transfer should detach the sender ArrayBuffer");
+
+    const event = await delivered;
+    assert_array_equals(Array.from(new Uint8Array(event.data.buffer)), [6, 7]);
+    assert_equals(event.ports.length, 0, "options.transfer ArrayBuffer transfer should not populate event.ports");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+  }
+}, "MessagePort.postMessage accepts iterable options.transfer values for ArrayBuffers");
+
+promise_test(async function () {
+  const outer = new MessageChannel();
+  const inner = new MessageChannel();
+  try {
+    const delivered = next_port_message(outer.port2, function (data) {
+      return data && data.kind === "port";
+    });
+
+    outer.port1.postMessage({ kind: "port", port: inner.port2 }, [inner.port2]);
+
+    const event = await delivered;
+    assert_true(event instanceof MessageEvent, "transferred-port delivery should use MessageEvent");
+    assert_equals(event.origin, "", "transferred-port delivery should use the empty origin default");
+    assert_equals(event.lastEventId, "", "transferred-port delivery should use the empty lastEventId default");
+    assert_equals(event.source, null, "transferred-port delivery should not expose a Window source");
+    assert_equals(event.ports.length, 1, "transferred MessagePort should populate event.ports");
+    assert_true(event.data.port instanceof MessagePort, "payload should expose a MessagePort");
+    assert_true(event.data.port === event.ports[0], "payload port and event.ports should share a wrapper");
+
+    const reply = next_port_message(inner.port1);
+    event.data.port.postMessage("through-transferred-port");
+    assert_equals((await reply).data, "through-transferred-port");
+  } finally {
+    outer.port1.close();
+    outer.port2.close();
+    inner.port1.close();
+    inner.port2.close();
+  }
+}, "MessagePort.postMessage transfers MessagePorts and preserves event.ports wrapper identity");
+
+promise_test(async function () {
+  const outer = new MessageChannel();
+  const inner = new MessageChannel();
+  try {
+    const delivered = next_port_message(outer.port2, function (data) {
+      return data && data.kind === "iterable-port";
+    });
+    const iterable = {
+      [Symbol.iterator]: function* () {
+        yield inner.port2;
+      },
+    };
+
+    outer.port1.postMessage({ kind: "iterable-port", port: inner.port2 }, { transfer: iterable });
+
+    const event = await delivered;
+    assert_equals(event.ports.length, 1, "iterable options.transfer should populate event.ports");
+    assert_true(event.data.port === event.ports[0], "transferred payload port should match event.ports");
+
+    const reply = next_port_message(inner.port1);
+    event.data.port.postMessage("through-iterable-port");
+    assert_equals((await reply).data, "through-iterable-port");
+  } finally {
+    outer.port1.close();
+    outer.port2.close();
+    inner.port1.close();
+    inner.port2.close();
+  }
+}, "MessagePort.postMessage transfers MessagePorts with iterable options.transfer");
+</script>

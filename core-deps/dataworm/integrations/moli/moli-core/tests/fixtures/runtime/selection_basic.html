@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <body>
+    <p id="content">The quick brown fox</p>
+    <script>
+      const sel = window.getSelection();
+      const textNode = document.getElementById("content").firstChild;
+
+      window.selectionInitialRangeCount = sel.rangeCount;
+      window.selectionInitialType = sel.type;
+      window.selectionInitialIsCollapsed = sel.isCollapsed;
+      window.selectionInitialAnchorNodeIsNull = sel.anchorNode === null;
+      window.selectionInitialDirection = sel.direction;
+
+      sel.collapse(textNode, 4);
+      window.selectionAfterCollapseRangeCount = sel.rangeCount;
+      window.selectionAfterCollapseType = sel.type;
+      window.selectionAfterCollapseIsCollapsed = sel.isCollapsed;
+      window.selectionAfterCollapseAnchorOffset = sel.anchorOffset;
+      window.selectionAfterCollapseFocusOffset = sel.focusOffset;
+      window.selectionAfterCollapseDirection = sel.direction;
+
+      sel.extend(textNode, 9);
+      window.selectionAfterExtendRangeCount = sel.rangeCount;
+      window.selectionAfterExtendType = sel.type;
+      window.selectionAfterExtendIsCollapsed = sel.isCollapsed;
+      window.selectionAfterExtendAnchorOffset = sel.anchorOffset;
+      window.selectionAfterExtendFocusOffset = sel.focusOffset;
+      window.selectionAfterExtendDirection = sel.direction;
+      window.selectionRangeAtZeroIsRange = sel.getRangeAt(0) instanceof Range;
+
+      sel.deleteFromDocument();
+      window.selectionAfterDeleteText = textNode.textContent;
+      window.selectionAfterDeleteType = sel.type;
+      window.selectionAfterDeleteAnchorOffset = sel.anchorOffset;
+      window.selectionAfterDeleteFocusOffset = sel.focusOffset;
+      window.selectionAfterDeleteDirection = sel.direction;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const iterator = new URLSearchParams("a=1&b=2").entries();
+  assert_array_equals(iterator.next().value, ["a", "1"]);
+  assert_false("__moliUrlSearchParamsIteratorTarget" in iterator);
+  assert_false("__moliUrlSearchParamsIteratorIndex" in iterator);
+  assert_false("__moliUrlSearchParamsIteratorKind" in iterator);
+  assert_false(Object.keys(iterator).includes("__moliUrlSearchParamsIteratorIndex"));
+
+  iterator.__moliUrlSearchParamsIteratorTarget = null;
+  iterator.__moliUrlSearchParamsIteratorIndex = -100;
+  iterator.__moliUrlSearchParamsIteratorKind = "keys";
+
+  assert_array_equals(iterator.next().value, ["b", "2"]);
+  assert_true(iterator.next().done);
+}, "URLSearchParams iterator internal state is hidden from JS properties");
+</script>

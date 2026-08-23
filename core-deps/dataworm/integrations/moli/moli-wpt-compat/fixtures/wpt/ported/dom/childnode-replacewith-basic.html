@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<body></body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const parent = document.createElement("div");
+  const child = document.createElement("test");
+  parent.appendChild(child);
+
+  child.replaceWith();
+  assert_equals(parent.innerHTML, "");
+  assert_equals(child.parentNode, null);
+}, "ChildNode.replaceWith without arguments removes the child");
+
+test(function () {
+  const parent = document.createElement("div");
+  const child = document.createElement("test");
+  parent.appendChild(child);
+
+  child.replaceWith(null, undefined, "", "text");
+  assert_equals(parent.innerHTML, "nullundefinedtext");
+  assert_equals(parent.childNodes[2].data, "");
+  assert_equals(child.parentNode, null);
+}, "ChildNode.replaceWith converts non-node arguments to Text");
+
+test(function () {
+  const parent = document.createElement("div");
+  const child = document.createElement("test");
+  const x = document.createElement("x");
+  parent.appendChild(child);
+
+  child.replaceWith(x, "text");
+  assert_equals(parent.innerHTML, "<x></x>text");
+  assert_equals(child.parentNode, null);
+}, "ChildNode.replaceWith replaces the child with element and text arguments");
+
+test(function () {
+  const parent = document.createElement("div");
+  const child = document.createElement("test");
+  const x = document.createElement("x");
+  const y = document.createElement("y");
+  const z = document.createElement("z");
+
+  parent.appendChild(y);
+  parent.appendChild(child);
+  parent.appendChild(x);
+
+  child.replaceWith(x, y, z);
+  assert_equals(parent.innerHTML, "<x></x><y></y><z></z>");
+  assert_equals(child.parentNode, null);
+}, "ChildNode.replaceWith moves existing siblings into the replacement in argument order");
+
+test(function () {
+  const parent = document.createElement("div");
+  const child = document.createElement("test");
+  const x = document.createElement("x");
+  parent.appendChild(child);
+  parent.appendChild(x);
+  parent.appendChild(document.createTextNode("text"));
+
+  child.replaceWith(x, child);
+  assert_equals(parent.innerHTML, "<x></x><test></test>text");
+  assert_equals(child.parentNode, parent);
+}, "ChildNode.replaceWith handles the context object as a replacement argument");
+
+test(function () {
+  const child = document.createElement("test");
+  const x = document.createElement("x");
+  const y = document.createElement("y");
+  const parent = document.createElement("div");
+  parent.appendChild(x);
+  parent.appendChild(y);
+
+  child.replaceWith(x, y);
+  assert_equals(parent.innerHTML, "<x></x><y></y>");
+  assert_equals(child.parentNode, null);
+}, "ChildNode.replaceWith on a parentless child is a no-op");
+</script>

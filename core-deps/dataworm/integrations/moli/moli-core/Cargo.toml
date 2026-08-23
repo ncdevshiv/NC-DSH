@@ -1,0 +1,49 @@
+[package]
+license.workspace = true
+name = "moli-core"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+# Compile renderer-only testing and diagnostic projections. This is not part of
+# normal browser behavior and must stay disabled in production builds.
+test-support = ["moli-renderer-v8/test-support"]
+# Forward the renderer's WPT-only test harness globals. This must stay opt-in:
+# normal Moli pages should not expose `window.webdriver` / `window.WebDriver`.
+wpt-extensions = ["moli-renderer-v8/wpt-extensions"]
+
+[dependencies]
+anyhow = "1.0.100"
+moli-browser-profile = { path = "../moli-browser-profile" }
+moli-dom = { path = "../moli-dom" }
+moli-parser = { path = "../moli-parser" }
+moli-page-types = { path = "../moli-page-types" }
+moli-renderer-v8 = { path = "../moli-renderer-v8" }
+moli-selector = { path = "../moli-selector" }
+moli-storage-key = { path = "../moli-storage-key" }
+moli-storage-service = { path = "../moli-storage-service" }
+moli-url = { path = "../moli-url" }
+moli-web-mime = { path = "../moli-web-mime" }
+moli-cookie-jar = { path = "../moli-cookie-jar" }
+moli-fetch = { path = "../moli-fetch" }
+parking_lot = "0.12"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tokio = { version = "1.51.0", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1.41"
+url = "2.5.7"
+
+[dev-dependencies]
+moli-fetch = { path = "../moli-fetch", features = ["test-support"] }
+# Integration tests compile moli-core as a normal dependency, so `cfg(test)` in
+# moli-renderer-v8 would not apply. Enable the renderer feature through this
+# dev-dependency instead; production dependencies keep it disabled by default.
+moli-renderer-v8 = { path = "../moli-renderer-v8", features = ["test-support", "wpt-extensions"] }
+moli-test-support = { path = "../moli-test-support" }
+moli-wpt-compat = { path = "../moli-wpt-compat" }
+strip-ansi-escapes = "0.2.1"
+static_assertions = "1.1.0"
+
+[lints]
+workspace = true

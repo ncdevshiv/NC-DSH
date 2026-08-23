@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const cases = [
+    { type: "text", value: "abc123", pattern: "[a-z]+", message: "text" },
+    { type: "search", value: "needle42", pattern: "[a-z]+", message: "search" },
+    { type: "tel", value: "555-0100", pattern: "[0-9]+", message: "tel" },
+    { type: "password", value: "secret42", pattern: "[a-z]+", message: "password" },
+    { type: "email", value: "user@example.com", pattern: ".+@example\\.org", message: "email" },
+    { type: "url", value: "https://example.com/path", pattern: "https://example\\.org/.*", message: "url" },
+  ];
+
+  for (const entry of cases) {
+    const input = document.createElement("input");
+    input.type = entry.type;
+    input.pattern = entry.pattern;
+    input.value = entry.value;
+
+    assert_equals(input.type, entry.type, entry.message + " type should be supported by this fixture");
+    assert_true(input.validity.patternMismatch, entry.message + " should apply patternMismatch");
+    assert_false(input.validity.valid, entry.message + " patternMismatch should make the control invalid");
+  }
+}, "patternMismatch applies to pattern-supported input types");
+
+test(function () {
+  const cases = [
+    { type: "number", value: "123", pattern: "[A-Z]+", message: "number" },
+    { type: "date", value: "2024-02-29", pattern: "[A-Z]+", message: "date" },
+    { type: "time", value: "12:34", pattern: "[A-Z]+", message: "time" },
+    { type: "checkbox", value: "checked", pattern: "[0-9]+", message: "checkbox" },
+    { type: "hidden", value: "hidden-value", pattern: "[0-9]+", message: "hidden" },
+  ];
+
+  for (const entry of cases) {
+    const input = document.createElement("input");
+    input.type = entry.type;
+    input.pattern = entry.pattern;
+    input.value = entry.value;
+
+    assert_equals(input.type, entry.type, entry.message + " type should be supported by this fixture");
+    assert_false(input.validity.patternMismatch, entry.message + " should ignore patternMismatch");
+  }
+}, "patternMismatch is ignored for input types that do not support pattern");
+
+test(function () {
+  const input = document.createElement("input");
+  input.pattern = "[A-Z]+";
+  input.value = "123";
+
+  input.type = "number";
+  assert_equals(input.type, "number", "number type should be active");
+  assert_false(input.validity.patternMismatch, "number should ignore patternMismatch");
+
+  input.type = "text";
+  assert_equals(input.type, "text", "text type should be active after dynamic type change");
+  assert_true(input.validity.patternMismatch, "text should apply patternMismatch after dynamic type change");
+
+  input.type = "search";
+  assert_equals(input.type, "search", "search type should be active after dynamic type change");
+  assert_true(input.validity.patternMismatch, "search should keep applying patternMismatch after dynamic type change");
+
+  input.type = "hidden";
+  assert_equals(input.type, "hidden", "hidden type should be active after dynamic type change");
+  assert_false(input.validity.patternMismatch, "hidden should ignore patternMismatch after dynamic type change");
+}, "patternMismatch follows dynamic input type changes");
+</script>

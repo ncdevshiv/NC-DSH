@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+  <body
+    data-child-back-sync=""
+    data-child-forward-sync=""
+    data-child-back-committed=""
+    data-child-back-finished=""
+    data-child-forward-committed=""
+    data-child-forward-finished=""
+  >
+    <iframe id="child" src="/compat/window-child-browsing-context-target-name-a"></iframe>
+    <script>
+      const describeRejection = (error) =>
+        [String(error?.name ?? ""), String(error?.message ?? "")].join("|");
+      const iframe = document.getElementById("child");
+      iframe.addEventListener("load", () => {
+        const childWindow = iframe.contentWindow;
+        const initialEntry = childWindow.navigation.currentEntry;
+        const noopBack = childWindow.navigation.back();
+        const noopForward = childWindow.navigation.forward();
+
+        document.body.setAttribute(
+          "data-child-back-sync",
+          [
+            String(typeof noopBack?.committed?.then === "function"),
+            String(typeof noopBack?.finished?.then === "function"),
+            String(childWindow.navigation.currentEntry === initialEntry),
+          ].join("|")
+        );
+        document.body.setAttribute(
+          "data-child-forward-sync",
+          [
+            String(typeof noopForward?.committed?.then === "function"),
+            String(typeof noopForward?.finished?.then === "function"),
+            String(childWindow.navigation.currentEntry === initialEntry),
+          ].join("|")
+        );
+        noopBack.committed.then(
+          () => document.body.setAttribute("data-child-back-committed", "fulfilled"),
+          (error) =>
+            document.body.setAttribute(
+              "data-child-back-committed",
+              describeRejection(error)
+            )
+        );
+        noopBack.finished.then(
+          () => document.body.setAttribute("data-child-back-finished", "fulfilled"),
+          (error) =>
+            document.body.setAttribute(
+              "data-child-back-finished",
+              describeRejection(error)
+            )
+        );
+        noopForward.committed.then(
+          () =>
+            document.body.setAttribute("data-child-forward-committed", "fulfilled"),
+          (error) =>
+            document.body.setAttribute(
+              "data-child-forward-committed",
+              describeRejection(error)
+            )
+        );
+        noopForward.finished.then(
+          () => document.body.setAttribute("data-child-forward-finished", "fulfilled"),
+          (error) =>
+            document.body.setAttribute(
+              "data-child-forward-finished",
+              describeRejection(error)
+            )
+        );
+      });
+    </script>
+  </body>
+</html>

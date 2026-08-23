@@ -1,0 +1,96 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function worker_fixture_url() {
+  return new URL(
+    "/wpt/ported/worker/resources/worker-abortsignal-worker.js",
+    location.href,
+  ).href;
+}
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "reentrant-abort" });
+    const message = await next_message(worker);
+    assert_true(message.data.firstAborted, "first controller should abort");
+    assert_true(message.data.secondAborted, "second controller should abort reentrantly");
+    assert_equals(
+      message.data.secondReason,
+      "second-abort",
+      "reentrant abort should preserve the second controller reason",
+    );
+    assert_array_equals(
+      message.data.events,
+      ["first-listener", "second-listener", "second-state:true:second-abort"],
+      "reentrant abort should finish nested listener work before returning to the original listener",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker AbortSignal listeners can abort another controller reentrantly");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "mutate-listeners" });
+    const message = await next_message(worker);
+    assert_equals(
+      message.data.status,
+      "listener-ran|after-abort:true",
+      "dispatchEvent should not run listeners added reentrantly during the same dispatch",
+    );
+    assert_true(message.data.aborted, "reentrant listener mutation test should still abort the signal");
+    assert_equals(
+      message.data.reason,
+      "custom-abort",
+      "reentrant listener mutation test should preserve the abort reason",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker AbortSignal dispatch tolerates listener mutation during dispatch");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "once-listener" });
+    const message = await next_message(worker);
+    assert_equals(
+      message.data.count,
+      1,
+      "once listeners should run only once across repeated dispatchEvent calls inside the worker",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker AbortSignal dispatch honors once listeners");
+</script>

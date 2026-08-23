@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const state = {
+    when: new Date("2020-01-02T03:04:05.000Z"),
+    values: [1, 2],
+  };
+
+  const result = navigation.navigate(location.pathname + "#structured-clone", {
+    history: "push",
+    state: state,
+  });
+
+  state.when.setUTCFullYear(1999);
+  state.values.push(3);
+
+  const syncState = navigation.currentEntry.getState();
+  assert_true(syncState?.when instanceof Date, "state.when should be restored as a Date");
+  assert_equals(
+    syncState?.when?.toISOString?.(),
+    "2020-01-02T03:04:05.000Z",
+    "navigation state should preserve the original Date payload",
+  );
+  assert_true(Array.isArray(syncState?.values), "state.values should be restored as an Array");
+  assert_array_equals(
+    syncState?.values ?? [],
+    [1, 2],
+    "navigation state should not retain later mutations to the source array",
+  );
+  assert_equals(JSON.stringify(history.state), "null", "history.state should stay null");
+  assert_true(
+    !!result &&
+      typeof result.committed?.then === "function" &&
+      typeof result.finished?.then === "function",
+    "navigate() should still expose committed and finished promises",
+  );
+
+  await new Promise(function (resolve) {
+    setTimeout(resolve, 0);
+  });
+
+  const finalState = navigation.currentEntry.getState();
+  assert_true(finalState?.when instanceof Date, "final state.when should stay a Date");
+  assert_equals(
+    finalState?.when?.toISOString?.(),
+    "2020-01-02T03:04:05.000Z",
+    "final navigation state should preserve the original Date payload",
+  );
+  assert_true(Array.isArray(finalState?.values), "final state.values should stay an Array");
+  assert_array_equals(
+    finalState?.values ?? [],
+    [1, 2],
+    "final navigation state should preserve the cloned array payload",
+  );
+  assert_equals(JSON.stringify(history.state), "null", "history.state should remain null");
+}, "top-level same-document navigation.navigate() stores state using structured clone");
+</script>

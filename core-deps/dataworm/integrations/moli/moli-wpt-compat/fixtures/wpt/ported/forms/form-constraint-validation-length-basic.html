@@ -1,0 +1,178 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "text";
+
+  assert_equals(input.maxLength, -1, "missing maxlength should expose -1");
+  assert_equals(input.minLength, -1, "missing minlength should expose -1");
+
+  input.maxLength = 5;
+  input.minLength = 2;
+  assert_equals(input.getAttribute("maxlength"), "5", "maxLength should reflect to maxlength");
+  assert_equals(input.getAttribute("minlength"), "2", "minLength should reflect to minlength");
+  assert_equals(input.maxLength, 5, "maxLength getter should read the reflected value");
+  assert_equals(input.minLength, 2, "minLength getter should read the reflected value");
+
+  input.maxLength = "7.8";
+  input.minLength = true;
+  assert_equals(input.getAttribute("maxlength"), "7", "maxLength setter should convert and truncate string numbers");
+  assert_equals(input.getAttribute("minlength"), "1", "minLength setter should convert boolean values");
+  assert_equals(input.maxLength, 7, "maxLength getter should expose the converted integer");
+  assert_equals(input.minLength, 1, "minLength getter should expose the converted integer");
+
+  input.minLength = null;
+  assert_equals(input.getAttribute("minlength"), "0", "minLength setter should convert null to zero");
+  assert_equals(input.minLength, 0, "minLength getter should expose zero after null conversion");
+
+  input.maxLength = NaN;
+  input.minLength = Infinity;
+  assert_equals(input.getAttribute("maxlength"), "0", "maxLength setter should convert NaN to zero");
+  assert_equals(input.getAttribute("minlength"), "0", "minLength setter should convert Infinity to zero");
+
+  input.maxLength = { valueOf() { return 6; } };
+  input.minLength = {
+    valueOf() { return {}; },
+    toString() { return "3"; },
+  };
+  assert_equals(input.getAttribute("maxlength"), "6", "maxLength setter should convert object values through valueOf");
+  assert_equals(input.getAttribute("minlength"), "3", "minLength setter should fall back to object toString conversion");
+
+  assert_throws_name("Error", function () {
+    input.maxLength = { valueOf() { throw new Error("length conversion failed"); } };
+  }, "maxLength setter should propagate object conversion exceptions");
+  assert_equals(input.getAttribute("maxlength"), "6", "failed maxLength conversion should not mutate the attribute");
+
+  assert_throws_name("TypeError", function () {
+    input.minLength = Symbol("length");
+  }, "minLength setter should reject Symbol conversion");
+  assert_equals(input.getAttribute("minlength"), "3", "failed Symbol conversion should not mutate the attribute");
+
+  assert_throws_name("TypeError", function () {
+    input.maxLength = 1n;
+  }, "maxLength setter should reject BigInt conversion");
+  assert_equals(input.getAttribute("maxlength"), "6", "failed BigInt conversion should not mutate the attribute");
+
+  input.setAttribute("maxlength", "bogus");
+  input.setAttribute("minlength", "-1");
+  assert_equals(input.maxLength, -1, "invalid maxlength content attribute should expose -1");
+  assert_equals(input.minLength, -1, "negative minlength content attribute should expose -1");
+
+  assert_throws_name("IndexSizeError", function () {
+    input.maxLength = -1;
+  }, "negative maxLength should throw IndexSizeError");
+  assert_throws_name("IndexSizeError", function () {
+    input.minLength = -1;
+  }, "negative minLength should throw IndexSizeError");
+}, "input minLength and maxLength reflect non-negative length attributes");
+
+test(function () {
+  withHost(
+    `<textarea id="field"></textarea>`,
+    function (host) {
+      const textarea = host.querySelector("#field");
+
+      assert_equals(textarea.maxLength, -1, "missing textarea maxlength should expose -1");
+      assert_equals(textarea.minLength, -1, "missing textarea minlength should expose -1");
+
+      textarea.maxLength = 4;
+      textarea.minLength = 2;
+      assert_equals(textarea.getAttribute("maxlength"), "4", "textarea maxLength should reflect to maxlength");
+      assert_equals(textarea.getAttribute("minlength"), "2", "textarea minLength should reflect to minlength");
+      assert_equals(textarea.maxLength, 4, "textarea maxLength getter should read the reflected value");
+      assert_equals(textarea.minLength, 2, "textarea minLength getter should read the reflected value");
+
+      textarea.maxLength = "3.9";
+      textarea.minLength = false;
+      assert_equals(textarea.getAttribute("maxlength"), "3", "textarea maxLength setter should convert and truncate string numbers");
+      assert_equals(textarea.getAttribute("minlength"), "0", "textarea minLength setter should convert boolean false to zero");
+      assert_equals(textarea.maxLength, 3, "textarea maxLength getter should expose the converted integer");
+      assert_equals(textarea.minLength, 0, "textarea minLength getter should expose the converted integer");
+
+      textarea.maxLength = Infinity;
+      textarea.minLength = { valueOf() { return 2; } };
+      assert_equals(textarea.getAttribute("maxlength"), "0", "textarea maxLength setter should convert Infinity to zero");
+      assert_equals(textarea.getAttribute("minlength"), "2", "textarea minLength setter should convert object values");
+
+      assert_throws_name("Error", function () {
+        textarea.minLength = { valueOf() { throw new Error("textarea length conversion failed"); } };
+      }, "textarea minLength setter should propagate object conversion exceptions");
+      assert_equals(textarea.getAttribute("minlength"), "2", "failed textarea conversion should not mutate the attribute");
+
+      assert_throws_name("IndexSizeError", function () {
+        textarea.maxLength = -1;
+      }, "negative textarea maxLength should throw IndexSizeError");
+      assert_throws_name("IndexSizeError", function () {
+        textarea.minLength = -1;
+      }, "negative textarea minLength should throw IndexSizeError");
+    },
+  );
+}, "textarea minLength and maxLength reflect non-negative length attributes");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.minLength = 5;
+  input.maxLength = 6;
+
+  input.value = "abc";
+  assert_false(input.validity.tooShort, "script-set input value should not trip tooShort");
+  assert_true(input.validity.valid, "script-set short input should remain valid without user edit provenance");
+
+  input.value = "abcdefg";
+  assert_false(input.validity.tooLong, "script-set input value should not trip tooLong");
+  assert_true(input.validity.valid, "script-set long input should remain valid without user edit provenance");
+}, "input length validity is not triggered by script-set values");
+
+test(function () {
+  withHost(
+    `<form id="form">
+       <textarea id="field" minlength="4" maxlength="6"></textarea>
+     </form>`,
+    function (host) {
+      const form = host.querySelector("#form");
+      const textarea = host.querySelector("#field");
+      const events = [];
+      textarea.addEventListener("invalid", function () {
+        events.push("invalid");
+      });
+
+      textarea.value = "ab";
+      assert_false(textarea.validity.tooShort, "script-set textarea value should not trip tooShort");
+      assert_true(form.checkValidity(), "form should not fail length constraints without user edit provenance");
+
+      textarea.value = "abcdefg";
+      assert_false(textarea.validity.tooLong, "script-set textarea value should not trip tooLong");
+      assert_true(form.reportValidity(), "reportValidity should not fail length constraints without user edit provenance");
+      assert_array_equals(events, [], "script-set length checks should not dispatch invalid");
+    },
+  );
+}, "textarea length validity is not triggered by script-set values");
+</script>

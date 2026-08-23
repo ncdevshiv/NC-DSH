@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      const canvas = document.createElement("canvas");
+      const zero = document.createElement("canvas");
+      zero.width = 0;
+      zero.height = 0;
+
+      document.body.setAttribute("data-typeof", typeof canvas.toDataURL);
+      document.body.setAttribute(
+        "data-nonzero-prefix",
+        String(canvas.toDataURL().startsWith("data:image/png;base64,"))
+      );
+      document.body.setAttribute("data-zero", zero.toDataURL());
+    </script>
+  </body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_error_url() {
+  return new URL("/wpt/ported/worker/resources/worker-error.js", location.href).href;
+}
+
+function wait(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+function wait_for(promise, description) {
+  return Promise.race([
+    promise,
+    wait(300).then(function () {
+      throw new Error("timed out waiting for " + description);
+    }),
+  ]);
+}
+
+async function assert_unhandled_worker_error_propagates_to_window() {
+  const previousOnerror = window.onerror;
+  let worker = null;
+  let workerRecord = null;
+
+  try {
+    const windowSeen = new Promise(function (resolve) {
+      window.onerror = function (message, filename, lineno, colno, error, sixth) {
+        resolve({ message, filename, lineno, colno, error, sixth });
+        return true;
+      };
+    });
+
+    worker = new Worker(worker_error_url());
+    worker.onerror = function (event, second, third) {
+      workerRecord = { event, second, third };
+    };
+
+    const windowRecord = await wait_for(windowSeen, "window.onerror for worker runtime error");
+
+    assert_true(workerRecord.event instanceof ErrorEvent, "worker.onerror should receive an ErrorEvent");
+    assert_equals(workerRecord.event.type, "error", "worker error event type");
+    assert_equals(workerRecord.event.error, null, "worker error event should not expose the worker exception object");
+    assert_equals(workerRecord.second, undefined, "worker.onerror second argument");
+    assert_equals(workerRecord.third, undefined, "worker.onerror third argument");
+
+    assert_equals(windowRecord.message, workerRecord.event.message, "window.onerror message should match worker error");
+    assert_equals(windowRecord.filename, workerRecord.event.filename, "window.onerror filename should match worker error");
+    assert_equals(windowRecord.lineno, workerRecord.event.lineno, "window.onerror line should match worker error");
+    assert_equals(windowRecord.colno, workerRecord.event.colno, "window.onerror column should match worker error");
+    assert_equals(windowRecord.sixth, undefined, "window.onerror should receive five arguments");
+    assert_true(
+      windowRecord.message.indexOf("worker-boom") !== -1,
+      "window.onerror message should include the thrown worker error",
+    );
+  } finally {
+    window.onerror = previousOnerror;
+    if (worker) {
+      worker.terminate();
+    }
+  }
+}
+
+async function assert_worker_error_prevent_default_suppresses_window() {
+  const previousOnerror = window.onerror;
+  let worker = null;
+  let windowErrorCalled = false;
+
+  try {
+    window.onerror = function () {
+      windowErrorCalled = true;
+      return true;
+    };
+
+    worker = new Worker(worker_error_url());
+    await wait_for(
+      new Promise(function (resolve) {
+        worker.onerror = function (event) {
+          event.preventDefault();
+          resolve();
+        };
+      }),
+      "worker.onerror preventDefault",
+    );
+
+    assert_false(windowErrorCalled, "preventDefault on worker error should suppress window.onerror");
+  } finally {
+    window.onerror = previousOnerror;
+    if (worker) {
+      worker.terminate();
+    }
+  }
+}
+
+async function assert_truthy_worker_onerror_suppresses_window() {
+  const previousOnerror = window.onerror;
+  let worker = null;
+  let windowErrorCalled = false;
+  let handlerSeen = false;
+
+  try {
+    window.onerror = function () {
+      windowErrorCalled = true;
+      return true;
+    };
+
+    worker = new Worker(worker_error_url());
+    worker.onerror = function () {
+      handlerSeen = true;
+      return 1;
+    };
+
+    const listenerDefaultPrevented = await wait_for(
+      new Promise(function (resolve) {
+        worker.addEventListener(
+          "error",
+          function (event) {
+            resolve(event.defaultPrevented);
+          },
+          { once: true },
+        );
+      }),
+      "worker error listener after truthy onerror",
+    );
+
+    assert_true(handlerSeen, "worker.onerror should run before the later listener");
+    assert_true(listenerDefaultPrevented, "truthy worker.onerror should mark the worker error handled");
+    assert_false(windowErrorCalled, "truthy worker.onerror should suppress window.onerror");
+  } finally {
+    window.onerror = previousOnerror;
+    if (worker) {
+      worker.terminate();
+    }
+  }
+}
+
+promise_test(async function () {
+  await assert_unhandled_worker_error_propagates_to_window();
+  await assert_worker_error_prevent_default_suppresses_window();
+  await assert_truthy_worker_onerror_suppresses_window();
+}, "Dedicated worker runtime errors propagate to page window.onerror unless handled");
+</script>

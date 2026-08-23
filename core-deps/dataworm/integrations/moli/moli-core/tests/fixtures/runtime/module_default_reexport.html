@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleDefaultReexportOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleDefaultReexportOrder.push("dcl");
+        window.moduleDefaultReexportFinalOrder =
+          window.moduleDefaultReexportOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import fallback, {
+        makeValue,
+        value
+      } from "/assets/module-default-reexport-barrel.mjs";
+
+      window.moduleDefaultReexportOrder.push("module");
+      window.moduleDefaultReexportResult =
+        `${fallback()}:${makeValue()}:${value}`;
+      window.moduleDefaultReexportDefaultName = fallback.name;
+      window.moduleDefaultReexportAliasName = makeValue.name;
+    </script>
+  </body>
+</html>

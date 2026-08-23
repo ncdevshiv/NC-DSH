@@ -1,0 +1,111 @@
+<!doctype html>
+<meta charset="utf-8">
+<div id="target" contenteditable style="width:200px;height:200px"></div>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const target = document.getElementById("target");
+const events = [];
+let phase = "sibling";
+let expectedInputs = 0;
+
+function selectedText() {
+  const selection = getSelection();
+  if (selection.rangeCount === 0) {
+    return "";
+  }
+  return selection.getRangeAt(0).toString();
+}
+
+function resetRangeSelection() {
+  target.textContent = "";
+  const left = document.createTextNode("alpha ");
+  const right = document.createTextNode("omega");
+  target.append(left, right);
+
+  const selection = getSelection();
+  selection.removeAllRanges();
+  selection.setBaseAndExtent(left, 3, right, 2);
+  target.focus();
+}
+
+function resetNestedRangeSelection() {
+  target.innerHTML =
+    '<p id="left">alpha <b>bold</b></p><p id="right"><i>omega</i> tail</p>';
+  const start = document.getElementById("left").firstChild;
+  const end = document.getElementById("right").querySelector("i").firstChild;
+
+  const selection = getSelection();
+  selection.removeAllRanges();
+  selection.setBaseAndExtent(start, 2, end, 3);
+  target.focus();
+}
+
+window.__setupContenteditableRangePhase = function (nextPhase) {
+  phase = nextPhase;
+  if (phase === "sibling") {
+    resetRangeSelection();
+  } else if (phase === "nested") {
+    resetNestedRangeSelection();
+  }
+};
+
+window.__setupContenteditableRangePhase("sibling");
+
+const complete = new Promise(function (resolve) {
+  target.addEventListener("drop", function (event) {
+    events.push(
+      phase +
+        "-drop:" +
+        event.dataTransfer.getData("text") +
+        ":" +
+        target.textContent +
+        ":" +
+        selectedText(),
+    );
+  });
+
+  target.addEventListener("beforeinput", function () {
+    events.push(
+      phase + "-beforeinput:" + target.textContent + ":" + selectedText(),
+    );
+  });
+
+  target.addEventListener("input", function () {
+    const selection = getSelection();
+    events.push(
+      phase +
+        "-input:" +
+        target.textContent +
+        ":" +
+        selection.anchorNode.data +
+        ":" +
+        selection.anchorOffset +
+        ":" +
+        selection.focusOffset,
+    );
+    expectedInputs += 1;
+    if (expectedInputs === 2) {
+      resolve();
+    }
+  });
+});
+
+promise_test(async function () {
+  await complete;
+  assert_array_equals(
+    events,
+    [
+      "sibling-drop:moli:alpha omega:ha om",
+      "sibling-beforeinput:alpha omega:ha om",
+      "sibling-input:alpmoliega:moli:4:4",
+      "nested-drop:nested:alpha boldomega tail:pha boldome",
+      "nested-beforeinput:alpha boldomega tail:pha boldome",
+      "nested-input:alnestedga tail:nested:6:6",
+    ],
+    "contenteditable drop should replace Selection ranges spanning sibling text nodes and nested elements",
+  );
+  assert_equals(target.textContent, "alnestedga tail", "nested selected range was replaced");
+}, "Input.dispatchDragEvent replaces contenteditable ranges spanning sibling text nodes and nested elements");
+</script>

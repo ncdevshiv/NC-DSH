@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script>
+      window.runtimeInsertedHrefMutationStart = Date.now();
+
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "/assets/blocking_stylesheet_slow.css?stale=1";
+      document.head.appendChild(link);
+      link.href = "/assets/chrome_stylesheetlist_1.css?fresh=1";
+    </script>
+    <script>
+      window.runtimeInsertedHrefMutationParserNotBlocked =
+        Date.now() - window.runtimeInsertedHrefMutationStart < 50;
+      window.runtimeInsertedHrefMutationSawLate =
+        !!document.getElementById("late");
+    </script>
+  </head>
+  <body>
+    <div id="late">late</div>
+  </body>
+</html>

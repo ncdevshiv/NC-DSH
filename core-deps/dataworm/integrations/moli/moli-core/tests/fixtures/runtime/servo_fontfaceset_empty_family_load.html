@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <body data-result-is-array="">
+    <script>
+      (async () => {
+        const body = document.body;
+        const testFontFace = new FontFace('a', 'url(a)');
+        document.fonts.add(testFontFace);
+        const result = await document.fonts.load('1px ""');
+        body.setAttribute('data-result-is-array', String(Array.isArray(result)));
+      })();
+    </script>
+  </body>
+</html>

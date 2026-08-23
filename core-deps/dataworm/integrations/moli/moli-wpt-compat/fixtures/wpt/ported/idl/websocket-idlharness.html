@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface WebSocket : EventTarget {
+  constructor(USVString url, optional (DOMString or sequence<DOMString>) protocols = []);
+  readonly attribute USVString url;
+  readonly attribute unsigned short readyState;
+  readonly attribute unsigned long long bufferedAmount;
+  readonly attribute DOMString extensions;
+  readonly attribute DOMString protocol;
+  attribute DOMString binaryType;
+  attribute EventHandler onopen;
+  attribute EventHandler onerror;
+  attribute EventHandler onclose;
+  attribute EventHandler onmessage;
+  undefined send(any data);
+  undefined close(optional unsigned short code, optional USVString reason);
+};
+
+interface CloseEvent : Event {
+  constructor(DOMString type, optional object eventInitDict = {});
+  readonly attribute boolean wasClean;
+  readonly attribute unsigned short code;
+  readonly attribute USVString reason;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    WebSocket: ["new WebSocket('wss://example.test/socket')"],
+    CloseEvent: ["new CloseEvent('close', { wasClean: true, code: 1000, reason: 'ok' })"]
+  });
+});
+</script>

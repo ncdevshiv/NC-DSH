@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.parserOwnedImportMapOrder = [];
+      window.parserOwnedImportMapErrors = 0;
+      window.addEventListener("error", () => {
+        window.parserOwnedImportMapOrder.push("window-error");
+        window.parserOwnedImportMapOrderResult =
+          window.parserOwnedImportMapOrder.join(",");
+      });
+    </script>
+    <script
+      type="importmap"
+      onerror="window.parserOwnedImportMapOrder.push('error'); window.parserOwnedImportMapErrors += 1;"
+    >
+      {"imports": {"fixture": "/fixtures/esm/fixture.mjs",}}
+    </script>
+    <script type="module">
+      window.parserOwnedImportMapOrder.push("later-module");
+      window.parserOwnedImportMapContinuation = true;
+      window.parserOwnedImportMapOrderResult = window.parserOwnedImportMapOrder.join(",");
+    </script>
+  </body>
+</html>

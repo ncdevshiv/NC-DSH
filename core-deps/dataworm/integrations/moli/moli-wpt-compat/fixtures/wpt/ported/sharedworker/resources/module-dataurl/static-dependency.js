@@ -1,0 +1,1 @@
+globalThis.staticDependencyValue = "static-dependency";

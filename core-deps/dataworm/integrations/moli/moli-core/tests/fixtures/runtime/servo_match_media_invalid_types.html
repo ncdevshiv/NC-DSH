@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <body
+    data-and=""
+    data-or=""
+    data-not=""
+    data-only=""
+    data-not-and=""
+    data-not-or=""
+    data-not-not=""
+    data-not-only=""
+  >
+    <script>
+      const cases = [
+        ['data-and', 'and'],
+        ['data-or', 'or'],
+        ['data-not', 'not'],
+        ['data-only', 'only'],
+        ['data-not-and', 'not and'],
+        ['data-not-or', 'not or'],
+        ['data-not-not', 'not not'],
+        ['data-not-only', 'not only'],
+      ];
+      for (const [attr, query] of cases) {
+        document.body.setAttribute(attr, window.matchMedia(query).media);
+      }
+    </script>
+  </body>
+</html>

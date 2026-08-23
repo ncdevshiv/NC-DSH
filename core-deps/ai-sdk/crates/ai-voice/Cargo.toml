@@ -1,0 +1,30 @@
+[package]
+name = "ai-voice"
+description = "Voice: audio types, VAD, STT/TTS traits with real provider adapters"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-core = { path = "../ai-core" }
+ai-errors = { path = "../ai-errors" }
+ai-protocols = { path = "../ai-protocols" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+futures.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# First-party loopback WebSocket servers for duplex-session integration tests
+# (same convention as mcp_http.rs / transport.rs).
+tokio-tungstenite = "0.24"
+# Property-based WAV round-trip tests (workspace convention, see ai-memory et al).
+proptest.workspace = true

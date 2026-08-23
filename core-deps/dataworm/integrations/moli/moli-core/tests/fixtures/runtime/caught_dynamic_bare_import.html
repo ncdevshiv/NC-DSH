@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="before">before</main>
+    <main id="status">pending</main>
+    <script type="module">
+      import.meta.url;
+      import("_").catch(() => {
+        document.getElementById("status").textContent = "caught";
+      });
+      async function* g() {}
+      window.caughtDynamicBareImportModernProbe = true;
+    </script>
+    <script type="module">
+      window.trailingExportListBefore = true; const trailingExportValue = 1; export { trailingExportValue };
+    </script>
+    <main id="after">after</main>
+  </body>
+</html>

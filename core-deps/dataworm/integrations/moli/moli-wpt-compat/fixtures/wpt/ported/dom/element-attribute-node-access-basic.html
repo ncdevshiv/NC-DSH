@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const el = document.createElement("div");
+
+  el.setAttribute("foo", "bar");
+  const attr = el.attributes[0];
+
+  assert_equals(attr.ownerElement, el, "indexed Attr ownerElement");
+  assert_equals(el.getAttributeNode("foo"), attr, "getAttributeNode identity");
+  assert_equals(el.getAttributeNodeNS("", "foo"), attr, "getAttributeNodeNS empty namespace identity");
+  assert_equals(el.getAttributeNodeNS(null, "foo"), attr, "getAttributeNodeNS null namespace identity");
+
+  el.setAttributeNS("urn:test", "p:foo2", "bar2");
+  const attr2 = el.attributes[1];
+  assert_equals(attr2.ownerElement, el, "namespaced indexed Attr ownerElement");
+  assert_equals(el.getAttributeNodeNS("urn:test", "foo2"), attr2, "namespaced getAttributeNodeNS identity");
+}, "getAttributeNode and getAttributeNodeNS return live indexed Attr objects");
+
+test(function () {
+  const el = document.createElement("div");
+
+  el.setAttribute("foo", "bar");
+  const attr = el.attributes[0];
+  assert_equals(attr.ownerElement, el, "ownerElement before removal");
+
+  el.removeAttribute("foo");
+
+  assert_equals(attr.ownerElement, null, "ownerElement after removal");
+  assert_equals(attr.value, "bar", "removed Attr keeps its value");
+}, "Attr loses ownerElement when removed from its element");
+
+test(function () {
+  const el = document.createElement("div");
+
+  el.setAttribute("x", "plain");
+  el.setAttributeNS("urn:first", "x", "first");
+  const plain = el.attributes[0];
+  const namespaced = el.attributes[1];
+
+  el.removeAttribute("x");
+
+  assert_equals(plain.ownerElement, null, "plain attr was removed");
+  assert_equals(plain.value, "plain", "plain attr keeps its value");
+  assert_equals(namespaced.ownerElement, el, "namespaced attr stays attached");
+  assert_equals(namespaced.value, "first", "namespaced attr keeps its value");
+  assert_equals(el.getAttributeNS("urn:first", "x"), "first");
+}, "removeAttribute only detaches the first matching qualified-name Attr");
+
+test(function () {
+  const el = document.createElement("div");
+
+  el.setAttribute("x", "plain");
+  el.setAttributeNS("urn:first", "x", "first");
+  const namespaced = el.attributes[1];
+
+  el.removeAttributeNS("urn:first", "x");
+
+  assert_equals(namespaced.ownerElement, null, "namespaced attr was removed");
+  assert_equals(namespaced.value, "first", "namespaced attr keeps its pre-removal value");
+  assert_equals(el.getAttribute("x"), "plain");
+}, "removeAttributeNS detaches the namespaced Attr without reading a same-name fallback");
+</script>

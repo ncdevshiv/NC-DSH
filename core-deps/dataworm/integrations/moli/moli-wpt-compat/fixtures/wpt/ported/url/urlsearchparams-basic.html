@@ -1,0 +1,726 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (caught) {
+    error = caught;
+  }
+  assert_true(
+    error !== null,
+    (description || "assert_throws_name") + ": expected an exception",
+  );
+  assert_equals(
+    error.name,
+    expectedName,
+    (description || "assert_throws_name") + ": unexpected exception name",
+  );
+}
+
+test(function () {
+  const params = new URLSearchParams("a=1&a=2&space=hello+world");
+  assert_equals(params.get("a"), "1");
+  assert_array_equals(params.getAll("a"), ["1", "2"]);
+  assert_equals(params.get("space"), "hello world");
+  assert_true(params.has("a", "1"));
+  assert_true(params.has("a", "2"));
+  assert_false(params.has("a", "3"));
+  params.append("b", "3");
+  params.set("a", "4");
+  assert_true(params.has("a", "4"));
+  assert_false(params.has("a", "1"));
+  assert_equals(params.toString(), "a=4&space=hello+world&b=3");
+}, "URLSearchParams supports getAll, has value matching, append, set, and serialization");
+
+test(function () {
+  const params = new URLSearchParams(
+    "?a=1&&b=&=empty&c&plus=a+b&encoded=%7E%2B%26&semi=x;y=2",
+  );
+  assert_array_equals(
+    Array.from(params.entries()).map(pair => pair.join("=")),
+    [
+      "a=1",
+      "b=",
+      "=empty",
+      "c=",
+      "plus=a b",
+      "encoded=~+&",
+      "semi=x;y=2",
+    ],
+  );
+  assert_equals(params.get(""), "empty", "empty names are preserved");
+  assert_equals(params.get("c"), "", "missing equals signs produce empty values");
+  assert_equals(params.get("plus"), "a b", "plus signs decode to spaces");
+  assert_equals(params.get("encoded"), "~+&", "percent-encoded bytes decode");
+  assert_equals(params.get("semi"), "x;y=2", "semicolons are data, not separators");
+  assert_equals(
+    params.toString(),
+    "a=1&b=&=empty&c=&plus=a+b&encoded=%7E%2B%26&semi=x%3By%3D2",
+  );
+}, "URLSearchParams string constructor follows form-url-encoded parsing boundaries");
+
+test(function () {
+  assert_equals(new URLSearchParams("?").toString(), "");
+  assert_equals(new URLSearchParams("??a=1").get("?a"), "1");
+  assert_false(new URLSearchParams("??a=1").has("a"));
+}, "URLSearchParams string constructor strips only one leading question mark");
+
+test(function () {
+  const params = new URLSearchParams(
+    "bad=%&short=%E0%A4&hex=%zz&mixed=%C3%28&nul=%00",
+  );
+  assert_equals(params.get("bad"), "%", "bare percent is preserved as data");
+  assert_equals(params.get("short"), "\uFFFD", "truncated UTF-8 decodes to replacement");
+  assert_equals(params.get("hex"), "%zz", "non-hex percent triplet is preserved");
+  assert_equals(params.get("mixed"), "\uFFFD(", "invalid UTF-8 byte is replaced");
+  assert_equals(params.get("nul"), "\0", "NUL bytes are preserved");
+  assert_equals(
+    params.toString(),
+    "bad=%25&short=%EF%BF%BD&hex=%25zz&mixed=%EF%BF%BD%28&nul=%00",
+  );
+
+  const names = new URLSearchParams("name%zz=value%&%E0%A4=x");
+  assert_equals(names.get("name%zz"), "value%");
+  assert_equals(names.get("\uFFFD"), "x");
+  assert_equals(names.toString(), "name%25zz=value%25&%EF%BF%BD=x");
+}, "URLSearchParams string constructor handles malformed percent and invalid UTF-8");
+
+test(function () {
+  const params = new URLSearchParams("a=undefined&a=1&b=undefined");
+  assert_true(params.has("a", undefined));
+  assert_true(params.has("b", undefined));
+  assert_false(params.has("missing", undefined));
+
+  params.delete("a", undefined);
+  assert_equals(params.toString(), "b=undefined");
+
+  params.delete("b");
+  assert_equals(params.toString(), "");
+}, "URLSearchParams treats explicit undefined optional values as missing");
+
+test(function () {
+  const params = new URLSearchParams("a=1&a=2");
+  const descriptor = Object.getOwnPropertyDescriptor(URLSearchParams.prototype, "size");
+  assert_true(!!descriptor, "prototype should expose size descriptor");
+  assert_equals(typeof descriptor.get, "function", "size getter");
+  assert_equals(descriptor.set, undefined, "size should be readonly");
+  assert_equals(descriptor.enumerable, true, "size should be enumerable");
+  assert_equals(descriptor.configurable, true, "size should be configurable");
+  assert_false(
+    Object.prototype.hasOwnProperty.call(params, "size"),
+    "size should not be an own instance property",
+  );
+
+  assert_equals(params.size, 2, "initial size");
+  params.append("b", "3");
+  assert_equals(params.size, 3, "append updates size");
+  params.set("a", "4");
+  assert_equals(params.size, 2, "set collapses repeated names");
+  params.delete("a");
+  assert_equals(params.size, 1, "delete updates size");
+
+  assert_throws_name("TypeError", function () {
+    descriptor.get.call({});
+  }, "size getter requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    descriptor.get.call(Object.create(URLSearchParams.prototype));
+  }, "size getter requires URLSearchParams internal slots");
+}, "URLSearchParams size is a prototype readonly accessor with receiver checks");
+
+test(function () {
+  const params = new URLSearchParams("a=1");
+  assert_throws_name("TypeError", function () {
+    params.get();
+  }, "get requires name");
+  assert_throws_name("TypeError", function () {
+    params.getAll();
+  }, "getAll requires name");
+  assert_throws_name("TypeError", function () {
+    params.has();
+  }, "has requires name");
+  assert_throws_name("TypeError", function () {
+    params.delete();
+  }, "delete requires name");
+  assert_throws_name("TypeError", function () {
+    params.append();
+  }, "append requires name");
+  assert_throws_name("TypeError", function () {
+    params.append("a");
+  }, "append requires value");
+  assert_throws_name("TypeError", function () {
+    params.set();
+  }, "set requires name");
+  assert_throws_name("TypeError", function () {
+    params.set("a");
+  }, "set requires value");
+
+  assert_throws_name("TypeError", function () {
+    params.get(Symbol("name"));
+  }, "get rejects Symbol name conversion");
+  assert_throws_name("TypeError", function () {
+    params.has("a", Symbol("value"));
+  }, "has rejects Symbol value conversion");
+  assert_throws_name("TypeError", function () {
+    params.delete(Symbol("name"));
+  }, "delete rejects Symbol name conversion");
+  assert_throws_name("TypeError", function () {
+    params.append("a", Symbol("value"));
+  }, "append rejects Symbol value conversion");
+  assert_throws_name("TypeError", function () {
+    params.set(Symbol("name"), "value");
+  }, "set rejects Symbol name conversion");
+}, "URLSearchParams methods enforce required USVString arguments");
+
+test(function () {
+  const proto = URLSearchParams.prototype;
+  const receiver = {};
+  const inheritedReceiver = Object.create(proto);
+
+  assert_throws_name("TypeError", function () {
+    proto.get.call(receiver, "a");
+  }, "get requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.getAll.call(receiver, "a");
+  }, "getAll requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.has.call(receiver, "a");
+  }, "has requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.delete.call(receiver, "a");
+  }, "delete requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.append.call(receiver, "a", "b");
+  }, "append requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.set.call(receiver, "a", "b");
+  }, "set requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.keys.call(receiver);
+  }, "keys requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.values.call(receiver);
+  }, "values requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.entries.call(receiver);
+  }, "entries requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto[Symbol.iterator].call(receiver);
+  }, "default iterator requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.forEach.call(receiver, function () {});
+  }, "forEach requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.sort.call(receiver);
+  }, "sort requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.toString.call(receiver);
+  }, "toString requires URLSearchParams receiver");
+  assert_throws_name("TypeError", function () {
+    proto.get.call(inheritedReceiver, "a");
+  }, "get requires URLSearchParams internal slots");
+  assert_throws_name("TypeError", function () {
+    proto.append.call(inheritedReceiver, "a", "b");
+  }, "append requires URLSearchParams internal slots");
+}, "URLSearchParams prototype methods require URLSearchParams receivers");
+
+test(function () {
+  const params = new URLSearchParams("a=1&a=2&b=3");
+  const throwing = {
+    toString: function () {
+      throw new RangeError("method argument stringification failed");
+    },
+  };
+
+  assert_throws_name("RangeError", function () {
+    params.get(throwing);
+  }, "get name stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.getAll(throwing);
+  }, "getAll name stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.has(throwing);
+  }, "has name stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.has("a", throwing);
+  }, "has value stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.delete(throwing);
+  }, "delete name stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.delete("a", throwing);
+  }, "delete value stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.append(throwing, "value");
+  }, "append name stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.append("a", throwing);
+  }, "append value stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.set(throwing, "value");
+  }, "set name stringification errors should propagate");
+  assert_throws_name("RangeError", function () {
+    params.set("a", throwing);
+  }, "set value stringification errors should propagate");
+
+  assert_equals(params.toString(), "a=1&a=2&b=3");
+}, "URLSearchParams methods propagate argument stringification errors");
+
+test(function () {
+  const params = new URLSearchParams([
+    ["alpha", "one"],
+    ["space", "two words"],
+    ["alpha", "three"],
+  ]);
+  assert_array_equals(params.getAll("alpha"), ["one", "three"]);
+  assert_equals(params.get("space"), "two words");
+  assert_equals(params.toString(), "alpha=one&space=two+words&alpha=three");
+}, "URLSearchParams constructor accepts sequence pairs");
+
+test(function () {
+  const fromMap = new URLSearchParams(new Map([
+    ["alpha", "one"],
+    ["space", "two words"],
+  ]));
+  assert_equals(fromMap.toString(), "alpha=one&space=two+words");
+
+  const fromIterablePairs = new URLSearchParams([
+    new Set(["set", "pair"]),
+    {
+      [Symbol.iterator]: function* () {
+        yield "custom";
+        yield "iterable";
+      },
+    },
+  ]);
+  assert_equals(fromIterablePairs.toString(), "set=pair&custom=iterable");
+}, "URLSearchParams constructor accepts iterable sequence pairs");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams({
+      [Symbol.iterator]: function () {
+        return {
+          next: function () {
+            throw new RangeError("top-level iterator failed");
+          },
+        };
+      },
+    });
+  }, "top-level iterator errors should propagate");
+
+  assert_throws_name("SyntaxError", function () {
+    new URLSearchParams([
+      {
+        [Symbol.iterator]: function () {
+          return {
+            next: function () {
+              throw new SyntaxError("pair iterator failed");
+            },
+          };
+        },
+      },
+    ]);
+  }, "inner pair iterator errors should propagate");
+}, "URLSearchParams constructor propagates iterable errors");
+
+test(function () {
+  assert_throws_name("TypeError", function () {
+    new URLSearchParams({
+      [Symbol.iterator]: function () {
+        return {
+          next: function () {
+            return 1;
+          },
+        };
+      },
+    });
+  }, "top-level iterator result primitives should throw");
+
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams({
+      [Symbol.iterator]: function () {
+        return {
+          next: function () {
+            return {
+              done: false,
+              get value() {
+                throw new RangeError("top-level iterator value failed");
+              },
+            };
+          },
+        };
+      },
+    });
+  }, "top-level iterator value getter errors should propagate");
+
+  assert_throws_name("SyntaxError", function () {
+    new URLSearchParams([
+      {
+        [Symbol.iterator]: function () {
+          return {
+            next: function () {
+              return {
+                done: false,
+                get value() {
+                  throw new SyntaxError("pair iterator value failed");
+                },
+              };
+            },
+          };
+        },
+      },
+    ]);
+  }, "inner pair iterator value getter errors should propagate");
+}, "URLSearchParams constructor propagates iterator protocol errors");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams([[
+      {
+        toString: function () {
+          throw new RangeError("key stringification failed");
+        },
+      },
+      "value",
+    ]]);
+  }, "sequence pair key stringification errors should propagate");
+
+  assert_throws_name("SyntaxError", function () {
+    new URLSearchParams([[
+      "key",
+      {
+        toString: function () {
+          throw new SyntaxError("value stringification failed");
+        },
+      },
+    ]]);
+  }, "sequence pair value stringification errors should propagate");
+}, "URLSearchParams constructor propagates pair stringification errors");
+
+test(function () {
+  let closedAfterStringification = false;
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams({
+      [Symbol.iterator]: function () {
+        let count = 0;
+        return {
+          next: function () {
+            count += 1;
+            if (count === 1) {
+              return {
+                done: false,
+                value: [{
+                  toString: function () {
+                    throw new RangeError("pair key stringification failed");
+                  },
+                }, "value"],
+              };
+            }
+            return { done: false, value: ["unreached", "value"] };
+          },
+          return: function () {
+            closedAfterStringification = true;
+            return { done: true };
+          },
+        };
+      },
+    });
+  }, "top-level iterator should propagate pair conversion errors");
+  assert_true(
+    closedAfterStringification,
+    "pair conversion errors should close the top-level iterator",
+  );
+
+  let closedAfterInvalidPair = false;
+  assert_throws_name("TypeError", function () {
+    new URLSearchParams({
+      [Symbol.iterator]: function () {
+        let count = 0;
+        return {
+          next: function () {
+            count += 1;
+            return {
+              done: false,
+              value: count === 1 ? ["short"] : ["unreached", "value"],
+            };
+          },
+          return: function () {
+            closedAfterInvalidPair = true;
+            return { done: true };
+          },
+        };
+      },
+    });
+  }, "top-level iterator should propagate invalid pair errors");
+  assert_true(
+    closedAfterInvalidPair,
+    "invalid pair errors should close the top-level iterator",
+  );
+}, "URLSearchParams constructor closes top-level iterators on pair conversion errors");
+
+test(function () {
+  let innerClosedAfterValueConversion = false;
+  const pair = {
+    [Symbol.iterator]: function () {
+      let count = 0;
+      return {
+        next: function () {
+          count += 1;
+          if (count === 1) {
+            return { done: false, value: "key" };
+          }
+          if (count === 2) {
+            return {
+              done: false,
+              value: {
+                toString: function () {
+                  throw new RangeError("pair value stringification failed");
+                },
+              },
+            };
+          }
+          return { done: false, value: "unreached" };
+        },
+        return: function () {
+          innerClosedAfterValueConversion = true;
+          return { done: true };
+        },
+      };
+    },
+  };
+
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams([pair]);
+  }, "inner pair iterator should propagate element conversion errors");
+  assert_true(
+    innerClosedAfterValueConversion,
+    "pair element conversion errors should close the inner pair iterator",
+  );
+}, "URLSearchParams constructor closes inner pair iterators on element conversion errors");
+
+test(function () {
+  let topLevelReturnCalled = false;
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams({
+      [Symbol.iterator]: function () {
+        return {
+          next: function () {
+            return {
+              done: false,
+              value: [{
+                toString: function () {
+                  throw new RangeError("pair key stringification failed");
+                },
+              }, "value"],
+            };
+          },
+          return: function () {
+            topLevelReturnCalled = true;
+            throw new SyntaxError("top-level return failed");
+          },
+        };
+      },
+    });
+  }, "top-level iterator return errors should not replace the original conversion error");
+  assert_true(topLevelReturnCalled, "top-level iterator return should be called");
+
+  let innerReturnCalled = false;
+  const pair = {
+    [Symbol.iterator]: function () {
+      let count = 0;
+      return {
+        next: function () {
+          count += 1;
+          if (count === 1) {
+            return { done: false, value: "key" };
+          }
+          return {
+            done: false,
+            value: {
+              toString: function () {
+                throw new RangeError("pair value stringification failed");
+              },
+            },
+          };
+        },
+        return: function () {
+          innerReturnCalled = true;
+          throw new SyntaxError("inner return failed");
+        },
+      };
+    },
+  };
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams([pair]);
+  }, "inner pair iterator return errors should not replace the original conversion error");
+  assert_true(innerReturnCalled, "inner pair iterator return should be called");
+}, "URLSearchParams constructor preserves original errors when iterator return throws");
+
+test(function () {
+  let returnCalled = false;
+  assert_throws_name("TypeError", function () {
+    new URLSearchParams({
+      [Symbol.iterator]: function () {
+        return {
+          next: function () {
+            return { done: false, value: ["short"] };
+          },
+          return: function () {
+            returnCalled = true;
+            throw new SyntaxError("top-level return failed");
+          },
+        };
+      },
+    });
+  }, "top-level iterator return errors should not replace invalid pair length errors");
+  assert_true(returnCalled, "top-level iterator return should be called");
+}, "URLSearchParams constructor preserves invalid pair length errors when iterator return throws");
+
+test(function () {
+  let topLevelReturnCalled = false;
+  let innerReturnCalled = false;
+  const pair = {
+    [Symbol.iterator]: function () {
+      let count = 0;
+      return {
+        next: function () {
+          count += 1;
+          if (count === 1) {
+            return { done: false, value: "key" };
+          }
+          if (count === 2) {
+            return { done: false, value: "value" };
+          }
+          return { done: true };
+        },
+        return: function () {
+          innerReturnCalled = true;
+          return { done: true };
+        },
+      };
+    },
+  };
+
+  const params = new URLSearchParams({
+    [Symbol.iterator]: function () {
+      let count = 0;
+      return {
+        next: function () {
+          count += 1;
+          if (count === 1) {
+            return { done: false, value: pair };
+          }
+          return { done: true };
+        },
+        return: function () {
+          topLevelReturnCalled = true;
+          return { done: true };
+        },
+      };
+    },
+  });
+  assert_equals(params.toString(), "key=value");
+  assert_false(topLevelReturnCalled, "top-level iterator return should not run on completion");
+  assert_false(innerReturnCalled, "inner pair iterator return should not run on completion");
+}, "URLSearchParams constructor does not close iterators after normal completion");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams({
+      key: {
+        toString: function () {
+          throw new RangeError("record value stringification failed");
+        },
+      },
+    });
+  }, "record value stringification errors should propagate");
+}, "URLSearchParams constructor propagates record stringification errors");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new URLSearchParams(new Proxy({}, {
+      ownKeys: function () {
+        throw new RangeError("record ownKeys failed");
+      },
+    }));
+  }, "record ownKeys errors should propagate");
+
+  assert_throws_name("SyntaxError", function () {
+    const record = {};
+    Object.defineProperty(record, "key", {
+      enumerable: true,
+      get: function () {
+        throw new SyntaxError("record getter failed");
+      },
+    });
+    new URLSearchParams(record);
+  }, "record value getter errors should propagate");
+}, "URLSearchParams constructor propagates record enumeration and getter errors");
+
+test(function () {
+  const record = { visible: "yes" };
+  const symbolKey = Symbol("hidden");
+  record[symbolKey] = "symbol";
+  Object.defineProperty(record, "hidden", {
+    value: "no",
+    enumerable: false,
+  });
+  const params = new URLSearchParams(record);
+  assert_equals(params.toString(), "visible=yes");
+  assert_false(params.has("hidden"));
+  assert_false(params.has("Symbol(hidden)"));
+}, "URLSearchParams constructor ignores non-enumerable and symbol record properties");
+
+test(function () {
+  const sequence = new URLSearchParams([
+    [null, undefined],
+    ["nil", null],
+  ]);
+  assert_equals(sequence.get("null"), "undefined");
+  assert_equals(sequence.get("nil"), "null");
+  assert_equals(sequence.toString(), "null=undefined&nil=null");
+
+  const record = new URLSearchParams({
+    nil: null,
+    missing: undefined,
+  });
+  assert_equals(record.get("nil"), "null");
+  assert_equals(record.get("missing"), "undefined");
+}, "URLSearchParams constructor stringifies nullish sequence and record values");
+
+test(function () {
+  const sequence = new URLSearchParams([
+    ["\uD800", "\uDC00"],
+  ]);
+  assert_equals(sequence.get("\uFFFD"), "\uFFFD");
+  assert_equals(sequence.toString(), "%EF%BF%BD=%EF%BF%BD");
+
+  const record = new URLSearchParams({
+    "\uD800": "\uDC00",
+  });
+  assert_equals(record.get("\uFFFD"), "\uFFFD");
+
+  const params = new URLSearchParams();
+  params.append("\uD800", "\uDC00");
+  assert_equals(params.get("\uFFFD"), "\uFFFD");
+  params.set("paired", "\uD800");
+  assert_equals(params.get("paired"), "\uFFFD");
+}, "URLSearchParams converts lone surrogates to replacement characters");
+
+test(function () {
+  assert_throws_name("TypeError", function () {
+    new URLSearchParams([{ 0: "alpha", 1: "one" }]);
+  }, "non-iterable pair object should throw");
+  assert_throws_name("TypeError", function () {
+    new URLSearchParams([["alpha"]]);
+  }, "short pair should throw");
+  assert_throws_name("TypeError", function () {
+    new URLSearchParams([["alpha", "one", "extra"]]);
+  }, "long pair should throw");
+}, "URLSearchParams constructor rejects sequence pairs whose length is not 2");
+</script>

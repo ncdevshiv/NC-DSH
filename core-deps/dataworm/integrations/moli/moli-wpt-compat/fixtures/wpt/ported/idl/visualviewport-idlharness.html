@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface VisualViewport : EventTarget {
+  readonly attribute double offsetLeft;
+  readonly attribute double offsetTop;
+  readonly attribute double pageLeft;
+  readonly attribute double pageTop;
+  readonly attribute double width;
+  readonly attribute double height;
+  readonly attribute double scale;
+};
+`], [], function (idlArray) {
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    VisualViewport: ["visualViewport"]
+  });
+});
+
+test(function () {
+  const viewport = visualViewport;
+
+  assert_true(viewport instanceof VisualViewport, "visualViewport should be a VisualViewport");
+  assert_true(viewport instanceof EventTarget, "visualViewport should be an EventTarget");
+  assert_equals(Object.prototype.toString.call(viewport), "[object VisualViewport]");
+  assert_false(viewport.hasOwnProperty("offsetLeft"));
+  assert_false(viewport.hasOwnProperty("offsetTop"));
+  assert_false(viewport.hasOwnProperty("pageLeft"));
+  assert_false(viewport.hasOwnProperty("pageTop"));
+  assert_false(viewport.hasOwnProperty("width"));
+  assert_false(viewport.hasOwnProperty("height"));
+  assert_false(viewport.hasOwnProperty("scale"));
+  assert_equals(viewport.offsetLeft, 0);
+  assert_equals(viewport.offsetTop, 0);
+  assert_equals(viewport.pageLeft, 0);
+  assert_equals(viewport.pageTop, 0);
+  assert_true(viewport.width > 0, "visualViewport.width should be positive");
+  assert_true(viewport.height > 0, "visualViewport.height should be positive");
+  assert_true(viewport.scale > 0, "visualViewport.scale should be positive");
+  assert_equals(typeof viewport.addEventListener, "function");
+  assert_equals(typeof viewport.removeEventListener, "function");
+  assert_equals(typeof viewport.dispatchEvent, "function");
+}, "VisualViewport idlharness sample covers singleton metrics and EventTarget inheritance");
+</script>

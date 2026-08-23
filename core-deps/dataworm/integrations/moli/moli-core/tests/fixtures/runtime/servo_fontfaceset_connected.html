@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head id="head">
+    <style id="style">
+      @font-face {
+        font-family: "WebFont";
+        src: url("resources/Rochester.otf") format("opentype");
+      }
+    </style>
+  </head>
+  <body
+    data-initial-size=""
+    data-initial-has-connected=""
+    data-initial-has-manual=""
+    data-after-add-size=""
+    data-after-add-has-connected=""
+    data-after-add-has-manual=""
+    data-after-remove-style-size=""
+    data-after-remove-style-has-connected=""
+    data-after-remove-style-has-manual=""
+    data-after-delete-manual-size=""
+    data-after-delete-manual-has-connected=""
+    data-after-delete-manual-has-manual=""
+  >
+    <script>
+      const body = document.body;
+      const fonts = document.fonts;
+      const connected = Array.from(fonts.keys())[0];
+      const manual = new FontFace(
+        'WebFont2',
+        "url('resources/GenR102.woff2') format('woff2')"
+      );
+
+      body.setAttribute('data-initial-size', String(fonts.size));
+      body.setAttribute(
+        'data-initial-has-connected',
+        String(fonts.has(connected))
+      );
+      body.setAttribute('data-initial-has-manual', String(fonts.has(manual)));
+
+      fonts.add(manual);
+      body.setAttribute('data-after-add-size', String(fonts.size));
+      body.setAttribute(
+        'data-after-add-has-connected',
+        String(fonts.has(connected))
+      );
+      body.setAttribute('data-after-add-has-manual', String(fonts.has(manual)));
+
+      document.getElementById('head').removeChild(document.getElementById('style'));
+      body.setAttribute('data-after-remove-style-size', String(fonts.size));
+      body.setAttribute(
+        'data-after-remove-style-has-connected',
+        String(fonts.has(connected))
+      );
+      body.setAttribute(
+        'data-after-remove-style-has-manual',
+        String(fonts.has(manual))
+      );
+
+      fonts.delete(manual);
+      body.setAttribute('data-after-delete-manual-size', String(fonts.size));
+      body.setAttribute(
+        'data-after-delete-manual-has-connected',
+        String(fonts.has(connected))
+      );
+      body.setAttribute(
+        'data-after-delete-manual-has-manual',
+        String(fonts.has(manual))
+      );
+    </script>
+  </body>
+</html>

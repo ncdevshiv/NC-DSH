@@ -1,0 +1,309 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+const MESSAGE_TIMEOUT_MS = 30000;
+
+function next_worker_message(worker, predicate, label) {
+  return new Promise(function (resolve, reject) {
+    const timeout = setTimeout(function () {
+      cleanup();
+      reject(new Error((label || "worker message") + " timed out"));
+    }, MESSAGE_TIMEOUT_MS);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      if (predicate && !predicate(event.data)) {
+        return;
+      }
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(event.error || new Error(event.message || "unexpected worker error"));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function next_port_message(port, predicate, label) {
+  port.start();
+  return new Promise(function (resolve, reject) {
+    const timeout = setTimeout(function () {
+      cleanup();
+      reject(new Error((label || "port message") + " timed out"));
+    }, MESSAGE_TIMEOUT_MS);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      port.removeEventListener("message", onmessage);
+      port.removeEventListener("messageerror", onmessageerror);
+    }
+
+    function onmessage(event) {
+      if (predicate && !predicate(event.data)) {
+        return;
+      }
+      cleanup();
+      resolve(event);
+    }
+
+    function onmessageerror(event) {
+      cleanup();
+      reject(event.error || new Error((label || "port message") + " messageerror"));
+    }
+
+    port.addEventListener("message", onmessage);
+    port.addEventListener("messageerror", onmessageerror);
+  });
+}
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (!event.data || event.data.kind !== 'buffer') {",
+        "    return;",
+        "  }",
+        "  const buffer = event.data.buffer;",
+        "  postMessage({",
+        "    kind: 'buffer',",
+        "    isArrayBuffer: buffer instanceof ArrayBuffer,",
+        "    byteLength: buffer.byteLength,",
+        "    bytes: Array.from(new Uint8Array(buffer)).join(','),",
+        "    portsLength: event.ports.length,",
+        "  });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+
+  try {
+    const transferred = new Uint8Array([1, 2, 3]).buffer;
+    const reply = next_worker_message(worker, function (data) {
+      return data && data.kind === "buffer";
+    }, "worker ArrayBuffer transfer reply");
+    const iterable = {
+      [Symbol.iterator]: function* () {
+        yield transferred;
+      },
+    };
+
+    worker.postMessage({ kind: "buffer", buffer: transferred }, { transfer: iterable });
+
+    assert_equals(
+      transferred.byteLength,
+      0,
+      "iterable options.transfer should detach the sender ArrayBuffer",
+    );
+
+    const data = (await reply).data;
+    assert_true(data.isArrayBuffer, "worker should receive an ArrayBuffer");
+    assert_equals(data.byteLength, 3, "worker should receive the original byte length");
+    assert_equals(data.bytes, "1,2,3", "worker should receive the transferred bytes");
+    assert_equals(data.portsLength, 0, "ArrayBuffer-only transfer should not populate event.ports");
+  } finally {
+    worker.terminate();
+  }
+}, "Worker.postMessage accepts iterable options.transfer for ArrayBuffer transfer");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (!event.data || event.data.kind !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.data.port;",
+        "  postMessage({",
+        "    kind: 'ready',",
+        "    portsLength: event.ports.length,",
+        "    sameWrapper: port === event.ports[0],",
+        "    isMessagePort: port instanceof MessagePort,",
+        "  });",
+        "  port.onmessage = function (messageEvent) {",
+        "    port.postMessage('iterable:' + messageEvent.data);",
+        "  };",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const iterable = {
+      [Symbol.iterator]: function* () {
+        yield channel.port2;
+      },
+    };
+    const ready = next_worker_message(worker, function (data) {
+      return data && data.kind === "ready";
+    }, "worker MessagePort transfer ready");
+
+    worker.postMessage({ kind: "connect", port: channel.port2 }, { transfer: iterable });
+
+    const readyData = (await ready).data;
+    assert_equals(readyData.portsLength, 1, "iterable options.transfer should populate event.ports");
+    assert_true(readyData.sameWrapper, "payload port and event.ports should share a wrapper");
+    assert_true(readyData.isMessagePort, "worker should receive a MessagePort");
+
+    const reply = next_port_message(channel.port1, null, "worker MessagePort transfer round-trip");
+    channel.port1.postMessage("ping");
+    assert_equals((await reply).data, "iterable:ping", "iterable options.transfer port should round-trip");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}, "Worker.postMessage accepts iterable options.transfer values");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (messageEvent) {",
+        "    if (!messageEvent.data || messageEvent.data.kind !== 'buffer') {",
+        "      return;",
+        "    }",
+        "    const buffer = messageEvent.data.buffer;",
+        "    port.postMessage({",
+        "      kind: 'buffer',",
+        "      isArrayBuffer: buffer instanceof ArrayBuffer,",
+        "      byteLength: buffer.byteLength,",
+        "      bytes: Array.from(new Uint8Array(buffer)).join(','),",
+        "      portsLength: messageEvent.ports.length,",
+        "    });",
+        "  };",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const ready = next_worker_message(worker, function (data) {
+      return data && data.kind === "ready";
+    }, "worker port connection ready");
+    worker.postMessage("connect", [channel.port2]);
+    await ready;
+
+    const transferred = new Uint8Array([4, 5]).buffer;
+    const reply = next_port_message(channel.port1, function (data) {
+      return data && data.kind === "buffer";
+    }, "MessagePort ArrayBuffer transfer reply");
+    const iterable = {
+      [Symbol.iterator]: function* () {
+        yield transferred;
+      },
+    };
+
+    channel.port1.postMessage({ kind: "buffer", buffer: transferred }, { transfer: iterable });
+
+    assert_equals(
+      transferred.byteLength,
+      0,
+      "iterable MessagePort options.transfer should detach the sender ArrayBuffer",
+    );
+
+    const data = (await reply).data;
+    assert_true(data.isArrayBuffer, "worker should receive an ArrayBuffer through the port");
+    assert_equals(data.byteLength, 2, "worker should receive the original byte length");
+    assert_equals(data.bytes, "4,5", "worker should receive the transferred bytes");
+    assert_equals(data.portsLength, 0, "ArrayBuffer-only MessagePort transfer should not populate event.ports");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}, "MessagePort.postMessage accepts iterable options.transfer for ArrayBuffer transfer");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const control = event.ports[0];",
+        "  control.onmessage = function (messageEvent) {",
+        "    if (!messageEvent.data || messageEvent.data.kind !== 'forward-port') {",
+        "      return;",
+        "    }",
+        "    const forwarded = messageEvent.data.port;",
+        "    control.postMessage({",
+        "      kind: 'forward-ready',",
+        "      portsLength: messageEvent.ports.length,",
+        "      sameWrapper: forwarded === messageEvent.ports[0],",
+        "      isMessagePort: forwarded instanceof MessagePort,",
+        "    });",
+        "    forwarded.onmessage = function (innerEvent) {",
+        "      forwarded.postMessage('iterable:' + innerEvent.data);",
+        "    };",
+        "  };",
+        "  postMessage({ kind: 'control-ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const control = new MessageChannel();
+  const inner = new MessageChannel();
+
+  try {
+    const controlReady = next_worker_message(worker, function (data) {
+      return data && data.kind === "control-ready";
+    }, "worker control port ready");
+    worker.postMessage("connect", [control.port2]);
+    await controlReady;
+
+    const iterable = {
+      [Symbol.iterator]: function* () {
+        yield inner.port2;
+      },
+    };
+    const forwardReady = next_port_message(control.port1, function (data) {
+      return data && data.kind === "forward-ready";
+    }, "MessagePort forwarded port ready");
+
+    control.port1.postMessage({ kind: "forward-port", port: inner.port2 }, { transfer: iterable });
+
+    const readyData = (await forwardReady).data;
+    assert_equals(readyData.portsLength, 1, "iterable port options.transfer should populate event.ports");
+    assert_true(readyData.sameWrapper, "forwarded payload port and event.ports should share a wrapper");
+    assert_true(readyData.isMessagePort, "worker should receive a forwarded MessagePort");
+
+    const reply = next_port_message(inner.port1, null, "MessagePort forwarded port round-trip");
+    inner.port1.postMessage("ping");
+    assert_equals((await reply).data, "iterable:ping", "iterable MessagePort options.transfer should round-trip");
+  } finally {
+    control.port1.close();
+    control.port2.close();
+    inner.port1.close();
+    inner.port2.close();
+    worker.terminate();
+  }
+}, "MessagePort.postMessage accepts iterable options.transfer values");
+</script>

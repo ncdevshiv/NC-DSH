@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      const childWindow = parent.document.getElementById("child").contentWindow;
+      const topHrefBefore = parent.location.href;
+      const topHistoryBefore = parent.history.length;
+      const order = [];
+      let listenerCount = 0;
+      let propertyCount = 0;
+      let committed = false;
+      let finished = false;
+      let from = "unset";
+      let propertyFrom = "unset";
+      let navType = "unset";
+      let propertyNavType = "unset";
+
+      childWindow.navigation.addEventListener("currententrychange", (event) => {
+        listenerCount += 1;
+        from = event.from ? event.from.url : "null";
+        navType = String(event.navigationType);
+        order.push(
+          `cec:${event.navigationType ?? "null"}:${String(event.from?.url ?? "")}`
+        );
+        queueMicrotask(() => {
+          order.push(
+            `cec-micro:${new URL(childWindow.location.href).hash}:${String(
+              childWindow.history.state?.step ?? "null"
+            )}`
+          );
+        });
+      });
+
+      childWindow.navigation.oncurrententrychange = (event) => {
+        propertyCount += 1;
+        propertyFrom = event.from ? event.from.url : "null";
+        propertyNavType = String(event.navigationType);
+      };
+
+      childWindow.addEventListener("popstate", () => {
+        order.push(`popstate:${new URL(childWindow.location.href).hash}`);
+      });
+
+      childWindow.addEventListener("hashchange", () => {
+        order.push(`hashchange:${new URL(childWindow.location.href).hash}`);
+      });
+
+      const result = childWindow.navigation.navigate("#dest", {
+        history: "replace",
+        state: { step: 9 },
+      });
+
+      result.committed.then((entry) => {
+        committed = true;
+        order.push(
+          `committed:${new URL(entry.url).hash}:${String(
+            entry === childWindow.navigation.currentEntry
+          )}`
+        );
+      });
+
+      result.finished.then((entry) => {
+        finished = true;
+        order.push(
+          `finished:${new URL(entry.url).hash}:${String(
+            entry === childWindow.navigation.currentEntry
+          )}`
+        );
+      });
+
+      parent.document.body.setAttribute(
+        "data-top-location-unchanged",
+        String(parent.location.href === topHrefBefore)
+      );
+      parent.document.body.setAttribute(
+        "data-top-history-unchanged",
+        String(parent.history.length === topHistoryBefore)
+      );
+      parent.document.body.setAttribute(
+        "data-sync",
+        [
+          `hash=${new URL(childWindow.location.href).hash}`,
+          `len=${childWindow.history.length}`,
+          `committed=${committed}`,
+          `finished=${finished}`,
+          `history=${JSON.stringify(childWindow.history.state)}`,
+          `entry=${JSON.stringify(childWindow.navigation.currentEntry.getState())}`,
+          `listener=${listenerCount}`,
+          `property=${propertyCount}`,
+          `from=${from}`,
+          `propertyFrom=${propertyFrom}`,
+          `navType=${navType}`,
+          `propertyNavType=${propertyNavType}`,
+          `order=${order.join(",")}`,
+        ].join("|")
+      );
+
+      setTimeout(() => {
+        parent.document.body.setAttribute(
+          "data-timeout",
+          [
+            `hash=${new URL(childWindow.location.href).hash}`,
+            `len=${childWindow.history.length}`,
+            `committed=${committed}`,
+            `finished=${finished}`,
+            `history=${JSON.stringify(childWindow.history.state)}`,
+            `entry=${JSON.stringify(childWindow.navigation.currentEntry.getState())}`,
+            `listener=${listenerCount}`,
+            `property=${propertyCount}`,
+            `from=${from}`,
+            `propertyFrom=${propertyFrom}`,
+            `navType=${navType}`,
+            `propertyNavType=${propertyNavType}`,
+            `order=${order.join(",")}`,
+          ].join("|")
+        );
+      }, 0);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error && error.name, expectedName, description || "unexpected exception name");
+    return;
+  }
+  assert_unreached((description || "assert_throws_name") + ": expected an exception");
+}
+
+function next_task() {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, 0);
+  });
+}
+
+test(function () {
+  const channel = new MessageChannel();
+  function listener() {}
+  const throwingType = {
+    toString() {
+      throw new RangeError("type conversion");
+    },
+  };
+
+  assert_throws_name(
+    "TypeError",
+    () => channel.port1.addEventListener(),
+    "addEventListener type is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => channel.port1.removeEventListener(),
+    "removeEventListener type is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => channel.port1.addEventListener(Symbol("message"), listener),
+    "addEventListener rejects Symbol type"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => channel.port1.removeEventListener(Symbol("message"), listener),
+    "removeEventListener rejects Symbol type"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => channel.port1.addEventListener(throwingType, listener),
+    "addEventListener propagates type stringification errors"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => channel.port1.removeEventListener(throwingType, listener),
+    "removeEventListener propagates type stringification errors"
+  );
+
+  channel.port1.addEventListener(undefined, listener);
+  channel.port1.removeEventListener(undefined, listener);
+  channel.port1.close();
+  channel.port2.close();
+}, "MessagePort listener type follows WebIDL DOMString conversion");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  let calls = 0;
+  function listener() {
+    calls += 1;
+  }
+
+  channel.port2.addEventListener("message", listener);
+  channel.port2.addEventListener("message", listener);
+  channel.port2.start();
+  channel.port1.postMessage("go");
+
+  await next_task();
+  channel.port1.close();
+  channel.port2.close();
+
+  assert_equals(calls, 1, "duplicate listener registrations should be ignored");
+}, "MessagePort ignores duplicate listener registrations with the same capture value");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  const events = [];
+  function listener(event) {
+    events.push(event.data);
+  }
+
+  channel.port2.addEventListener("message", listener, { once: true });
+  channel.port2.start();
+  channel.port1.postMessage("first");
+  channel.port1.postMessage("second");
+
+  await next_task();
+  channel.port1.close();
+  channel.port2.close();
+
+  assert_array_equals(events, ["first"], "once listener should be removed after the first message");
+}, "MessagePort honors once listeners");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  let calls = 0;
+  function listener() {
+    calls += 1;
+  }
+
+  channel.port2.addEventListener("message", listener);
+  channel.port2.addEventListener("message", listener, true);
+  channel.port2.removeEventListener("message", listener);
+  channel.port2.start();
+  channel.port1.postMessage("go");
+
+  await next_task();
+  channel.port1.close();
+  channel.port2.close();
+
+  assert_equals(calls, 1, "removeEventListener without capture should leave the capture listener");
+}, "MessagePort removeEventListener matches listener capture value");
+</script>

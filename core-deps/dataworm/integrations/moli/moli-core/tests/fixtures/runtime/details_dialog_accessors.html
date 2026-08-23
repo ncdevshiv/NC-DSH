@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<body
+  data-details=""
+  data-dialog-initial=""
+  data-dialog-show=""
+  data-dialog-close=""
+  data-dialog-close-count-after-call=""
+  data-dialog-show-modal=""
+  data-dialog-close-count="0"
+>
+<details id="details"></details>
+<dialog id="dialog"></dialog>
+<script>
+const details = document.getElementById('details');
+details.open = true;
+details.name = 'group-a';
+document.body.setAttribute('data-details', `${details.open}:${details.hasAttribute('open')}:${details.name}:${details.getAttribute('name')}`);
+
+const dialog = document.getElementById('dialog');
+dialog.addEventListener('close', () => {
+  const count = Number(document.body.getAttribute('data-dialog-close-count'));
+  document.body.setAttribute('data-dialog-close-count', String(count + 1));
+});
+
+document.body.setAttribute('data-dialog-initial', `${dialog.open}:${dialog.returnValue}`);
+dialog.returnValue = 'seed';
+dialog.show();
+document.body.setAttribute('data-dialog-show', `${dialog.open}:${dialog.hasAttribute('open')}:${dialog.returnValue}:${dialog.getAttribute('returnvalue')}`);
+dialog.close('done');
+document.body.setAttribute('data-dialog-close-count-after-call', document.body.getAttribute('data-dialog-close-count'));
+document.body.setAttribute('data-dialog-close', `${dialog.open}:${dialog.hasAttribute('open')}:${dialog.returnValue}:${dialog.getAttribute('returnvalue')}`);
+dialog.showModal();
+document.body.setAttribute('data-dialog-show-modal', `${dialog.open}:${dialog.hasAttribute('open')}`);
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.documentWriteExternalImportMapOrder = [];
+      document.write(
+        '<script type="importmap">{"imports":{"docwrite:fixture":"/assets/module-export-const-multiple-bindings.mjs"}}<\/script>' +
+          '<script type="module" src="/assets/document_write_importmap_written_module.mjs"><\/script>' +
+          '<script>window.documentWriteExternalImportMapOrder.push("classic-after-write"); window.documentWriteExternalImportMapResult = window.documentWriteExternalImportMapOrder.join(",");<\/script>'
+      );
+    </script>
+  </body>
+</html>

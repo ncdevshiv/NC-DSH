@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.parserOwnedMissingExportOrder = [];
+      window.addEventListener("error", () => {
+        window.parserOwnedMissingExportOrder.push("error");
+        window.parserOwnedMissingExportError = "missing-export";
+      });
+    </script>
+    <script type="module">
+      import { missingValue } from "/assets/module-link-exports-only-named.mjs";
+      window.parserOwnedMissingExportValue = missingValue;
+    </script>
+    <script type="module">
+      window.parserOwnedMissingExportOrder.push("later-module");
+      window.parserOwnedMissingExportContinuation = true;
+      window.parserOwnedMissingExportOrderResult =
+        window.parserOwnedMissingExportOrder.join(",");
+    </script>
+  </body>
+</html>

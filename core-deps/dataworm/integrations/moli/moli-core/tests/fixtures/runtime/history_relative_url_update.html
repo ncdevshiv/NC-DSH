@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body
+    data-push-path=""
+    data-push-href=""
+    data-replace-path=""
+    data-replace-href=""
+    data-history-length=""
+    data-history-state=""
+  >
+    <script>
+      history.pushState({ step: 1 }, "", "child/push?x=1");
+      document.body.setAttribute("data-push-path", location.pathname + location.search);
+      document.body.setAttribute("data-push-href", location.href);
+
+      history.replaceState({ step: 2 }, "", "../replace?y=2#frag");
+      document.body.setAttribute(
+        "data-replace-path",
+        location.pathname + location.search + location.hash
+      );
+      document.body.setAttribute("data-replace-href", location.href);
+      document.body.setAttribute("data-history-length", String(history.length));
+      document.body.setAttribute("data-history-state", JSON.stringify(history.state));
+    </script>
+  </body>
+</html>

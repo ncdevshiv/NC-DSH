@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.parserModuleTlaDynamicImportOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.parserModuleTlaDynamicImportOrder.push(
+          `dcl:${document.readyState}`,
+        );
+        window.parserModuleTlaDynamicImportDclSawValue =
+          window.parserModuleTlaDynamicImportValue === "dep";
+        window.parserModuleTlaDynamicImportOrderResult =
+          window.parserModuleTlaDynamicImportOrder.join(",");
+        document.body.setAttribute(
+          "data-parser-module-tla-dynamic-import",
+          String(window.parserModuleTlaDynamicImportDclSawValue),
+        );
+      });
+    </script>
+    <script type="module">
+      window.parserModuleTlaDynamicImportOrder.push("module-start");
+      const mod = await import(
+        "/assets/parser-owned-module-tla-dynamic-import-dep.mjs"
+      );
+      window.parserModuleTlaDynamicImportValue = mod.value;
+      window.parserModuleTlaDynamicImportOrder.push("module-after-import");
+    </script>
+  </body>
+</html>

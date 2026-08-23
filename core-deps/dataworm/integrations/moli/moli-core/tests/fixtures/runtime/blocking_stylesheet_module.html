@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.blockingStylesheetStart = Date.now();
+      window.blockingStylesheetModuleOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.blockingStylesheetModuleOrder.push("dcl");
+        window.blockingStylesheetModuleDclOrder =
+          window.blockingStylesheetModuleOrder.join(",");
+      });
+    </script>
+    <link rel="stylesheet" href="/assets/blocking_stylesheet_slow.css">
+    <script type="module">
+      window.blockingStylesheetModuleElapsed =
+        Date.now() - window.blockingStylesheetStart;
+      window.blockingStylesheetModuleBlockedEnough =
+        window.blockingStylesheetModuleElapsed >= 50;
+      window.blockingStylesheetModuleSawLate = !!document.getElementById("late");
+      window.blockingStylesheetModuleSawDcl =
+        window.blockingStylesheetModuleOrder.includes("dcl");
+      window.blockingStylesheetModuleOrder.push("module");
+      Promise.resolve().then(() =>
+        window.blockingStylesheetModuleOrder.push("module-microtask")
+      );
+    </script>
+  </head>
+  <body>
+    <div id="late">late</div>
+  </body>
+</html>

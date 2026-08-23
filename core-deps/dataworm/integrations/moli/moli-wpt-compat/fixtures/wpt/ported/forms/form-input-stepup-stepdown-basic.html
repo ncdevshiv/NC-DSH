@@ -1,0 +1,191 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.max = "10";
+  input.step = "2";
+  input.value = "4";
+
+  input.stepUp();
+  assert_equals(input.value, "6", "stepUp() should add one allowed step");
+
+  input.stepUp(2);
+  assert_equals(input.value, "10", "stepUp(n) should add n steps and clamp at max");
+
+  input.stepDown(3);
+  assert_equals(input.value, "4", "stepDown(n) should subtract n steps");
+
+  input.stepUp(0);
+  assert_equals(input.value, "4", "stepUp(0) should keep an aligned value unchanged");
+
+  input.stepUp("2");
+  assert_equals(input.value, "8", "stepUp should convert string n with WebIDL integer conversion");
+
+  input.stepDown(true);
+  assert_equals(input.value, "6", "stepDown should convert boolean n with WebIDL integer conversion");
+
+  input.stepDown(null);
+  assert_equals(input.value, "6", "stepDown(null) should convert n to zero");
+
+  input.value = "4";
+  input.stepUp({ valueOf() { return 2; } });
+  assert_equals(input.value, "8", "stepUp should convert object n through valueOf");
+
+  input.stepDown({
+    valueOf() { return {}; },
+    toString() { return "1"; },
+  });
+  assert_equals(input.value, "6", "stepDown should fall back to object n toString conversion");
+
+  input.stepUp(NaN);
+  assert_equals(input.value, "6", "stepUp(NaN) should convert n to zero");
+
+  input.stepDown(Infinity);
+  assert_equals(input.value, "6", "stepDown(Infinity) should convert n to zero");
+
+  assert_throws_name("Error", function () {
+    input.stepUp({ valueOf() { throw new Error("conversion failed"); } });
+  }, "stepUp should propagate object conversion exceptions");
+  assert_equals(input.value, "6", "failed object conversion should not mutate value");
+
+  input.value = "4";
+  input.stepUp(-1);
+  assert_equals(input.value, "4", "stepUp with negative n should not move below the pre-step value");
+}, "number input stepUp and stepDown use allowed value steps and converted n arguments");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.step = "2";
+
+  input.value = "3";
+  input.stepUp();
+  assert_equals(input.value, "4", "stepUp() should align a mismatched value upward before stepping");
+
+  input.value = "3";
+  input.stepDown();
+  assert_equals(input.value, "2", "stepDown() should align a mismatched value downward before stepping");
+}, "number input stepUp and stepDown align step-mismatched values toward the invocation direction");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "5";
+  input.max = "9";
+  input.step = "2";
+
+  input.stepUp();
+  assert_equals(input.value, "5", "empty value should step from zero and clamp to the first aligned value at min");
+
+  input.stepUp(10);
+  assert_equals(input.value, "9", "stepUp should clamp to the largest aligned value at max");
+
+  input.stepDown(10);
+  assert_equals(input.value, "5", "stepDown should clamp to the smallest aligned value at min");
+}, "number input stepUp and stepDown clamp empty and out-of-range results");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.value = "5";
+  input.step = "any";
+  assert_throws_name("InvalidStateError", function () {
+    input.stepUp();
+  }, "stepUp should throw when there is no allowed value step");
+  assert_equals(input.value, "5", "failed stepUp should not mutate value");
+
+  input.type = "text";
+  assert_throws_name("InvalidStateError", function () {
+    input.stepDown();
+  }, "unsupported input type should throw InvalidStateError");
+}, "stepUp and stepDown expose InvalidStateError boundaries");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "date";
+  input.min = "2024-03-01";
+  input.step = "7";
+  input.value = "2024-03-08";
+
+  input.stepUp();
+  assert_equals(input.value, "2024-03-15", "date stepUp should move by whole days");
+
+  input.stepDown(2);
+  assert_equals(input.value, "2024-03-01", "date stepDown should move by n whole-day steps");
+}, "date input stepUp and stepDown use day units");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "time";
+  input.min = "00:00";
+  input.step = "900";
+  input.value = "01:00";
+
+  input.stepDown(2);
+  assert_equals(input.value, "00:30", "time stepDown should move by seconds scaled to milliseconds");
+
+  input.stepUp();
+  assert_equals(input.value, "00:45", "time stepUp should move by one second-scaled step");
+}, "time input stepUp and stepDown use second units");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+  input.min = "1970-01-01T00:00";
+  input.step = "60";
+  input.value = "1970-01-01T00:01";
+
+  input.stepUp(2);
+  assert_equals(input.value, "1970-01-01T00:03", "datetime-local stepUp should move local date-time milliseconds");
+
+  input.stepDown();
+  assert_equals(input.value, "1970-01-01T00:02", "datetime-local stepDown should move local date-time milliseconds");
+}, "datetime-local input stepUp and stepDown use local date-time seconds");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "month";
+  input.min = "2024-01";
+  input.step = "2";
+  input.value = "2024-03";
+
+  input.stepUp();
+  assert_equals(input.value, "2024-05", "month stepUp should move by month units");
+
+  input.stepDown(2);
+  assert_equals(input.value, "2024-01", "month stepDown should move by n month steps");
+}, "month input stepUp and stepDown use month units");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "week";
+  input.min = "2024-W01";
+  input.step = "2";
+  input.value = "2024-W03";
+
+  input.stepUp();
+  assert_equals(input.value, "2024-W05", "week stepUp should move by week units");
+
+  input.stepDown(2);
+  assert_equals(input.value, "2024-W01", "week stepDown should move by n week steps");
+}, "week input stepUp and stepDown use ISO week units");
+</script>

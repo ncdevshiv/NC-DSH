@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<body
+  data-channel-tag=""
+  data-port-instance=""
+  data-port-tag=""
+  data-port-distinct=""
+  data-onmessage=""
+  data-started-order=""
+  data-duplex=""
+  data-object-type=""
+  data-object-value=""
+>
+<script>
+const basic = new MessageChannel();
+document.body.setAttribute('data-channel-tag', Object.prototype.toString.call(basic));
+document.body.setAttribute(
+  'data-port-instance',
+  String(basic.port1 instanceof MessagePort && basic.port2 instanceof MessagePort),
+);
+document.body.setAttribute('data-port-tag', Object.prototype.toString.call(basic.port1));
+document.body.setAttribute('data-port-distinct', String(basic.port1 !== basic.port2));
+
+const onmessageChannel = new MessageChannel();
+let onmessageValue = null;
+onmessageChannel.port2.onmessage = (event) => {
+  onmessageValue = event.data;
+  document.body.setAttribute('data-onmessage', String(onmessageValue));
+};
+onmessageChannel.port1.postMessage('hello');
+
+const orderedChannel = new MessageChannel();
+const orderedMessages = [];
+orderedChannel.port2.addEventListener('message', (event) => {
+  orderedMessages.push(event.data);
+  document.body.setAttribute('data-started-order', orderedMessages.join(','));
+});
+orderedChannel.port2.start();
+orderedChannel.port1.postMessage('first');
+orderedChannel.port1.postMessage('second');
+orderedChannel.port1.postMessage('third');
+
+const duplexChannel = new MessageChannel();
+let port1Count = 0;
+let port2Count = 0;
+duplexChannel.port1.onmessage = () => {
+  port1Count += 1;
+  document.body.setAttribute('data-duplex', `${port1Count}:${port2Count}`);
+};
+duplexChannel.port2.onmessage = () => {
+  port2Count += 1;
+  document.body.setAttribute('data-duplex', `${port1Count}:${port2Count}`);
+};
+duplexChannel.port1.postMessage('to port2');
+duplexChannel.port2.postMessage('to port1');
+
+const objectChannel = new MessageChannel();
+let objectType = '';
+let objectValue = '';
+objectChannel.port2.onmessage = (event) => {
+  objectType = event.data.type;
+  objectValue = String(event.data.value);
+  document.body.setAttribute('data-object-type', objectType);
+  document.body.setAttribute('data-object-value', objectValue);
+};
+objectChannel.port1.postMessage({ type: 'test', value: 42 });
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface ImageData {
+  constructor(unsigned long sw, unsigned long sh, optional object settings = {});
+  readonly attribute unsigned long width;
+  readonly attribute unsigned long height;
+  readonly attribute Uint8ClampedArray data;
+  readonly attribute DOMString colorSpace;
+  readonly attribute DOMString pixelFormat;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    ImageData: ["new ImageData(2, 3)"]
+  });
+});
+
+test(function () {
+  const bytes = new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]);
+  const imageData = new ImageData(bytes, 1);
+  assert_equals(imageData.width, 1);
+  assert_equals(imageData.height, 2);
+  assert_equals(imageData.data, bytes);
+  assert_equals(imageData.colorSpace, "srgb");
+  assert_equals(imageData.pixelFormat, "rgba-unorm8");
+  assert_false(Object.prototype.hasOwnProperty.call(imageData, "width"));
+  assert_false(Object.prototype.hasOwnProperty.call(imageData, "data"));
+  assert_equals(Object.prototype.toString.call(imageData), "[object ImageData]");
+}, "ImageData idlharness sample supports typed-array construction");
+</script>

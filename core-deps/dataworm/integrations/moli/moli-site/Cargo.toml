@@ -1,0 +1,14 @@
+[package]
+license = "(MIT OR Apache-2.0) AND MPL-2.0"
+name = "moli-site"
+version = "0.1.0"
+edition = "2024"
+description = "Moli registrable-site and schemeful-site helpers"
+
+[dependencies]
+moli-url = { path = "../moli-url" }
+publicsuffix = "2.3.0"
+url = "2.5.7"
+
+[lints]
+workspace = true

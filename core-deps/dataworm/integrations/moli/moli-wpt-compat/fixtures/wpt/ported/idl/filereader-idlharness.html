@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface FileReader : EventTarget {
+  constructor();
+  readonly attribute unsigned short readyState;
+  readonly attribute object? result;
+  readonly attribute object? error;
+  undefined readAsArrayBuffer(Blob blob);
+  undefined readAsBinaryString(Blob blob);
+  undefined readAsText(Blob blob, optional DOMString encoding);
+  undefined readAsDataURL(Blob blob);
+  undefined abort();
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    FileReader: ["new FileReader()"]
+  });
+});
+</script>

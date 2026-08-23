@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body
+    data-tampered-queue-microtask-called="no"
+    data-mutation-observer-delivered="no"
+    data-mutation-record-count="0"
+  >
+    <script>
+      window.queueMicrotask = () => {
+        document.body.setAttribute("data-tampered-queue-microtask-called", "yes");
+        throw new Error("host must not call page queueMicrotask");
+      };
+
+      const observer = new MutationObserver((records) => {
+        document.body.setAttribute("data-mutation-observer-delivered", "yes");
+        document.body.setAttribute("data-mutation-record-count", String(records.length));
+      });
+
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["data-trigger"],
+      });
+      document.body.setAttribute("data-trigger", "yes");
+    </script>
+  </body>
+</html>

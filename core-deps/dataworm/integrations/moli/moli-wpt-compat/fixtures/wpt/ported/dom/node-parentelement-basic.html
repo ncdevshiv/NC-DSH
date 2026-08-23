@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<body></body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  assert_equals(document.parentElement, null);
+}, "parentElement is null when the parent is null");
+
+test(function () {
+  assert_equals(document.doctype.parentElement, null);
+  assert_equals(document.documentElement.parentElement, null);
+
+  const comment = document.appendChild(document.createComment("foo"));
+  assert_equals(comment.parentNode, document);
+  assert_equals(comment.parentElement, null);
+  comment.remove();
+}, "parentElement is null when the parent is a document");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const element = document.createElement("div");
+  const text = document.createTextNode("bar");
+
+  fragment.appendChild(element);
+  fragment.appendChild(text);
+
+  assert_equals(fragment.parentElement, null);
+  assert_equals(element.parentNode, fragment);
+  assert_equals(text.parentNode, fragment);
+  assert_equals(element.parentElement, null);
+  assert_equals(text.parentElement, null);
+}, "parentElement is null for children of DocumentFragments");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const parent = document.createElement("div");
+  const element = document.createElement("span");
+  const text = document.createTextNode("bar");
+
+  fragment.appendChild(parent);
+  parent.appendChild(element);
+  parent.appendChild(text);
+
+  assert_equals(parent.parentElement, null);
+  assert_equals(element.parentElement, parent);
+  assert_equals(text.parentElement, parent);
+}, "parentElement returns an element parent inside a DocumentFragment subtree");
+
+test(function () {
+  const parent = document.createElement("div");
+  const element = document.createElement("span");
+  const text = document.createTextNode("bar");
+
+  parent.appendChild(element);
+  parent.appendChild(text);
+
+  assert_equals(parent.parentElement, null);
+  assert_equals(element.parentElement, parent);
+  assert_equals(text.parentElement, parent);
+
+  document.body.appendChild(parent);
+  assert_equals(parent.parentElement, document.body);
+  assert_equals(element.parentElement, parent);
+  assert_equals(text.parentElement, parent);
+}, "parentElement works in disconnected and connected element subtrees");
+</script>

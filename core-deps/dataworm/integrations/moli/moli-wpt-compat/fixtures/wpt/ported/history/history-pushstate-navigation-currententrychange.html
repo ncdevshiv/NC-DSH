@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const entryBefore = navigation.currentEntry;
+  const entryBeforeUrl = entryBefore ? entryBefore.url : null;
+  const eventPromise = new Promise((resolve) => {
+    navigation.addEventListener("currententrychange", resolve, { once: true });
+  });
+
+  history.pushState({ step: 1 }, "", "#one");
+
+  const event = await eventPromise;
+  assert_equals(
+    event.constructor.name,
+    "NavigationCurrentEntryChangeEvent",
+    "history.pushState should dispatch a NavigationCurrentEntryChangeEvent",
+  );
+  assert_equals(event.from, entryBefore, "event.from should reference the previously current entry");
+  assert_equals(event.from.url, entryBeforeUrl, "event.from.url should match the original URL");
+  assert_equals(event.navigationType, "push", "pushState should surface navigationType=push");
+  assert_false(event.bubbles, "currententrychange should not bubble");
+  assert_false(event.cancelable, "currententrychange should not be cancelable");
+  assert_false(event.composed, "currententrychange should not be composed");
+  assert_true(event.isTrusted, "host-dispatched currententrychange should be trusted");
+  assert_equals(location.hash, "#one", "pushState should update location");
+  assert_equals(navigation.currentEntry.url, location.href, "currentEntry URL should follow location.href");
+  assert_equals(JSON.stringify(history.state), "{\"step\":1}", "history.state should store the pushed state");
+  assert_equals(
+    JSON.stringify(navigation.currentEntry.getState?.() ?? null),
+    "null",
+    "history.pushState should not populate navigation.currentEntry.getState()",
+  );
+}, "history.pushState dispatches navigation.currententrychange with push metadata");
+</script>

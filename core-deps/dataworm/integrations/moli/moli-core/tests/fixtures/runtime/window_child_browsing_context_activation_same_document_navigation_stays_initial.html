@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+  <body
+    data-child-activation-initial=""
+    data-child-activation-after-push=""
+    data-child-activation-after-back=""
+    data-child-activation-after-forward=""
+  >
+    <iframe
+      id="child"
+      src="/compat/window-child-browsing-context-target-name-a"
+    ></iframe>
+    <script>
+      const iframe = document.getElementById("child");
+
+      function snapshotChildActivation() {
+        const childWindow = iframe.contentWindow;
+        const activation = childWindow.navigation.activation;
+        return [
+          String(activation?.entry?.url ?? ""),
+          String(activation?.from?.url ?? ""),
+          String(activation?.navigationType ?? ""),
+          String(childWindow.navigation.currentEntry?.url ?? ""),
+          String(childWindow.navigation.transition === null),
+        ].join("|");
+      }
+
+      iframe.addEventListener("load", () => {
+        setTimeout(() => {
+          document.body.setAttribute(
+            "data-child-activation-initial",
+            snapshotChildActivation()
+          );
+
+          const childWindow = iframe.contentWindow;
+          childWindow.navigation.navigate("#one", {
+            history: "push",
+            state: { step: 1 },
+          });
+
+          setTimeout(() => {
+            document.body.setAttribute(
+              "data-child-activation-after-push",
+              snapshotChildActivation()
+            );
+            childWindow.addEventListener(
+              "hashchange",
+              function onBack() {
+                if (childWindow.location.hash !== "") {
+                  return;
+                }
+                childWindow.removeEventListener("hashchange", onBack);
+                setTimeout(() => {
+                  document.body.setAttribute(
+                    "data-child-activation-after-back",
+                    snapshotChildActivation()
+                  );
+                  childWindow.addEventListener(
+                    "hashchange",
+                    function onForward() {
+                      if (childWindow.location.hash !== "#one") {
+                        return;
+                      }
+                      childWindow.removeEventListener("hashchange", onForward);
+                      setTimeout(() => {
+                        document.body.setAttribute(
+                          "data-child-activation-after-forward",
+                          snapshotChildActivation()
+                        );
+                      }, 0);
+                    },
+                    { once: false }
+                  );
+                  childWindow.history.forward();
+                }, 0);
+              },
+              { once: false }
+            );
+            childWindow.history.back();
+          }, 0);
+        }, 0);
+      });
+    </script>
+  </body>
+</html>

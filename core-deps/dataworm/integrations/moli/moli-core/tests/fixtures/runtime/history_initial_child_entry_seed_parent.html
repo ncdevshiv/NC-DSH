@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe
+      id="child"
+      src="/compat/history-initial-child-entry-seed-child.html"
+    ></iframe>
+    <script>
+      window.addEventListener('load', () => {
+        const child = document.getElementById('child').contentWindow;
+        document.body.setAttribute('data-top-history-length', String(history.length));
+        document.body.setAttribute(
+          'data-child-history-length',
+          String(child.history.length)
+        );
+        document.body.setAttribute(
+          'data-child-current-index',
+          String(child.navigation.currentEntry?.index ?? -1)
+        );
+        document.body.setAttribute(
+          'data-child-current-url',
+          child.navigation.currentEntry?.url ?? 'null'
+        );
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.dynamicInOrderScriptOrder = [];
+      window.dynamicReattachLoads = 0;
+      window.dynamicReattachSettled = false;
+
+      const script = document.createElement("script");
+      script.async = false;
+      script.src = "/assets/dynamic_taxonomy_in_order_fast.js";
+      script.onload = () => {
+        window.dynamicReattachLoads += 1;
+        if (window.dynamicReattachLoads === 1) {
+          document.head.removeChild(script);
+          document.head.appendChild(script);
+          setTimeout(() => {
+            window.dynamicReattachSettled = true;
+          }, 25);
+        }
+      };
+
+      document.head.appendChild(script);
+    </script>
+  </head>
+  <body>
+    <script>
+      testing.eventually(() => {
+        testing.expectTrue(window.dynamicReattachSettled);
+        testing.expectEqual(1, window.dynamicReattachLoads);
+        testing.expectEqual(
+          "in-order-fast",
+          window.dynamicInOrderScriptOrderResult,
+        );
+      });
+    </script>
+  </body>
+</html>

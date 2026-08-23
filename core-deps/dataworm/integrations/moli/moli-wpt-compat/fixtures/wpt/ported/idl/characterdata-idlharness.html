@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface CharacterData : Node {
+  attribute DOMString data;
+  readonly attribute unsigned long length;
+  DOMString substringData(unsigned long offset, unsigned long count);
+  undefined appendData(DOMString data);
+  undefined insertData(unsigned long offset, DOMString data);
+  undefined deleteData(unsigned long offset, unsigned long count);
+  undefined replaceData(unsigned long offset, unsigned long count, DOMString data);
+};
+
+interface Text : CharacterData {
+  constructor(optional DOMString data = "");
+  Text splitText(unsigned long offset);
+  readonly attribute DOMString wholeText;
+};
+
+interface Comment : CharacterData {
+  constructor(optional DOMString data = "");
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    Text: ["new Text('text-idl')"],
+    Comment: ["new Comment('comment-idl')"]
+  });
+});
+
+test(function () {
+  const text = new Text("hello");
+  assert_equals(text.data, "hello");
+  assert_equals(text.length, 5);
+  assert_equals(text.wholeText, "hello");
+  assert_false(Object.prototype.hasOwnProperty.call(text, "data"));
+  assert_false(Object.prototype.hasOwnProperty.call(text, "length"));
+  assert_false(Object.prototype.hasOwnProperty.call(text, "wholeText"));
+  text.data = "world";
+  assert_equals(text.data, "world");
+  assert_equals(Object.prototype.toString.call(text), "[object Text]");
+}, "CharacterData idlharness sample exposes prototype-backed attribute accessors");
+</script>

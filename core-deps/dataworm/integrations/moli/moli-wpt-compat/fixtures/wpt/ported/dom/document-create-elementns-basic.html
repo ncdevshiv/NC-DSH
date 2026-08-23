@@ -1,0 +1,162 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const HTML_NS = "http://www.w3.org/1999/xhtml";
+const SVG_NS = "http://www.w3.org/2000/svg";
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
+
+function assert_element_ns(namespace, qualifiedName, expected) {
+  test(function () {
+    const element = document.createElementNS(namespace, qualifiedName);
+
+    assert_true(element !== null);
+    assert_true(element instanceof Element, "instanceof Element");
+    assert_true(element instanceof Node, "instanceof Node");
+    assert_equals(element.ownerDocument, document);
+    assert_equals(element.nodeType, Node.ELEMENT_NODE, "nodeType");
+    assert_equals(element.nodeValue, null, "nodeValue");
+    assert_equals(element.namespaceURI, expected.namespaceURI, "namespaceURI");
+    assert_equals(element.prefix, expected.prefix, "prefix");
+    assert_equals(element.localName, expected.localName, "localName");
+    assert_equals(element.tagName, expected.tagName, "tagName");
+    assert_equals(element.nodeName, expected.tagName, "nodeName");
+  }, "createElementNS(" + JSON.stringify(namespace) + ", " + JSON.stringify(qualifiedName) + ")");
+}
+
+assert_element_ns(null, "span", {
+  namespaceURI: null,
+  prefix: null,
+  localName: "span",
+  tagName: "span",
+});
+
+assert_element_ns(undefined, "span", {
+  namespaceURI: null,
+  prefix: null,
+  localName: "span",
+  tagName: "span",
+});
+
+assert_element_ns(HTML_NS, "span", {
+  namespaceURI: HTML_NS,
+  prefix: null,
+  localName: "span",
+  tagName: "SPAN",
+});
+
+assert_element_ns(HTML_NS, "html:span", {
+  namespaceURI: HTML_NS,
+  prefix: "html",
+  localName: "span",
+  tagName: "HTML:SPAN",
+});
+
+assert_element_ns(SVG_NS, "svg:path", {
+  namespaceURI: SVG_NS,
+  prefix: "svg",
+  localName: "path",
+  tagName: "svg:path",
+});
+
+function assert_create_element_ns_throws(doc, namespace, qualifiedName, expectedName, label) {
+  assert_throws_dom(expectedName, function () {
+    doc.createElementNS(namespace, qualifiedName);
+  }, label);
+}
+
+function assert_document_create_element_ns(doc, namespace, qualifiedName, expected, label) {
+  test(function () {
+    const element = doc.createElementNS(namespace, qualifiedName);
+
+    assert_true(element !== null);
+    assert_true(element instanceof Element, "instanceof Element");
+    assert_true(element instanceof Node, "instanceof Node");
+    assert_equals(element.ownerDocument, doc, "ownerDocument");
+    assert_equals(element.nodeType, Node.ELEMENT_NODE, "nodeType");
+    assert_equals(element.namespaceURI, expected.namespaceURI, "namespaceURI");
+    assert_equals(element.prefix, expected.prefix, "prefix");
+    assert_equals(element.localName, expected.localName, "localName");
+    assert_equals(element.tagName, expected.tagName, "tagName");
+    assert_equals(element.nodeName, expected.tagName, "nodeName");
+  }, label);
+}
+
+test(function () {
+  [
+    [document, null, "1bad", "InvalidCharacterError", "current invalid name"],
+    [document, null, "p:root", "NamespaceError", "current missing namespace"],
+    [document, "", "p:root", "NamespaceError", "current empty namespace"],
+    [document, "urn:not-xml", "xml:root", "NamespaceError", "current xml prefix"],
+    [document, "urn:not-xmlns", "xmlns:root", "NamespaceError", "current xmlns prefix"],
+    [document, XMLNS_NS, "x:root", "NamespaceError", "current xmlns namespace"],
+    [
+      document.implementation.createHTMLDocument(""),
+      null,
+      "p:root",
+      "NamespaceError",
+      "created HTML missing namespace",
+    ],
+    [
+      document.implementation.createDocument(null, "root", null),
+      null,
+      "p:root",
+      "NamespaceError",
+      "created XML missing namespace",
+    ],
+    [
+      new DOMParser().parseFromString("<html><body></body></html>", "text/html"),
+      null,
+      "p:root",
+      "NamespaceError",
+      "DOMParser HTML missing namespace",
+    ],
+    [
+      new DOMParser().parseFromString("<root/>", "application/xml"),
+      null,
+      "p:root",
+      "NamespaceError",
+      "DOMParser XML missing namespace",
+    ],
+  ].forEach(function ([doc, namespace, qualifiedName, expectedName, label]) {
+    assert_create_element_ns_throws(doc, namespace, qualifiedName, expectedName, label);
+  });
+
+  const xmlElement = document.createElementNS(XML_NS, "xml:root");
+  assert_equals(xmlElement.prefix, "xml");
+  assert_equals(xmlElement.namespaceURI, XML_NS);
+
+  const xmlnsElement = document.createElementNS(XMLNS_NS, "xmlns:root");
+  assert_equals(xmlnsElement.prefix, "xmlns");
+  assert_equals(xmlnsElement.namespaceURI, XMLNS_NS);
+}, "createElementNS() validates qualifiedName and namespace combinations");
+
+assert_document_create_element_ns(
+  new DOMParser().parseFromString("<html><body></body></html>", "text/html"),
+  SVG_NS,
+  "svg:path",
+  {
+    namespaceURI: SVG_NS,
+    prefix: "svg",
+    localName: "path",
+    tagName: "svg:path",
+  },
+  "DOMParser HTML document exposes createElementNS()"
+);
+
+assert_document_create_element_ns(
+  new DOMParser().parseFromString("<root/>", "application/xml"),
+  SVG_NS,
+  "svg:path",
+  {
+    namespaceURI: SVG_NS,
+    prefix: "svg",
+    localName: "path",
+    tagName: "svg:path",
+  },
+  "DOMParser XML document exposes createElementNS()"
+);
+</script>

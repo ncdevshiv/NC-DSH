@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="after">after</main>
+    <script>
+      window.__messagePortCallbackCompleted = false;
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        window.__messagePortCallbackCompleted = true;
+        throw new Error("message port boom");
+      };
+      channel.port2.postMessage("ping");
+    </script>
+  </body>
+</html>

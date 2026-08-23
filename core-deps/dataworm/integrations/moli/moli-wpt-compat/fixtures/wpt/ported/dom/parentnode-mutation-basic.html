@@ -1,0 +1,111 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function labels(parent) {
+  return Array.from(parent.childNodes).map((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return "#" + node.textContent;
+    }
+    return node.localName + (node.id ? "#" + node.id : "");
+  });
+}
+
+function newElementParent() {
+  return document.createElement("div");
+}
+
+function newFragmentParent() {
+  return document.createDocumentFragment();
+}
+
+function runParentNodeTests(factory, name) {
+  test(function () {
+    const parent = factory();
+    parent.append();
+    assert_array_equals(labels(parent), []);
+
+    parent.append(null, undefined, "text");
+    assert_array_equals(labels(parent), ["#null", "#undefined", "#text"]);
+  }, name + ".append() appends stringified text arguments");
+
+  test(function () {
+    const parent = factory();
+    const child = document.createElement("test");
+    const x = document.createElement("x");
+
+    parent.appendChild(child);
+    parent.append(x, "text");
+
+    assert_array_equals(labels(parent), ["test", "x", "#text"]);
+    assert_equals(parent.childNodes[0], child);
+    assert_equals(parent.childNodes[1], x);
+  }, name + ".append() appends nodes and text after existing children");
+
+  test(function () {
+    const parent = factory();
+    parent.append("tail");
+    const x = document.createElement("x");
+    const y = document.createElement("y");
+
+    parent.prepend(x, "head", y);
+
+    assert_array_equals(labels(parent), ["x", "#head", "y", "#tail"]);
+    assert_equals(parent.childNodes[0], x);
+    assert_equals(parent.childNodes[2], y);
+  }, name + ".prepend() inserts nodes and text before existing children");
+
+  test(function () {
+    const parent = factory();
+    const x = document.createElement("x");
+    const y = document.createElement("y");
+
+    parent.append(x, y, x);
+
+    assert_equals(parent.childNodes.length, 2);
+    assert_equals(parent.childNodes[0], y);
+    assert_equals(parent.childNodes[1], x);
+  }, name + ".append() moves the same element when passed twice");
+
+  test(function () {
+    const parent = factory();
+    const old = document.createElement("old");
+    const x = document.createElement("x");
+
+    parent.append(old, "old text");
+    parent.replaceChildren(x, "text");
+
+    assert_array_equals(labels(parent), ["x", "#text"]);
+    assert_equals(parent.childNodes[0], x);
+    assert_equals(old.parentNode, null);
+  }, name + ".replaceChildren() replaces existing children with nodes and text");
+
+  test(function () {
+    const parent = factory();
+    parent.append(document.createElement("old"), "old text");
+    parent.replaceChildren();
+
+    assert_array_equals(labels(parent), []);
+  }, name + ".replaceChildren() without arguments clears existing children");
+}
+
+runParentNodeTests(newElementParent, "Element");
+runParentNodeTests(newFragmentParent, "DocumentFragment");
+
+test(function () {
+  const parent = document.createElement("div");
+  const fragment = document.createDocumentFragment();
+  const a = document.createElement("a");
+  const b = document.createElement("b");
+
+  fragment.append(a, b);
+  parent.append(fragment);
+
+  assert_array_equals(labels(parent), ["a", "b"]);
+  assert_array_equals(labels(fragment), []);
+  assert_equals(parent.firstChild, a);
+  assert_equals(parent.lastChild, b);
+}, "append() inserts DocumentFragment children and empties the fragment");
+</script>

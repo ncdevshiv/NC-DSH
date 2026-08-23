@@ -1,0 +1,10 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="before">before</main>
+    <script>
+      Promise.reject(new Error("promise boom"));
+    </script>
+    <main id="after">after</main>
+  </body>
+</html>

@@ -1,0 +1,209 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+function next_worker_message(worker, predicate) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      if (predicate && !predicate(event.data)) {
+        return;
+      }
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(event.error || new Error(event.message || "unexpected worker error"));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function next_port_message(port, predicate) {
+  return new Promise(function (resolve) {
+    function onmessage(event) {
+      if (predicate && !predicate(event.data)) {
+        return;
+      }
+      port.removeEventListener("message", onmessage);
+      resolve(event);
+    }
+
+    port.addEventListener("message", onmessage);
+    port.start();
+  });
+}
+
+test(function () {
+  const worker = new Worker(worker_url("postMessage('ready');"));
+  try {
+    assert_throws_name("TypeError", function () {
+      worker.postMessage("payload", 1);
+    }, "Worker.postMessage should reject a non-object, non-iterable second argument");
+
+    assert_throws_name("TypeError", function () {
+      worker.postMessage("payload", { transfer: 1 });
+    }, "Worker.postMessage should reject a non-iterable transfer option");
+  } finally {
+    worker.terminate();
+  }
+}, "Worker.postMessage validates its second argument before structured cloning");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data === 'plain') {",
+        "    postMessage({ kind: 'plain', portsLength: event.ports.length });",
+        "    return;",
+        "  }",
+        "  if (!event.data || event.data.kind !== 'clone') {",
+        "    return;",
+        "  }",
+        "  const buffer = event.data.buffer;",
+        "  postMessage({",
+        "    kind: 'clone',",
+        "    isArrayBuffer: buffer instanceof ArrayBuffer,",
+        "    byteLength: buffer.byteLength,",
+        "    bytes: Array.from(new Uint8Array(buffer)).join(','),",
+        "    portsLength: event.ports.length,",
+        "  });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+
+  try {
+    const plain = next_worker_message(worker, function (data) {
+      return data && data.kind === "plain";
+    });
+    worker.postMessage("plain", {});
+    assert_equals((await plain).data.portsLength, 0, "empty options dict should not create transferred ports");
+
+    const buffer = new Uint8Array([5, 6, 7]).buffer;
+    const clone = next_worker_message(worker, function (data) {
+      return data && data.kind === "clone";
+    });
+    worker.postMessage({ kind: "clone", buffer: buffer }, { transfer: null });
+
+    assert_equals(buffer.byteLength, 3, "transfer:null should keep the sender ArrayBuffer attached");
+
+    const reply = (await clone).data;
+    assert_true(reply.isArrayBuffer, "worker should still receive an ArrayBuffer");
+    assert_equals(reply.byteLength, 3, "worker should receive cloned bytes");
+    assert_equals(reply.bytes, "5,6,7", "worker should receive the original bytes");
+    assert_equals(reply.portsLength, 0, "transfer:null should not populate event.ports");
+  } finally {
+    worker.terminate();
+  }
+}, "Worker.postMessage treats empty options and transfer:null as clone-only paths");
+
+test(function () {
+  const channel = new MessageChannel();
+  try {
+    assert_throws_name("TypeError", function () {
+      channel.port1.postMessage("payload", 1);
+    }, "MessagePort.postMessage should reject a non-object, non-iterable second argument");
+
+    assert_throws_name("TypeError", function () {
+      channel.port1.postMessage("payload", { transfer: 1 });
+    }, "MessagePort.postMessage should reject a non-iterable transfer option");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+  }
+}, "MessagePort.postMessage validates its second argument before structured cloning");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (messageEvent) {",
+        "    if (messageEvent.data === 'plain') {",
+        "      port.postMessage({ kind: 'plain', portsLength: messageEvent.ports.length });",
+        "      return;",
+        "    }",
+        "    if (!messageEvent.data || messageEvent.data.kind !== 'clone') {",
+        "      return;",
+        "    }",
+        "    const buffer = messageEvent.data.buffer;",
+        "    port.postMessage({",
+        "      kind: 'clone',",
+        "      isArrayBuffer: buffer instanceof ArrayBuffer,",
+        "      byteLength: buffer.byteLength,",
+        "      bytes: Array.from(new Uint8Array(buffer)).join(','),",
+        "      portsLength: messageEvent.ports.length,",
+        "    });",
+        "  };",
+        "  port.start();",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const ready = next_worker_message(worker, function (data) {
+      return data && data.kind === "ready";
+    });
+    worker.postMessage("connect", [channel.port2]);
+    await ready;
+
+    const plain = next_port_message(channel.port1, function (data) {
+      return data && data.kind === "plain";
+    });
+    channel.port1.postMessage("plain", {});
+    assert_equals((await plain).data.portsLength, 0, "empty MessagePort options dict should not create transferred ports");
+
+    const buffer = new Uint8Array([9, 10]).buffer;
+    const clone = next_port_message(channel.port1, function (data) {
+      return data && data.kind === "clone";
+    });
+    channel.port1.postMessage({ kind: "clone", buffer: buffer }, { transfer: null });
+
+    assert_equals(buffer.byteLength, 2, "MessagePort transfer:null should keep the sender ArrayBuffer attached");
+
+    const reply = (await clone).data;
+    assert_true(reply.isArrayBuffer, "worker should receive a cloned ArrayBuffer through the port");
+    assert_equals(reply.byteLength, 2, "worker should receive the original byte length");
+    assert_equals(reply.bytes, "9,10", "worker should receive the original bytes");
+    assert_equals(reply.portsLength, 0, "transfer:null should not populate messageEvent.ports");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}, "MessagePort.postMessage treats empty options and transfer:null as clone-only paths");
+</script>

@@ -1,0 +1,12 @@
+[package]
+license.workspace = true
+name = "moli-svg"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+moli-css-parse = { path = "../moli-css-parse" }
+svgtypes = "0.16.1"
+
+[lints]
+workspace = true

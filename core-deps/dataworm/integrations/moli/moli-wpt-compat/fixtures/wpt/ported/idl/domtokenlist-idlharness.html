@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+function assert_throws_type_error(callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, "TypeError", description);
+    return;
+  }
+  throw new Error(description || "expected TypeError");
+}
+
+idl_test([`
+interface DOMTokenList {
+  readonly attribute unsigned long length;
+  getter DOMString? item(unsigned long index);
+  boolean contains(DOMString token);
+  undefined add(DOMString... tokens);
+  undefined remove(DOMString... tokens);
+  boolean toggle(DOMString token, optional boolean force);
+  boolean replace(DOMString token, DOMString newToken);
+  boolean supports(DOMString token);
+  stringifier attribute DOMString value;
+  iterable<DOMString>;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    DOMTokenList: ["document.createElement('div').classList"]
+  });
+});
+
+test(function () {
+  const div = document.createElement("div");
+  const tokens = div.classList;
+
+  tokens.add("alpha", "beta");
+  assert_true(tokens.contains("alpha"));
+  assert_equals(tokens.item(1), "beta");
+  assert_array_equals(Array.from(tokens), ["alpha", "beta"]);
+  assert_false(Object.prototype.hasOwnProperty.call(tokens, "length"));
+  assert_false(Object.prototype.hasOwnProperty.call(tokens, "value"));
+  assert_throws_type_error(() => tokens.supports("alpha"));
+  assert_equals(Object.prototype.toString.call(tokens), "[object DOMTokenList]");
+}, "DOMTokenList idlharness sample operations preserve classList behavior");
+</script>

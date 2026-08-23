@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<body
+  data-top-self=""
+  data-parent-self=""
+  data-frames-self=""
+  data-window-length=""
+  data-frames-length=""
+  data-performance-instance=""
+  data-performance-same-object=""
+  data-performance-now-type=""
+  data-performance-now-monotonic=""
+  data-performance-time-origin-number=""
+  data-performance-tag=""
+  data-visual-viewport-same-object=""
+  data-visual-viewport-tag=""
+  data-visual-viewport-offset-left=""
+  data-visual-viewport-offset-top=""
+  data-visual-viewport-page-left=""
+  data-visual-viewport-page-top=""
+  data-visual-viewport-width=""
+  data-visual-viewport-height=""
+  data-visual-viewport-scale=""
+  data-navigator-user-agent=""
+  data-navigator-platform=""
+  data-navigator-language=""
+  data-navigator-hardware-concurrency=""
+  data-navigator-max-touch-points=""
+  data-window-inner-width=""
+  data-window-inner-height=""
+  data-window-device-pixel-ratio=""
+  data-screen-width=""
+  data-screen-height=""
+  data-screen-avail-width=""
+  data-screen-avail-height=""
+  data-screen-orientation-angle=""
+  data-screen-orientation-type=""
+>
+<script>
+  const body = document.body;
+
+  body.setAttribute('data-top-self', String(window.top === window));
+  body.setAttribute('data-parent-self', String(window.parent === window));
+  body.setAttribute('data-frames-self', String(window.frames === window));
+  body.setAttribute('data-window-length', String(window.length));
+  body.setAttribute('data-frames-length', String(window.frames.length));
+
+  const perf = window.performance;
+  const perfAgain = globalThis.performance;
+  const now1 = perf.now();
+  const now2 = perf.now();
+  body.setAttribute('data-performance-instance', String(perf instanceof Performance));
+  body.setAttribute('data-performance-same-object', String(perf === perfAgain));
+  body.setAttribute('data-performance-now-type', typeof perf.now);
+  body.setAttribute('data-performance-now-monotonic', String(now2 >= now1 && now1 >= 0));
+  body.setAttribute(
+    'data-performance-time-origin-number',
+    String(typeof perf.timeOrigin === 'number' && Number.isFinite(perf.timeOrigin))
+  );
+  body.setAttribute('data-performance-tag', Object.prototype.toString.call(perf));
+
+  const viewport = window.visualViewport;
+  body.setAttribute('data-visual-viewport-same-object', String(viewport === window.visualViewport));
+  body.setAttribute('data-visual-viewport-tag', Object.prototype.toString.call(viewport));
+  body.setAttribute('data-visual-viewport-offset-left', String(viewport.offsetLeft));
+  body.setAttribute('data-visual-viewport-offset-top', String(viewport.offsetTop));
+  body.setAttribute('data-visual-viewport-page-left', String(viewport.pageLeft));
+  body.setAttribute('data-visual-viewport-page-top', String(viewport.pageTop));
+  body.setAttribute('data-visual-viewport-width', String(viewport.width));
+  body.setAttribute('data-visual-viewport-height', String(viewport.height));
+  body.setAttribute('data-visual-viewport-scale', String(viewport.scale));
+
+  body.setAttribute('data-navigator-user-agent', navigator.userAgent);
+  body.setAttribute('data-navigator-platform', navigator.platform);
+  body.setAttribute('data-navigator-language', navigator.language);
+  body.setAttribute('data-navigator-hardware-concurrency', String(navigator.hardwareConcurrency));
+  body.setAttribute('data-navigator-max-touch-points', String(navigator.maxTouchPoints));
+
+  body.setAttribute('data-window-inner-width', String(window.innerWidth));
+  body.setAttribute('data-window-inner-height', String(window.innerHeight));
+  body.setAttribute('data-window-device-pixel-ratio', String(window.devicePixelRatio));
+
+  body.setAttribute('data-screen-width', String(screen.width));
+  body.setAttribute('data-screen-height', String(screen.height));
+  body.setAttribute('data-screen-avail-width', String(screen.availWidth));
+  body.setAttribute('data-screen-avail-height', String(screen.availHeight));
+  body.setAttribute('data-screen-orientation-angle', String(screen.orientation.angle));
+  body.setAttribute('data-screen-orientation-type', String(screen.orientation.type));
+</script>
+</body>
+</html>

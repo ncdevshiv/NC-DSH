@@ -1,0 +1,38 @@
+[package]
+name = "ai-agents"
+description = "Agent runtime: lifecycle, sub-agents, orchestration patterns, swarms, self-healing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-core = { path = "../ai-core" }
+ai-types = { path = "../ai-types" }
+ai-models = { path = "../ai-models" }
+ai-tools = { path = "../ai-tools" }
+ai-memory = { path = "../ai-memory" }
+ai-runtime = { path = "../ai-runtime" }
+ai-observability = { path = "../ai-observability" }
+ai-security = { path = "../ai-security" }
+ai-errors = { path = "../ai-errors" }
+ai-stream = { path = "../ai-stream" }
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+futures.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+time = { workspace = true, features = ["parsing"] }
+# Live-bench-only (tests/hercules_bench.rs): reuses the OpenAI-compatible
+# provider to reach the project gateway. Dev-deps may cycle: ai-providers
+# already depends on ai-agents.
+ai-providers = { path = "../ai-providers" }

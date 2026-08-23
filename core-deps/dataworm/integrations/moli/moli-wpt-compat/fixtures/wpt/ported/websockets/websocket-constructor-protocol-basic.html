@@ -1,0 +1,151 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_dom_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (caught) {
+    error = caught;
+  }
+  assert_true(!!error, (description || expectedName) + ": expected an exception");
+  assert_true(error instanceof DOMException, (description || expectedName) + ": expected DOMException");
+  assert_equals(error.name, expectedName, (description || expectedName) + ": exception name");
+}
+
+test(function () {
+  for (const protocol of [
+    "",
+    "bad protocol",
+    "bad,protocol",
+    "bad/protocol",
+    "bad;protocol",
+    "bad=protocol",
+    "\u007F",
+    "\u0080echo",
+  ]) {
+    assert_throws_dom_name("SyntaxError", function () {
+      new WebSocket("wss://example.test/socket", protocol);
+    }, "invalid protocol token " + JSON.stringify(protocol));
+  }
+
+  assert_throws_dom_name("SyntaxError", function () {
+    new WebSocket("wss://example.test/socket", ["echo", "ECHO"]);
+  }, "duplicate protocols should compare ASCII-case-insensitively");
+
+  const socket = new WebSocket("wss://example.test/socket", [
+    "echo",
+    "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  ]);
+  assert_equals(socket.protocol, "", "protocol should be empty before the handshake selects one");
+}, "WebSocket constructor validates subprotocol tokens and duplicate protocols");
+
+test(function () {
+  const steps = [];
+  const protocols = {
+    [Symbol.iterator]() {
+      steps.push("iterator");
+      let index = 0;
+      return {
+        next() {
+          index++;
+          if (index === 1) {
+            return {
+              done: false,
+              value: { toString() { steps.push("first"); return "chat"; } },
+            };
+          }
+          if (index === 2) {
+            return {
+              done: false,
+              value: { toString() { steps.push("second"); return "superchat"; } },
+            };
+          }
+          return { done: true };
+        },
+      };
+    },
+  };
+
+  const socket = new WebSocket("wss://example.test/socket", protocols);
+  assert_array_equals(steps, ["iterator", "first", "second"], "iterable conversion order");
+  assert_equals(socket.protocol, "", "protocol should be empty before the handshake selects one");
+}, "WebSocket constructor converts iterable protocols in order");
+
+test(function () {
+  assert_throws_js(TypeError, function () {
+    new WebSocket();
+  }, "missing URL should throw TypeError");
+  assert_throws_js(TypeError, function () {
+    new WebSocket(Symbol("url"));
+  }, "URL Symbol conversion should throw TypeError");
+  assert_throws_js(RangeError, function () {
+    new WebSocket({ toString() { throw new RangeError("url conversion"); } });
+  }, "URL stringification errors should propagate");
+}, "WebSocket constructor URL argument follows WebIDL USVString conversion");
+
+test(function () {
+  const nonIterable = {
+    toString() {
+      return "chat";
+    },
+  };
+  const iteratorThrowing = {};
+  Object.defineProperty(iteratorThrowing, Symbol.iterator, {
+    get() {
+      throw new RangeError("iterator lookup");
+    },
+  });
+  const elementThrowing = {
+    [Symbol.iterator]() {
+      let called = false;
+      return {
+        next() {
+          if (called) {
+            return { done: true };
+          }
+          called = true;
+          return {
+            done: false,
+            value: { toString() { throw new RangeError("protocol conversion"); } },
+          };
+        },
+      };
+    },
+  };
+
+  assert_equals(new WebSocket("wss://example.test/socket", null).protocol, "", "null protocol converts through DOMString");
+  assert_equals(new WebSocket("wss://example.test/socket", nonIterable).protocol, "", "non-iterable object protocols use DOMString conversion");
+  assert_throws_js(TypeError, function () {
+    new WebSocket("wss://example.test/socket", Symbol("protocol"));
+  }, "protocol Symbol conversion should throw TypeError");
+  assert_throws_js(RangeError, function () {
+    new WebSocket("wss://example.test/socket", iteratorThrowing);
+  }, "protocol iterator getter errors should propagate");
+  assert_throws_js(RangeError, function () {
+    new WebSocket("wss://example.test/socket", elementThrowing);
+  }, "protocol sequence element stringification errors should propagate");
+}, "WebSocket constructor protocol union follows WebIDL conversion boundaries");
+
+test(function () {
+  const absolute = new WebSocket("wss://example.test/socket");
+  const relative = new WebSocket("/relative");
+  const requestedProtocol = new WebSocket("wss://example.test/socket", "chat");
+  const extraArgument = new WebSocket("wss://example.test/socket", "echo", "stray");
+  const expectedRelativeScheme = location.protocol === "https:" ? "wss:" : "ws:";
+
+  assert_equals(absolute.url, "wss://example.test/socket", "absolute URL surface");
+  assert_equals(
+    relative.url,
+    expectedRelativeScheme + "//" + location.host + "/relative",
+    "relative URL surface",
+  );
+  assert_equals(absolute.protocol, "", "absolute socket initial protocol");
+  assert_equals(requestedProtocol.protocol, "", "requested protocol before handshake");
+  assert_equals(extraArgument.protocol, "", "extra constructor argument should be ignored");
+  assert_equals(extraArgument.url, "wss://example.test/socket", "extra argument should not affect URL");
+}, "WebSocket constructor exposes initial URL/protocol surface and ignores extra arguments");
+</script>

@@ -1,0 +1,28 @@
+disallowed-types = [
+    # Use the faster and simpler non-poisonable primitives in `parking_lot` instead.
+    { path = "std::sync::Mutex", reason = "Use parking_lot::Mutex for synchronous shared state. Use tokio::sync::Mutex only when a lock must be held across async suspension." },
+    { path = "std::sync::MutexGuard", reason = "std::sync::Mutex poisoning is not part of Moli's lock semantics; use parking_lot::MutexGuard via parking_lot::Mutex instead." },
+    { path = "std::sync::RwLock", reason = "Use parking_lot::RwLock for synchronous shared state. Use tokio::sync::RwLock only when a lock must be held across async suspension." },
+    { path = "std::sync::RwLockReadGuard", reason = "std::sync::RwLock poisoning is not part of Moli's lock semantics; use parking_lot::RwLockReadGuard via parking_lot::RwLock instead." },
+    { path = "std::sync::RwLockWriteGuard", reason = "std::sync::RwLock poisoning is not part of Moli's lock semantics; use parking_lot::RwLockWriteGuard via parking_lot::RwLock instead." },
+    { path = "std::sync::Condvar", reason = "Use parking_lot::Condvar with parking_lot locks; avoid std condition variables and poisoning semantics." },
+    { path = "std::sync::PoisonError", reason = "Moli synchronous locks intentionally do not use poisoning recovery paths; use parking_lot synchronization primitives instead." },
+]
+
+disallowed-methods = [
+    { path = "std::sync::Mutex::new", reason = "Use parking_lot::Mutex::new for synchronous shared state." },
+    { path = "std::sync::Mutex::lock", reason = "Use parking_lot::Mutex::lock; do not introduce std mutex poisoning semantics." },
+    { path = "std::sync::Mutex::try_lock", reason = "Use parking_lot::Mutex::try_lock; do not introduce std mutex poisoning semantics." },
+    { path = "std::sync::RwLock::new", reason = "Use parking_lot::RwLock::new for synchronous shared state." },
+    { path = "std::sync::RwLock::read", reason = "Use parking_lot::RwLock::read; do not introduce std rwlock poisoning semantics." },
+    { path = "std::sync::RwLock::write", reason = "Use parking_lot::RwLock::write; do not introduce std rwlock poisoning semantics." },
+    { path = "std::sync::RwLock::try_read", reason = "Use parking_lot::RwLock::try_read; do not introduce std rwlock poisoning semantics." },
+    { path = "std::sync::RwLock::try_write", reason = "Use parking_lot::RwLock::try_write; do not introduce std rwlock poisoning semantics." },
+    { path = "std::sync::Condvar::new", reason = "Use parking_lot::Condvar::new with parking_lot locks." },
+    { path = "std::sync::Condvar::wait", reason = "Use parking_lot::Condvar::wait with parking_lot locks." },
+    { path = "std::sync::Condvar::wait_timeout", reason = "Use parking_lot::Condvar::wait_for or wait_until with parking_lot locks." },
+    { path = "std::sync::Condvar::wait_while", reason = "Use parking_lot::Condvar with explicit predicate loops." },
+    { path = "std::sync::Condvar::wait_timeout_while", reason = "Use parking_lot::Condvar with explicit timed predicate loops." },
+    { path = "std::sync::Condvar::notify_one", reason = "Use parking_lot::Condvar::notify_one with parking_lot locks." },
+    { path = "std::sync::Condvar::notify_all", reason = "Use parking_lot::Condvar::notify_all with parking_lot locks." },
+]

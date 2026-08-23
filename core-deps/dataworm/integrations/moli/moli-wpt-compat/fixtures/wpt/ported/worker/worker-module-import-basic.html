@@ -1,0 +1,74 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    worker.addEventListener("message", resolve, { once: true });
+    worker.addEventListener("error", function (event) {
+      reject(new Error("Worker error: " + event.message));
+    }, { once: true });
+  });
+}
+
+promise_test(async function () {
+  const depUrl = worker_url([
+    "export const answer = 42;",
+    "export const suffix = 'dep';",
+    "export const depMetaUrl = import.meta.url;",
+    "export default 'default-value';",
+    "export function double(value) { return value * 2; }",
+    "export class Box { constructor(value) { this.value = value; } }",
+  ].join("\n"));
+  const reexportUrl = worker_url([
+    "export { answer as importedAnswer, default as importedDefault } from " + JSON.stringify(depUrl) + " with {};",
+    "export * as depNamespace from " + JSON.stringify(depUrl) + " with {};",
+  ].join("\n"));
+  const starUrl = worker_url([
+    "export * from " + JSON.stringify(depUrl) + " with {};",
+  ].join("\n"));
+  const source = [
+    "import defaultValue, { answer, suffix as renamed, depMetaUrl, double, Box } from " + JSON.stringify(depUrl) + " with {};",
+    "import * as re from " + JSON.stringify(reexportUrl) + " with {};",
+    "import { answer as starAnswer } from " + JSON.stringify(starUrl) + " with {};",
+    "var box = new Box(9);",
+    "postMessage({",
+    "  defaultValue,",
+    "  answer,",
+    "  renamed,",
+    "  doubled: double(21),",
+    "  boxValue: box.value,",
+    "  importedAnswer: re.importedAnswer,",
+    "  importedDefault: re.importedDefault,",
+    "  namespaceAnswer: re.depNamespace.answer,",
+    "  starAnswer,",
+    "  depMetaUrl,",
+    "  importScriptsType: typeof importScripts",
+    "});",
+  ].join("\n");
+  const worker = new Worker(worker_url(source), { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.defaultValue, "default-value", "default import should resolve from a data URL dependency");
+    assert_equals(message.data.answer, 42, "named import should resolve from a data URL dependency");
+    assert_equals(message.data.renamed, "dep", "renamed named import should bind the requested export");
+    assert_equals(message.data.doubled, 42, "exported function imports should remain callable");
+    assert_equals(message.data.boxValue, 9, "exported class imports should remain constructible");
+    assert_equals(message.data.importedAnswer, 42, "re-exported named binding should be visible through namespace import");
+    assert_equals(message.data.importedDefault, "default-value", "re-exported default binding should be visible through namespace import");
+    assert_equals(message.data.namespaceAnswer, 42, "export-star-as namespace should expose dependency exports");
+    assert_equals(message.data.starAnswer, 42, "export-star should forward non-default named exports");
+    assert_equals(message.data.depMetaUrl, depUrl, "import.meta.url should expose the data URL dependency URL");
+    assert_equals(message.data.importScriptsType, "function", "module workers should expose WorkerGlobalScope.importScripts");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers resolve data URL static imports and re-exports");
+</script>

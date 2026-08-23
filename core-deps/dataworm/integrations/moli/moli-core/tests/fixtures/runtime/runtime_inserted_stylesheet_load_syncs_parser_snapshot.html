@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script>
+      window.runtimeInsertedStyleSnapshotOrder = [];
+      window.runtimeInsertedStyleSnapshotSawMarker = false;
+      window.runtimeInsertedStyleSnapshotSawLate = false;
+      window.runtimeInsertedStyleSnapshotParserSawDcl = false;
+      document.addEventListener("DOMContentLoaded", () => {
+        window.runtimeInsertedStyleSnapshotOrder.push("dcl");
+        window.runtimeInsertedStyleSnapshotFinalOrder =
+          window.runtimeInsertedStyleSnapshotOrder.join(",");
+      });
+
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      // WHATWG HTML only lets parser-created style/link elements contribute to
+      // a document's script-blocking style sheet set. This link is created at
+      // runtime, so the later parser-inserted script must not wait for it.
+      //
+      // This fixture checks a narrower invariant: if the runtime stylesheet has
+      // already loaded while the parser is blocked by the parser-owned
+      // stylesheet below, the load handler's DOM mutation must be visible in
+      // the parser snapshot consumed by the later parser script. Keep the
+      // runtime stylesheet fast so the test does not depend on completion order
+      // between two equal-delay CSS requests.
+      link.href = "/assets/chrome_stylesheetlist_1.css?runtime=1";
+      link.addEventListener("load", () => {
+        const marker = document.createElement("meta");
+        marker.id = "runtime-style-loaded-marker";
+        document.head.appendChild(marker);
+        window.runtimeInsertedStyleSnapshotOrder.push("style-load");
+        window.runtimeInsertedStyleSnapshotFinalOrder =
+          window.runtimeInsertedStyleSnapshotOrder.join(",");
+      });
+      document.head.appendChild(link);
+    </script>
+    <!-- Parser-created and slow: this is the spec-defined script-blocking stylesheet. -->
+    <link rel="stylesheet" href="/assets/blocking_stylesheet_slow.css?parser=1">
+    <script>
+      window.runtimeInsertedStyleSnapshotSawMarker =
+        !!document.getElementById("runtime-style-loaded-marker");
+      window.runtimeInsertedStyleSnapshotSawLate = !!document.getElementById("late");
+      window.runtimeInsertedStyleSnapshotParserSawDcl =
+        window.runtimeInsertedStyleSnapshotOrder.includes("dcl");
+      window.runtimeInsertedStyleSnapshotOrder.push("parser");
+      window.runtimeInsertedStyleSnapshotFinalOrder =
+        window.runtimeInsertedStyleSnapshotOrder.join(",");
+    </script>
+  </head>
+  <body>
+    <div id="late">late</div>
+  </body>
+</html>

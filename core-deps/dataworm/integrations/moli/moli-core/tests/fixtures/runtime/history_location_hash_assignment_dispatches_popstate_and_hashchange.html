@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <body
+    data-order=""
+    data-popstate-state=""
+    data-history-state=""
+    data-href=""
+    data-old=""
+    data-new=""
+    data-len=""
+  >
+    <script>
+      const order = [];
+
+      window.addEventListener("popstate", (event) => {
+        order.push("popstate");
+        document.body.setAttribute(
+          "data-popstate-state",
+          String(event.state)
+        );
+        queueMicrotask(() => {
+          order.push("popstate-microtask");
+        });
+      });
+
+      window.addEventListener("hashchange", (event) => {
+        order.push("hashchange");
+        document.body.setAttribute("data-old", event.oldURL);
+        document.body.setAttribute("data-new", event.newURL);
+        queueMicrotask(() => {
+          order.push("hashchange-microtask");
+        });
+      });
+
+      location.hash = "frag";
+      order.push("after-set");
+      document.body.setAttribute("data-href", location.href);
+      document.body.setAttribute("data-history-state", String(history.state));
+      document.body.setAttribute("data-len", String(history.length));
+
+      setTimeout(() => {
+        document.body.setAttribute("data-order", order.join(","));
+      }, 0);
+    </script>
+  </body>
+</html>

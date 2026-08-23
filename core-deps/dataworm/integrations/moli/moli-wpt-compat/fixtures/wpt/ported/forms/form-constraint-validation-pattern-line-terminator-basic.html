@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function textInput(value, pattern) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.pattern = pattern;
+  document.body.appendChild(input);
+  return input;
+}
+
+test(function () {
+  const singleLine = textInput("axb", "a.b");
+  assert_false(singleLine.validity.patternMismatch, "dot should match ordinary characters");
+
+  const lineFeed = textInput("a\nb", "a.b");
+  assert_true(lineFeed.validity.patternMismatch, "dot should not match LF without the dotAll flag");
+
+  const carriageReturnLineFeed = textInput("a\r\nb", "a.b");
+  assert_true(carriageReturnLineFeed.validity.patternMismatch, "dot should not match CRLF without the dotAll flag");
+}, "patternMismatch uses JavaScript RegExp dot semantics for line terminators");
+
+test(function () {
+  const lineFeed = textInput("a\nb", "a[\\s\\S]*b");
+  assert_false(lineFeed.validity.patternMismatch, "[\\s\\S] should explicitly match across LF");
+  assert_true(lineFeed.validity.valid, "explicit cross-line pattern should keep LF values valid");
+
+  const carriageReturnLineFeed = textInput("a\r\nb", "a[\\s\\S]*b");
+  assert_false(carriageReturnLineFeed.validity.patternMismatch, "[\\s\\S] should explicitly match across CRLF");
+}, "patternMismatch can explicitly match line terminators with character classes");
+</script>

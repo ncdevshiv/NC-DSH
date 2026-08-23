@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.documentWriteSplitScriptOrder = [];
+      window.documentWriteSplitScriptResult = "initial";
+
+      document.write('<script>window.documentWriteSplitScriptOrder.push("inline-script")');
+      document.write(
+        ';window.documentWriteSplitScriptOrder.push(document.getElementById("after-split-script") ? "after-visible" : "after-missing")<\/script>'
+      );
+      document.write('<span id="after-split-script">after</span>');
+
+      window.addEventListener("load", () => {
+        window.documentWriteSplitScriptResult = [
+          window.documentWriteSplitScriptOrder.join(","),
+          document.getElementById("after-split-script") ? "after-present" : "after-missing",
+        ].join("|");
+      });
+    </script>
+  </body>
+</html>

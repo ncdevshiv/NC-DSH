@@ -1,0 +1,250 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="child" src="/compat/window-child-browsing-context-target-name-a"></iframe>
+    <script>
+      const iframe = document.getElementById("child");
+      const requestedMode = new URL(window.location.href).searchParams.get("mode");
+      const mode =
+        requestedMode === "document-pathname" ||
+        requestedMode === "search" ||
+        requestedMode === "document-search" ||
+        requestedMode === "host" ||
+        requestedMode === "document-host" ||
+        requestedMode === "hostname" ||
+        requestedMode === "document-hostname" ||
+        requestedMode === "port" ||
+        requestedMode === "document-port"
+          ? requestedMode
+          : "pathname";
+      const isHostMode = mode === "host" || mode === "document-host";
+      const isHostnameMode = mode === "hostname" || mode === "document-hostname";
+      const isPortMode = mode === "port" || mode === "document-port";
+      const targetPath = mode.includes("search") || isHostMode || isHostnameMode || isPortMode
+        ? "/compat/window-child-browsing-context-target-name-a"
+        : "/compat/window-child-browsing-context-delayed-child";
+      const targetUrl = mode.includes("search")
+        ? "/compat/window-child-browsing-context-target-name-a?via=search"
+        : targetPath;
+      const target = new URL(targetUrl, window.location.href);
+      if (isHostMode || isHostnameMode) {
+        target.hostname =
+          target.hostname === "127.0.0.1"
+            ? "localhost"
+            : target.hostname === "localhost"
+              ? "127.0.0.1"
+              : target.hostname;
+      }
+      if (isPortMode) {
+        target.port = new URL(window.location.href).searchParams.get("targetPort") ?? target.port;
+      }
+      const targetHref = target.href;
+      function readLoadedLocation(win, name) {
+        try {
+          return win.location[name];
+        } catch (error) {
+          document.body.setAttribute(
+            `data-child-location-${name}-read-error-after-load`,
+            `${error && error.name}:${error instanceof DOMException}`
+          );
+          const target = new URL(targetHref);
+          if (name === "href") {
+            return target.href;
+          }
+          if (name === "pathname") {
+            return target.pathname;
+          }
+          if (name === "search") {
+            return target.search;
+          }
+          return "";
+        }
+      }
+      let initialWindow = null;
+      let initialDocument = null;
+      let started = false;
+
+      iframe.addEventListener("load", () => {
+        const loadedDocument = iframe.contentDocument;
+        const loadedWindow = iframe.contentWindow;
+        const loadedHref = readLoadedLocation(loadedWindow, "href");
+        const canReadLoadedDocument = loadedDocument !== null;
+        if (started && (loadedDocument?.URL === targetHref || (!canReadLoadedDocument && loadedHref === targetHref))) {
+          document.body.setAttribute(
+            "data-window-same-after-load",
+            String(initialWindow === loadedWindow)
+          );
+          document.body.setAttribute(
+            "data-document-replaced-after-load",
+            canReadLoadedDocument ? String(initialDocument !== loadedDocument) : "true"
+          );
+          document.body.setAttribute(
+            "data-window-document-same-after-load",
+            canReadLoadedDocument ? String(loadedWindow.document === loadedDocument) : "false"
+          );
+          document.body.setAttribute(
+            "data-document-default-view-same-after-load",
+            canReadLoadedDocument ? String(loadedDocument.defaultView === loadedWindow) : "false"
+          );
+          document.body.setAttribute(
+            "data-default-view-document-same-after-load",
+            canReadLoadedDocument ? String(loadedDocument.defaultView.document === loadedDocument) : "false"
+          );
+          document.body.setAttribute(
+            "data-child-location-after-load",
+            loadedHref
+          );
+          document.body.setAttribute(
+            "data-child-pathname-after-load",
+            readLoadedLocation(loadedWindow, "pathname")
+          );
+          document.body.setAttribute(
+            "data-child-search-after-load",
+            readLoadedLocation(loadedWindow, "search")
+          );
+          document.body.setAttribute(
+            "data-child-document-url-after-load",
+            canReadLoadedDocument ? loadedDocument.URL : "null"
+          );
+          document.body.setAttribute(
+            "data-child-document-text-after-load",
+            canReadLoadedDocument
+              ? loadedDocument.body.getAttribute("data-child") ??
+                loadedDocument.body.textContent.trim()
+              : "null"
+          );
+          document.body.setAttribute(
+            "data-child-content-document-null-after-load",
+            String(!canReadLoadedDocument)
+          );
+          return;
+        }
+
+        if (started || loadedDocument?.body?.textContent?.trim() !== "name-a") {
+          return;
+        }
+        started = true;
+        const childWindow = iframe.contentWindow;
+        const childDocument = iframe.contentDocument;
+        const initialUrl = childWindow.location.href;
+        initialWindow = childWindow;
+        initialDocument = childDocument;
+
+        document.body.setAttribute("data-mode", mode);
+        if (mode === "document-port") {
+          childWindow.document.location.port = target.port;
+        } else if (mode === "port") {
+          childWindow.location.port = target.port;
+        } else if (mode === "document-hostname") {
+          childWindow.document.location.hostname = target.hostname;
+        } else if (mode === "hostname") {
+          childWindow.location.hostname = target.hostname;
+        } else if (mode === "document-host") {
+          childWindow.document.location.host = target.host;
+        } else if (mode === "host") {
+          childWindow.location.host = target.host;
+        } else if (mode === "document-search") {
+          childWindow.document.location.search = target.search;
+        } else if (mode === "search") {
+          childWindow.location.search = target.search;
+        } else if (mode === "document-pathname") {
+          childWindow.document.location.pathname = targetPath;
+        } else {
+          childWindow.location.pathname = targetPath;
+        }
+
+        document.body.setAttribute(
+          "data-window-same-immediate",
+          String(childWindow === iframe.contentWindow)
+        );
+        document.body.setAttribute(
+          "data-document-same-immediate",
+          String(childDocument === iframe.contentDocument)
+        );
+        document.body.setAttribute(
+          "data-window-document-same-immediate",
+          String(iframe.contentWindow.document === iframe.contentDocument)
+        );
+        document.body.setAttribute(
+          "data-document-default-view-same-immediate",
+          String(iframe.contentDocument.defaultView === iframe.contentWindow)
+        );
+        document.body.setAttribute(
+          "data-default-view-document-same-immediate",
+          String(iframe.contentDocument.defaultView.document === iframe.contentDocument)
+        );
+        document.body.setAttribute(
+          "data-child-location-immediate",
+          childWindow.location.href
+        );
+        document.body.setAttribute(
+          "data-child-pathname-immediate",
+          childWindow.location.pathname
+        );
+        document.body.setAttribute(
+          "data-child-search-immediate",
+          childWindow.location.search
+        );
+        document.body.setAttribute(
+          "data-child-document-url-immediate",
+          iframe.contentDocument.URL
+        );
+        document.body.setAttribute(
+          "data-child-document-still-committed-immediate",
+          String(iframe.contentDocument.URL === initialUrl)
+        );
+        document.body.setAttribute(
+          "data-child-location-target-immediate",
+          String(childWindow.location.href === targetHref)
+        );
+
+        queueMicrotask(() => {
+          document.body.setAttribute(
+            "data-window-same-pending-microtask",
+            String(childWindow === iframe.contentWindow)
+          );
+          document.body.setAttribute(
+            "data-document-same-pending-microtask",
+            String(childDocument === iframe.contentDocument)
+          );
+          document.body.setAttribute(
+            "data-window-document-same-pending-microtask",
+            String(iframe.contentWindow.document === iframe.contentDocument)
+          );
+          document.body.setAttribute(
+            "data-document-default-view-same-pending-microtask",
+            String(iframe.contentDocument.defaultView === iframe.contentWindow)
+          );
+          document.body.setAttribute(
+            "data-default-view-document-same-pending-microtask",
+            String(iframe.contentDocument.defaultView.document === iframe.contentDocument)
+          );
+          document.body.setAttribute(
+            "data-child-location-pending-microtask",
+            childWindow.location.href
+          );
+          document.body.setAttribute(
+            "data-child-pathname-pending-microtask",
+            childWindow.location.pathname
+          );
+          document.body.setAttribute(
+            "data-child-search-pending-microtask",
+            childWindow.location.search
+          );
+          document.body.setAttribute(
+            "data-child-document-url-pending-microtask",
+            iframe.contentDocument.URL
+          );
+          document.body.setAttribute(
+            "data-child-document-still-committed-pending-microtask",
+            String(iframe.contentDocument.URL === initialUrl)
+          );
+          document.body.setAttribute(
+            "data-child-location-target-pending-microtask",
+            String(childWindow.location.href === targetHref)
+          );
+        });
+      });
+    </script>
+  </body>
+</html>

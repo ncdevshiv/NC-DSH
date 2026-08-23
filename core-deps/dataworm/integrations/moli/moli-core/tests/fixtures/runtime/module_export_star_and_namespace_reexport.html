@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleExportStarOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleExportStarOrder.push("dcl");
+        window.moduleExportStarOrderResult = window.moduleExportStarOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import { answer, label, ns } from "/assets/module-export-star-barrel.mjs";
+      window.moduleExportStarOrder.push("module");
+      window.moduleExportStarResult =
+        `${answer}:${label}:${ns.answer}:${ns.label}:${ns.default}`;
+    </script>
+  </body>
+</html>

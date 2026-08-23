@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  let listenerFired = false;
+  let propertyFired = false;
+  let navigationType = "";
+  let tamperedDispatchCalled = false;
+
+  navigation.addEventListener("currententrychange", function (event) {
+    listenerFired = true;
+    navigationType = String(event.navigationType ?? "");
+  });
+
+  navigation.oncurrententrychange = function () {
+    propertyFired = true;
+  };
+
+  navigation.dispatchEvent = function () {
+    tamperedDispatchCalled = true;
+    throw new Error("host must not call navigation.dispatchEvent");
+  };
+
+  history.pushState({ step: 1 }, "", "#one");
+
+  assert_false(
+    tamperedDispatchCalled,
+    "host currententrychange dispatch should not go through page-tampered navigation.dispatchEvent",
+  );
+  assert_true(listenerFired, "navigation currententrychange listener should still fire");
+  assert_true(propertyFired, "navigation oncurrententrychange should still fire");
+  assert_equals(
+    navigationType,
+    "push",
+    "history.pushState should still surface navigationType=push",
+  );
+  assert_equals(location.hash, "#one", "history.pushState should still update location.hash");
+}, "currententrychange dispatch ignores a page-tampered navigation.dispatchEvent override");
+</script>

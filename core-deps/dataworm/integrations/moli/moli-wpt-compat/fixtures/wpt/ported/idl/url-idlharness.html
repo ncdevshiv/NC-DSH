@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface URL {
+  constructor(USVString url, optional USVString base);
+  static URL? parse(USVString url, optional USVString base);
+  static boolean canParse(USVString url, optional USVString base);
+  stringifier attribute USVString href;
+  readonly attribute USVString origin;
+  attribute USVString protocol;
+  attribute USVString username;
+  attribute USVString password;
+  attribute USVString host;
+  attribute USVString hostname;
+  attribute USVString port;
+  attribute USVString pathname;
+  attribute USVString search;
+  readonly attribute URLSearchParams searchParams;
+  attribute USVString hash;
+  USVString toJSON();
+};
+partial interface URL {
+  static DOMString createObjectURL(Blob blob);
+  static undefined revokeObjectURL(DOMString url);
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    URL: ["new URL('https://example.test/path?x=1')"]
+  });
+});
+
+test(function () {
+  const parsed = URL.parse("/next", "https://example.test/base/");
+  assert_true(parsed instanceof URL);
+  assert_equals(parsed.href, "https://example.test/next");
+  assert_equals(URL.parse("relative"), null);
+}, "URL.parse returns a URL object or null");
+</script>

@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body>
+    <div id="before-written">before</div>
+    <script>
+      window.documentWriteSplitExternalResult = "initial";
+      window.documentWriteExternalScriptRan = false;
+      window.documentWriteExternalSawBefore = false;
+      window.documentWriteExternalSawAfter = false;
+
+      document.write('<script src="/assets/document_write_external_parser_');
+      document.write('blocking.js"><\/script>');
+      document.write('<span id="after-written">after</span>');
+
+      window.addEventListener("load", () => {
+        window.documentWriteSplitExternalResult =
+          (window.documentWriteExternalScriptRan ? "ran" : "missed") +
+          "|" +
+          (window.documentWriteExternalSawBefore ? "before" : "no-before") +
+          "|" +
+          (window.documentWriteExternalSawAfter ? "after" : "no-after") +
+          "|" +
+          (document.getElementById("after-written") ? "after-present" : "after-missing");
+      });
+    </script>
+  </body>
+</html>

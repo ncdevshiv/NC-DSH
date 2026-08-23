@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface Request {
+  constructor(object input, optional object init = {});
+  Promise<ArrayBuffer> arrayBuffer();
+  Promise<Blob> blob();
+  Promise<Uint8Array> bytes();
+  Promise<any> json();
+  Promise<USVString> text();
+  readonly attribute boolean bodyUsed;
+  readonly attribute ByteString method;
+  readonly attribute USVString url;
+  readonly attribute Headers headers;
+  readonly attribute RequestDestination destination;
+  readonly attribute DOMString referrer;
+  readonly attribute ReferrerPolicy referrerPolicy;
+  readonly attribute RequestMode mode;
+  readonly attribute RequestCredentials credentials;
+  readonly attribute RequestCache cache;
+  readonly attribute RequestRedirect redirect;
+  readonly attribute DOMString integrity;
+  readonly attribute boolean keepalive;
+  readonly attribute AbortSignal signal;
+  readonly attribute RequestDuplex duplex;
+  readonly attribute boolean isHistoryNavigation;
+  Request clone();
+  readonly attribute ReadableStream? body;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    Request: ["new Request('https://example.test/api')"]
+  });
+});
+
+test(function () {
+  const request = new Request("https://example.test/api", {
+    method: "post",
+    body: "payload",
+    keepalive: true
+  });
+  assert_equals(request.method, "POST");
+  assert_equals(request.keepalive, true);
+  assert_equals(request.duplex, "half");
+  assert_true(request.signal instanceof AbortSignal);
+  assert_true(request.clone() instanceof Request);
+  assert_true(request.body !== null);
+  assert_false(request.bodyUsed);
+  assert_false(Object.prototype.hasOwnProperty.call(request, "text"));
+  assert_false(Object.prototype.hasOwnProperty.call(request, "json"));
+  assert_false(Object.prototype.hasOwnProperty.call(request, "arrayBuffer"));
+  assert_false(Object.prototype.hasOwnProperty.call(request, "blob"));
+  assert_false(Object.prototype.hasOwnProperty.call(request, "bytes"));
+}, "Request exposes default attributes, signal, body, and clone");
+</script>

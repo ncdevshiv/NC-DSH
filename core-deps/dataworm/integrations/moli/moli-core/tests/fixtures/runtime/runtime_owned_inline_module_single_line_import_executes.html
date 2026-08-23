@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.runtimeInlineModuleOrder = [];
+      window.runtimeInlineModuleErrors = 0;
+      window.runtimeInlineModuleOrder.push("ready:" + document.readyState);
+
+      window.addEventListener("error", () => {
+        window.runtimeInlineModuleErrors += 1;
+        window.runtimeInlineModuleOrder.push("window-error");
+      });
+
+      const script = document.createElement("script");
+      script.type = "module";
+      script.text =
+        'import { first } from "/assets/module-export-const-multiple-bindings.mjs"; window.runtimeInlineModuleOrder.push("module:" + first); queueMicrotask(() => window.runtimeInlineModuleOrder.push("module-microtask"));';
+      document.head.appendChild(script);
+      window.runtimeInlineModuleOrder.push("after-append");
+
+      document.addEventListener("DOMContentLoaded", () => {
+        window.runtimeInlineModuleOrder.push("dcl:" + document.readyState);
+      });
+
+      window.addEventListener("load", () => {
+        window.runtimeInlineModuleOrder.push("window-load:" + document.readyState);
+        window.runtimeInlineModuleFinalOrder =
+          window.runtimeInlineModuleOrder.join(",");
+      });
+    </script>
+  </head>
+  <body>
+    <main id="after">after</main>
+  </body>
+</html>

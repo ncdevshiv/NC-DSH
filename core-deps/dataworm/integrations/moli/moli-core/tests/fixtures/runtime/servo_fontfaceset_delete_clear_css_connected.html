@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      @font-face {
+        font-family: "WebFont";
+        src: url("resources/Rochester.otf") format("opentype");
+      }
+    </style>
+  </head>
+  <body
+    data-before-size=""
+    data-after-delete-size=""
+    data-after-clear-size=""
+    data-after-delete-has=""
+    data-after-clear-has=""
+  >
+    <script>
+      const body = document.body;
+      const fonts = document.fonts;
+      const connected = fonts.keys().next().value;
+
+      body.setAttribute('data-before-size', String(fonts.size));
+      fonts.delete(connected);
+      body.setAttribute('data-after-delete-size', String(fonts.size));
+      body.setAttribute('data-after-delete-has', String(fonts.has(connected)));
+
+      fonts.clear();
+      body.setAttribute('data-after-clear-size', String(fonts.size));
+      body.setAttribute('data-after-clear-has', String(fonts.has(connected)));
+    </script>
+  </body>
+</html>

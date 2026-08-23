@@ -1,0 +1,144 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function worker_fixture_url() {
+  return new URL(
+    "/wpt/ported/worker/resources/worker-fileapi-worker.js",
+    location.href,
+  ).href;
+}
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "filelist" });
+    const message = await next_message(worker);
+    assert_equals(message.data.ctorOwn, true, "worker should expose FileList");
+    assert_equals(message.data.ctorType, "function", "FileList constructor type");
+    assert_equals(message.data.ctorName, "FileList", "FileList constructor name");
+    assert_equals(message.data.tag, "[object FileList]", "FileList object brand");
+    assert_equals(message.data.instanceofFileList, true, "FileList instanceof");
+    assert_equals(message.data.length, 1, "FileList length");
+    assert_equals(message.data.firstName, "note.txt", "FileList.item(0)");
+    assert_equals(message.data.indexName, "note.txt", "FileList index getter");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose FileList");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "blob" });
+    const message = await next_message(worker);
+    assert_equals(message.data.blobCtor, "function", "worker should expose Blob");
+    assert_equals(message.data.blobTag, "[object Blob]", "Blob object brand");
+    assert_equals(message.data.size, 22, "Response.blob size");
+    assert_equals(
+      message.data.type,
+      "text/plain;charset=utf-8",
+      "Response.blob type",
+    );
+    assert_equals(message.data.text, "hello from worker blob", "Blob.text()");
+    assert_equals(
+      message.data.blobUrlPrefix,
+      true,
+      "worker blob URLs should retain the worker origin",
+    );
+    assert_equals(
+      message.data.imported,
+      true,
+      "blob URL importScripts should execute inside the worker",
+    );
+    assert_equals(
+      message.data.objectUrlType,
+      "function",
+      "blob URL importScripts should keep URL.createObjectURL available",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose Blob and blob URL importScripts");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "file-reader" });
+    const message = await next_message(worker);
+    assert_equals(message.data.fileCtor, "function", "worker should expose File");
+    assert_equals(message.data.readerCtor, "function", "worker should expose FileReader");
+    assert_equals(message.data.fileTag, "[object File]", "File object brand");
+    assert_equals(message.data.fileInstanceofBlob, true, "File should extend Blob");
+    assert_equals(
+      message.data.readerInstanceofEventTarget,
+      true,
+      "FileReader should extend EventTarget",
+    );
+    assert_equals(message.data.fileName, "note.txt", "File.name");
+    assert_equals(message.data.fileLastModified, 123, "File.lastModified");
+    assert_equals(message.data.fileType, "text/plain", "File.type");
+    assert_equals(message.data.fileText, "hello worker file", "File.text()");
+    assert_array_equals(message.data.constants, [0, 1, 2], "FileReader constants");
+    assert_array_equals(
+      message.data.events,
+      [
+        "before:0",
+        "after:1:true",
+        "loadstart",
+        "progress",
+        "load:hello worker file",
+        "loadend:2",
+      ],
+      "FileReader should read files asynchronously inside the worker",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose File and FileReader");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "file-reader-abort" });
+    const message = await next_message(worker);
+    assert_equals(message.data.readerReadyState, 2, "aborted FileReader readyState");
+    assert_equals(message.data.resultIsNull, true, "aborted FileReader result");
+    assert_array_equals(
+      message.data.events,
+      ["abort", "loadend"],
+      "FileReader.abort() should suppress later load from the pending queue",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers suppress late FileReader load after abort");
+</script>

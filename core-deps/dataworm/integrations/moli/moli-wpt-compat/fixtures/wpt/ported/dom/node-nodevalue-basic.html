@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_character_data_node_value(factory, label) {
+  test(function () {
+    const node = factory("initial");
+
+    assert_equals(node.nodeValue, "initial");
+    assert_equals(node.data, "initial");
+
+    node.nodeValue = "changed";
+    assert_equals(node.nodeValue, "changed");
+    assert_equals(node.data, "changed");
+
+    node.nodeValue = null;
+    assert_equals(node.nodeValue, "");
+    assert_equals(node.data, "");
+  }, label + ".nodeValue reflects and updates data");
+}
+
+assert_character_data_node_value((data) => document.createTextNode(data), "Text");
+assert_character_data_node_value((data) => document.createComment(data), "Comment");
+assert_character_data_node_value(
+  (data) => document.createProcessingInstruction("pi", data),
+  "ProcessingInstruction"
+);
+
+test(function () {
+  const element = document.createElement("a");
+  assert_equals(element.nodeValue, null);
+  element.nodeValue = "ignored";
+  assert_equals(element.nodeValue, null);
+}, "Element.nodeValue is null and setting it is a no-op");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  assert_equals(fragment.nodeValue, null);
+  fragment.nodeValue = "ignored";
+  assert_equals(fragment.nodeValue, null);
+}, "DocumentFragment.nodeValue is null and setting it is a no-op");
+
+test(function () {
+  assert_equals(document.nodeValue, null);
+  document.nodeValue = "ignored";
+  assert_equals(document.nodeValue, null);
+}, "Document.nodeValue is null and setting it is a no-op");
+
+test(function () {
+  const attr = document.createAttribute("data-kind");
+
+  attr.value = "first";
+  assert_equals(attr.nodeValue, "first");
+  assert_equals(attr.textContent, "first");
+
+  attr.nodeValue = "second";
+  assert_equals(attr.value, "second");
+  assert_equals(attr.textContent, "second");
+}, "Attr.nodeValue reflects value and textContent");
+</script>

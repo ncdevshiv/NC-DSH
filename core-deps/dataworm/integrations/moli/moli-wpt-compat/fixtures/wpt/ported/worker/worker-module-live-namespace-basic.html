@@ -1,0 +1,97 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve) {
+    worker.addEventListener("message", resolve, { once: true });
+  });
+}
+
+function assert_live_namespace_payload(data, label) {
+  assert_equals(data.depDescriptorValue, 1, label + ": namespace descriptor should expose the initial value");
+  assert_equals(data.forwardedDescriptorValue, 1, label + ": re-exported namespace descriptor should expose the initial value");
+  assert_true(data.depDescriptorEnumerable, label + ": namespace export should be enumerable");
+  assert_true(data.forwardedDescriptorEnumerable, label + ": re-exported namespace export should be enumerable");
+  assert_false(data.depDescriptorConfigurable, label + ": namespace export should not be configurable");
+  assert_false(data.forwardedDescriptorConfigurable, label + ": re-exported namespace export should not be configurable");
+  assert_equals(data.before, 1, label + ": initial namespace value should be visible");
+  assert_equals(data.bumpReturn, 2, label + ": exported mutator should return the updated value");
+  assert_equals(data.afterBump, 2, label + ": namespace read should observe mutation after bump()");
+  assert_equals(data.forwardedAfterSet, 9, label + ": re-export getter should observe setCounter()");
+  assert_equals(data.forwardedBumpReturn, 10, label + ": re-exported function should mutate the original module state");
+  assert_equals(data.afterForwardedBump, 10, label + ": original namespace should observe mutation through re-export");
+  assert_equals(data.importScriptsType, "function", label + ": module workers should expose WorkerGlobalScope.importScripts");
+}
+
+function module_source(depUrl, reexportUrl) {
+  return [
+    "import * as dep from " + JSON.stringify(depUrl) + ";",
+    "import * as forwarded from " + JSON.stringify(reexportUrl) + ";",
+    "const depDescriptor = Object.getOwnPropertyDescriptor(dep, 'counter');",
+    "const forwardedDescriptor = Object.getOwnPropertyDescriptor(forwarded, 'counter');",
+    "const before = dep.counter;",
+    "const bumpReturn = dep.bump();",
+    "const afterBump = dep.counter;",
+    "dep.setCounter(9);",
+    "const forwardedAfterSet = forwarded.counter;",
+    "const forwardedBumpReturn = forwarded.bump();",
+    "const afterForwardedBump = dep.counter;",
+    "postMessage({",
+    "  depDescriptorValue: depDescriptor.value,",
+    "  forwardedDescriptorValue: forwardedDescriptor.value,",
+    "  depDescriptorEnumerable: depDescriptor.enumerable,",
+    "  forwardedDescriptorEnumerable: forwardedDescriptor.enumerable,",
+    "  depDescriptorConfigurable: depDescriptor.configurable,",
+    "  forwardedDescriptorConfigurable: forwardedDescriptor.configurable,",
+    "  before,",
+    "  bumpReturn,",
+    "  afterBump,",
+    "  forwardedAfterSet,",
+    "  forwardedBumpReturn,",
+    "  afterForwardedBump,",
+    "  importScriptsType: typeof importScripts",
+    "});",
+  ].join("\n");
+}
+
+promise_test(async function () {
+  const depUrl = worker_url([
+    "export let counter = 1;",
+    "export function bump() { counter += 1; return counter; }",
+    "export function setCounter(value) { counter = value; }",
+  ].join("\n"));
+  const reexportUrl = worker_url([
+    "export { counter, bump, setCounter } from " + JSON.stringify(depUrl) + ";",
+  ].join("\n"));
+  const worker = new Worker(worker_url(module_source(depUrl, reexportUrl)), { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_live_namespace_payload(message.data, "data URL dependency");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module worker namespace imports expose live getter-backed data URL exports");
+
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-live-main.js",
+    location.href
+  ).href;
+  const worker = new Worker(workerUrl, { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_live_namespace_payload(message.data, "HTTP dependency");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module worker namespace imports expose live getter-backed HTTP exports");
+</script>

@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <body data-initial="" data-manual="" data-invalid="" data-auto="">
+    <script>
+      document.body.setAttribute("data-initial", String(history.scrollRestoration));
+      history.scrollRestoration = "manual";
+      document.body.setAttribute("data-manual", String(history.scrollRestoration));
+      history.scrollRestoration = "bogus";
+      document.body.setAttribute("data-invalid", String(history.scrollRestoration));
+      history.scrollRestoration = "auto";
+      document.body.setAttribute("data-auto", String(history.scrollRestoration));
+    </script>
+  </body>
+</html>

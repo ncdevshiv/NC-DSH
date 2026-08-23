@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+  <body
+    data-push-state-value=""
+    data-push-state-distinct=""
+    data-popstate-value=""
+    data-replace-state-value=""
+    data-replace-state-distinct=""
+    data-dataclone-threw=""
+    data-dataclone-name=""
+    data-history-length=""
+  >
+    <script>
+      const pushed = { nested: { value: 1 } };
+      history.pushState(pushed, "", "#push");
+      pushed.nested.value = 2;
+      document.body.setAttribute(
+        "data-push-state-value",
+        String(history.state?.nested?.value ?? "null")
+      );
+      document.body.setAttribute(
+        "data-push-state-distinct",
+        String(history.state !== pushed)
+      );
+
+      window.addEventListener(
+        "popstate",
+        (event) => {
+          document.body.setAttribute(
+            "data-popstate-value",
+            String(event.state?.nested?.value ?? "null")
+          );
+        },
+        { once: true }
+      );
+
+      history.pushState(null, "", "#after-push");
+      history.back();
+
+      const replaced = { nested: { value: 3 } };
+      history.replaceState(replaced, "", "#replace");
+      replaced.nested.value = 4;
+      document.body.setAttribute(
+        "data-replace-state-value",
+        String(history.state?.nested?.value ?? "null")
+      );
+      document.body.setAttribute(
+        "data-replace-state-distinct",
+        String(history.state !== replaced)
+      );
+
+      try {
+        history.pushState({ fn() {} }, "", "#bad");
+        document.body.setAttribute("data-dataclone-threw", "false");
+      } catch (error) {
+        document.body.setAttribute("data-dataclone-threw", "true");
+        document.body.setAttribute(
+          "data-dataclone-name",
+          String(error?.name ?? error?.message ?? "")
+        );
+      }
+
+      document.body.setAttribute("data-history-length", String(history.length));
+    </script>
+  </body>
+</html>

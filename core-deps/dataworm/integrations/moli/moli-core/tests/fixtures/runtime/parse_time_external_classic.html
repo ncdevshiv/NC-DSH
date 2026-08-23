@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="/assets/parse_time_classic.js"></script>
+  </head>
+  <body>
+    <div id="late">late</div>
+    <script>
+      document.documentElement.setAttribute(
+        "data-external-trace",
+        window.parseTimeExternal || "missing"
+      );
+    </script>
+  </body>
+</html>

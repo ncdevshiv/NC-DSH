@@ -1,0 +1,261 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/runtime/fixture-server-config.js"></script>
+<script>
+let uniqueNameCounter = 0;
+
+function alternate_url(path) {
+  return location.protocol + "//" + location.hostname + ":" + __lmFixtureServerConfig.alternatePort + path;
+}
+
+function unique_name(prefix) {
+  uniqueNameCounter++;
+  return prefix + "-" + Date.now() + "-" + uniqueNameCounter;
+}
+
+function next_worker_message(worker, label) {
+  return new Promise(function (resolve, reject) {
+    worker.onerror = function (event) {
+      reject(new Error(label + ": " + String(event.message || "SharedWorker error")));
+    };
+    worker.port.addEventListener("message", resolve, { once: true });
+    worker.port.start();
+  });
+}
+
+async function set_script_cookie() {
+  const response = await fetch(
+    "/wpt/runtime/sharedworker/script-fetch-policy/set-cookie",
+    { credentials: "same-origin" },
+  );
+  assert_true(response.ok, "script credential cookie setup should succeed");
+}
+
+function load_frame(url) {
+  return new Promise(function (resolve) {
+    const iframe = document.createElement("iframe");
+    iframe.onload = function () {
+      iframe.remove();
+      resolve();
+    };
+    iframe.src = url;
+    (document.body || document.documentElement).appendChild(iframe);
+  });
+}
+
+async function set_script_cookies() {
+  await load_frame(
+    alternate_url("/wpt/runtime/sharedworker/script-fetch-policy/set-remote-cookie"),
+  );
+  await set_script_cookie();
+}
+
+function import_main_url(testCase) {
+  const params = new URLSearchParams({
+    kind: testCase.importKind,
+    dependencyOrigin: testCase.dependencyOrigin,
+  });
+  if (testCase.dependencyOrigin === "remote") {
+    params.set(
+      "dependencyUrl",
+      alternate_url("/wpt/runtime/sharedworker/script-fetch-policy/report-import-cookie-remote-dependency.js"),
+    );
+  }
+  return "/wpt/runtime/sharedworker/script-fetch-policy/report-import-cookie-main.js?" + params;
+}
+
+promise_test(async function () {
+  await set_script_cookie();
+
+  const cases = [
+    {
+      label: "module default",
+      options: { type: "module" },
+      expectedCookie: "seen",
+    },
+    {
+      label: "module omit",
+      options: { type: "module", credentials: "omit" },
+      expectedCookie: "missing",
+    },
+    {
+      label: "module same-origin",
+      options: { type: "module", credentials: "same-origin" },
+      expectedCookie: "seen",
+    },
+    {
+      label: "module include",
+      options: { type: "module", credentials: "include" },
+      expectedCookie: "seen",
+    },
+    {
+      label: "classic omit",
+      options: { type: "classic", credentials: "omit" },
+      expectedCookie: "seen",
+    },
+  ];
+
+  for (const testCase of cases) {
+    const worker = new SharedWorker(
+      "/wpt/runtime/sharedworker/script-fetch-policy/report-cookie.js",
+      Object.assign({}, testCase.options, {
+        name: unique_name("script-fetch-policy-" + testCase.label),
+      }),
+    );
+    const message = (await next_worker_message(worker, testCase.label)).data;
+    assert_equals(
+      message.cookie,
+      testCase.expectedCookie,
+      testCase.label,
+    );
+  }
+}, "SharedWorker top-level script fetch applies WorkerOptions credentials");
+
+promise_test(async function () {
+  await set_script_cookies();
+  const sameOriginDependencyCheck = await fetch(
+    "/wpt/runtime/sharedworker/script-fetch-policy/report-import-cookie-dependency.js",
+    { credentials: "same-origin" },
+  );
+  assert_true(
+    (await sameOriginDependencyCheck.text()).includes('"seen"'),
+    "same-origin dependency setup should expose the cookie to fetch",
+  );
+  const remoteDependencyCheck = await fetch(
+    alternate_url("/wpt/runtime/sharedworker/script-fetch-policy/report-import-cookie-remote-dependency.js"),
+    { credentials: "include" },
+  );
+  assert_true(
+    (await remoteDependencyCheck.text()).includes('"seen"'),
+    "remote dependency setup should expose the cookie to fetch include",
+  );
+
+  const cases = [
+    {
+      label: "module default static same-origin",
+      options: { type: "module" },
+      importKind: "static",
+      dependencyOrigin: "same",
+      expectedCookie: "seen",
+    },
+    {
+      label: "module omit static same-origin",
+      options: { type: "module", credentials: "omit" },
+      importKind: "static",
+      dependencyOrigin: "same",
+      expectedCookie: "missing",
+    },
+    {
+      label: "module include static remote",
+      options: { type: "module", credentials: "include" },
+      importKind: "static",
+      dependencyOrigin: "remote",
+      expectedCookie: "seen",
+    },
+    {
+      label: "module same-origin static remote",
+      options: { type: "module", credentials: "same-origin" },
+      importKind: "static",
+      dependencyOrigin: "remote",
+      expectedCookie: "missing",
+    },
+    {
+      label: "module omit dynamic same-origin",
+      options: { type: "module", credentials: "omit" },
+      importKind: "dynamic",
+      dependencyOrigin: "same",
+      expectedCookie: "missing",
+    },
+    {
+      label: "module include dynamic remote",
+      options: { type: "module", credentials: "include" },
+      importKind: "dynamic",
+      dependencyOrigin: "remote",
+      expectedCookie: "seen",
+    },
+  ];
+
+  for (const testCase of cases) {
+    const worker = new SharedWorker(
+      import_main_url(testCase),
+      Object.assign({}, testCase.options, {
+        name: unique_name("script-import-policy-" + testCase.label),
+      }),
+    );
+    const message = (await next_worker_message(worker, testCase.label)).data;
+    assert_equals(
+      message.cookie,
+      testCase.expectedCookie,
+      testCase.label,
+    );
+  }
+}, "Module SharedWorker descendant imports apply WorkerOptions credentials");
+
+promise_test(async function () {
+  const worker = new SharedWorker(
+    "/wpt/runtime/sharedworker/script-fetch-policy/referrer-policy-main.js",
+    {
+      name: unique_name("script-response-referrer-policy"),
+      type: "module",
+    },
+  );
+  const message = (await next_worker_message(worker, "response referrer policy")).data;
+  assert_equals(
+    message.dependencyReferer,
+    "",
+    "module dependency fetch should inherit the SharedWorker script response referrer policy",
+  );
+}, "Module SharedWorker descendant imports use the top-level response Referrer-Policy");
+
+promise_test(async function () {
+  const worker = new SharedWorker(
+    "/wpt/runtime/sharedworker/script-fetch-policy/cross-origin-redirect-start.js",
+    unique_name("cross-origin-redirect"),
+  );
+  const outcome = await new Promise(function (resolve) {
+    worker.onerror = function (event) {
+      resolve({ type: "error", message: event.message });
+    };
+    worker.port.onmessage = function (event) {
+      resolve({ type: "message", data: event.data });
+    };
+    worker.port.start();
+  });
+
+  assert_equals(
+    outcome.type,
+    "error",
+    "cross-origin redirected SharedWorker script must not execute",
+  );
+}, "SharedWorker top-level script fetch rejects cross-origin redirect final URL");
+
+promise_test(async function () {
+  const meta = document.createElement("meta");
+  meta.setAttribute("http-equiv", "Content-Security-Policy");
+  meta.setAttribute("content", "worker-src 'none'; script-src 'unsafe-inline' 'self'");
+  document.head.appendChild(meta);
+
+  const worker = new SharedWorker(
+    "/wpt/runtime/sharedworker/script-fetch-policy/report-cookie.js",
+    unique_name("constructor-csp-worker-src-none"),
+  );
+  const outcome = await new Promise(function (resolve) {
+    worker.onerror = function (event) {
+      resolve({ type: "error", message: event.message });
+    };
+    worker.port.onmessage = function (event) {
+      resolve({ type: "message", data: event.data });
+    };
+    worker.port.start();
+  });
+
+  assert_equals(
+    outcome.type,
+    "error",
+    "document worker-src CSP must block the SharedWorker script before it executes",
+  );
+}, "SharedWorker top-level script fetch obeys document worker-src CSP");
+</script>

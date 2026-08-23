@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/runtime/fixture-server-config.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function alternate_url(path) {
+  return location.protocol + "//" + location.hostname + ":" + __lmFixtureServerConfig.alternatePort + path;
+}
+
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-importscripts-network-error-worker.js",
+    location.href,
+  ).href;
+  const directUrl = alternate_url("/wpt/runtime/worker/importscripts/cross-origin-target.js");
+  const redirectUrl = new URL(
+    "/wpt/runtime/worker/importscripts/redirect-to-cross-origin.js",
+    location.href,
+  ).href;
+  const worker = new Worker(workerUrl);
+
+  try {
+    worker.postMessage([directUrl, redirectUrl]);
+    const message = await next_message(worker);
+    const directResult = message.data[0];
+    const redirectResult = message.data[1];
+
+    assert_equals(
+      directResult.name,
+      "NetworkError",
+      "direct cross-origin importScripts should throw NetworkError",
+    );
+    assert_true(
+      directResult.domException,
+      "direct cross-origin importScripts should throw a DOMException",
+    );
+    assert_false(
+      directResult.loaded,
+      "direct cross-origin importScripts should not execute the target script",
+    );
+
+    assert_equals(
+      redirectResult.name,
+      "NetworkError",
+      "redirected cross-origin importScripts should throw NetworkError",
+    );
+    assert_true(
+      redirectResult.domException,
+      "redirected cross-origin importScripts should throw a DOMException",
+    );
+    assert_false(
+      redirectResult.loaded,
+      "redirected cross-origin importScripts should not execute the target script",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers reject cross-origin importScripts loads, including redirected targets");
+</script>

@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error && error.name, expectedName);
+    return;
+  }
+  assert_true(false, "Expected " + expectedName);
+}
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttribute("x", "plain");
+  el.setAttributeNS("urn:first", "x", "first");
+  el.setAttributeNS("urn:second", "x", "second");
+
+  assert_equals(el.attributes.getNamedItemNS(null, "x").value, "plain");
+  assert_equals(el.attributes.getNamedItemNS("", "x").value, "plain");
+  assert_equals(el.attributes.getNamedItemNS("urn:first", "x").value, "first");
+  assert_equals(el.attributes.getNamedItemNS("urn:second", "x").value, "second");
+  assert_equals(el.attributes.getNamedItemNS("urn:missing", "x"), null);
+}, "NamedNodeMap.getNamedItemNS matches by namespace and localName");
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttribute("x", "plain");
+  el.setAttributeNS("urn:first", "x", "first");
+  el.setAttributeNS("urn:second", "x", "second");
+
+  const removed = el.attributes.removeNamedItemNS("urn:first", "x");
+  assert_true(removed instanceof Attr);
+  assert_equals(removed.name, "x");
+  assert_equals(removed.namespaceURI, "urn:first");
+  assert_equals(removed.value, "first");
+  assert_equals(removed.ownerElement, null);
+
+  assert_equals(el.getAttribute("x"), "plain");
+  assert_equals(el.getAttributeNS("urn:first", "x"), null);
+  assert_equals(el.getAttributeNS("urn:second", "x"), "second");
+  assert_equals(el.attributes.length, 2);
+}, "NamedNodeMap.removeNamedItemNS removes only the matching namespace/localName slot");
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttributeNS("urn:first", "x", "first");
+
+  assert_throws_name("NotFoundError", function () {
+    el.attributes.removeNamedItemNS("urn:missing", "x");
+  });
+  assert_equals(el.getAttributeNS("urn:first", "x"), "first");
+}, "NamedNodeMap.removeNamedItemNS throws when the namespace/localName slot is absent");
+</script>

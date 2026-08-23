@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<script>
+const STORAGE_PREFIX = "__lm_wpt_form_top_level_target_keywords_basic__";
+const params = new URLSearchParams(location.search);
+const targetKeyword = params.get("target") ?? "";
+
+function key(suffix) {
+  return STORAGE_PREFIX + suffix;
+}
+
+const order = sessionStorage.getItem(key("order"));
+sessionStorage.setItem(key("order"), order ? order + "|" + targetKeyword : targetKeyword);
+sessionStorage.setItem(key("arrival:" + targetKeyword), location.href);
+sessionStorage.setItem(
+  key("queryTarget:" + targetKeyword),
+  new URLSearchParams(location.search).get("target") ?? "",
+);
+
+location.replace(
+  targetKeyword === "_top"
+    ? "../form-top-level-target-keywords-basic.html?target=_parent"
+    : "form-top-level-target-keywords-report.html",
+);
+</script>

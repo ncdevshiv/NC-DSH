@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_bytes_equal(actual, expected, description) {
+  assert_equals(actual.length, expected.length, description + " length");
+  for (let i = 0; i < expected.length; i++) {
+    assert_equals(actual[i], expected[i], description + " byte " + i);
+  }
+}
+
+promise_test(async function () {
+  const expected = [0x00, 0xff, 0x41, 0x80, 0x0a, 0x0d];
+  const response = await fetch("/wpt/runtime/fetch/binary-response");
+  const clone = response.clone();
+
+  assert_equals(response.status, 200, "binary response status");
+  assert_equals(
+    response.headers.get("content-type"),
+    "application/octet-stream",
+    "binary response MIME type",
+  );
+  assert_false(response.bodyUsed, "network response starts unused");
+  assert_bytes_equal(
+    new Uint8Array(await response.arrayBuffer()),
+    expected,
+    "Response.arrayBuffer() should preserve network response bytes",
+  );
+  assert_true(response.bodyUsed, "arrayBuffer() consumes the network response");
+
+  const blob = await clone.blob();
+  assert_equals(blob.type, "application/octet-stream", "Response.blob() inherits MIME type");
+  assert_bytes_equal(
+    new Uint8Array(await blob.arrayBuffer()),
+    expected,
+    "Response.blob() should preserve network response bytes",
+  );
+}, "fetch() preserves non-UTF-8 network response body bytes");
+</script>

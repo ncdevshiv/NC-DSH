@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function load_xhr(url) {
+  return new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      resolve(xhr);
+    };
+    xhr.open("GET", url);
+    xhr.send();
+  });
+}
+
+promise_test(async function () {
+  await load_xhr("/wpt/runtime/cookies/http-set");
+  const xhr = await load_xhr("/wpt/runtime/cookies/http-check");
+
+  assert_equals(xhr.status, 200, "http-check status");
+  assert_equals(xhr.responseText, "http-cookie=seen", "XHR should carry the HttpOnly cookie on later requests");
+  assert_false(
+    document.cookie.indexOf("wpt_http_cookie=fixture") !== -1,
+    "HttpOnly cookies set through XHR responses should stay hidden from document.cookie",
+  );
+}, "XMLHttpRequest reuses same-origin HttpOnly cookies across later requests");
+
+promise_test(async function () {
+  const xhr = await load_xhr("/wpt/runtime/cookies/redirect-chain/start");
+  const expectedUrl = new URL("/wpt/runtime/cookies/redirect-chain/final", location.href).href;
+
+  assert_equals(xhr.status, 200, "redirect-chain final status");
+  assert_equals(xhr.responseURL, expectedUrl, "responseURL should point at the redirect-chain final URL");
+  assert_equals(xhr.responseText, "cookie-chain=ok", "XHR redirect chain should carry and replace cookies");
+}, "XMLHttpRequest carries cookies across redirect chains");
+</script>

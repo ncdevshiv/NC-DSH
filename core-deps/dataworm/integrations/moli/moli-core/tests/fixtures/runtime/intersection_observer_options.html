@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<body>
+  <div id="root"></div>
+  <script>
+    const root = document.getElementById('root');
+    const observer = new IntersectionObserver(() => {}, {
+      root,
+      rootMargin: '10px 20px',
+      threshold: [0.75, 0.25, 0.75],
+    });
+
+    window.intersectionObserverRootMatches = observer.root === root;
+    window.intersectionObserverRootMargin = observer.rootMargin;
+    window.intersectionObserverThresholds = JSON.stringify(Array.from(observer.thresholds));
+
+    const entry = new IntersectionObserverEntry({
+      time: 12,
+      rootBounds: null,
+      boundingClientRect: { x: 0, y: 0, width: 10, height: 20 },
+      intersectionRect: { x: 0, y: 0, width: 5, height: 10 },
+      isIntersecting: true,
+      isVisible: false,
+      intersectionRatio: 0.5,
+      target: root,
+    });
+    window.intersectionObserverEntryPrototypeShape = JSON.stringify({
+      time: 'time' in IntersectionObserverEntry.prototype,
+      rootBounds: 'rootBounds' in IntersectionObserverEntry.prototype,
+      boundingClientRect: 'boundingClientRect' in IntersectionObserverEntry.prototype,
+      intersectionRect: 'intersectionRect' in IntersectionObserverEntry.prototype,
+      isIntersecting: 'isIntersecting' in IntersectionObserverEntry.prototype,
+      isVisible: 'isVisible' in IntersectionObserverEntry.prototype,
+      intersectionRatio: 'intersectionRatio' in IntersectionObserverEntry.prototype,
+      target: 'target' in IntersectionObserverEntry.prototype,
+      getter: typeof Object.getOwnPropertyDescriptor(
+        IntersectionObserverEntry.prototype,
+        'intersectionRatio'
+      ).get,
+      value: entry.intersectionRatio,
+    });
+  </script>
+</body>
+</html>

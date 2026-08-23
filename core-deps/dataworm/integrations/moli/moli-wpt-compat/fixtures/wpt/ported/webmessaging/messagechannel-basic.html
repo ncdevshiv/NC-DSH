@@ -1,0 +1,121 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const channel = new MessageChannel();
+  const payload = { greeting: "hello" };
+
+  assert_true(channel instanceof MessageChannel);
+  assert_true(channel.port1 instanceof MessagePort);
+  assert_true(channel.port2 instanceof MessagePort);
+  assert_false(channel.port1 === channel.port2);
+
+  const received = new Promise(function (resolve) {
+    channel.port2.onmessage = function (event) {
+      resolve(event);
+    };
+  });
+
+  channel.port2.start();
+  channel.port1.postMessage(payload);
+
+  const event = await received;
+  assert_true(event instanceof Event, "message dispatch should use an Event subclass");
+  assert_true(event instanceof MessageEvent, "message dispatch should use MessageEvent");
+  assert_equals(event.type, "message", "event type");
+  assert_equals(event.data.greeting, "hello", "event data should preserve cloned object fields");
+  assert_false(event.data === payload, "event data should be structured-cloned");
+  assert_equals(event.origin, "", "MessagePort delivery should use the empty origin default");
+  assert_equals(event.lastEventId, "", "MessagePort delivery should use the empty lastEventId default");
+  assert_equals(event.source, null, "MessagePort delivery should not expose a Window source");
+  assert_equals(event.ports.length, 0, "messages without transferred ports should expose an empty ports array");
+  assert_equals(event.ports, event.ports, "ports should be a stable value on the event");
+}, "MessageChannel dispatches MessageEvent objects between entangled ports");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  const messages = [];
+  const complete = new Promise(function (resolve) {
+    channel.port2.addEventListener("message", function (event) {
+      messages.push(event.data);
+      if (event.data === "third") {
+        resolve();
+      }
+    });
+  });
+
+  channel.port2.start();
+  channel.port1.postMessage("first");
+  channel.port1.postMessage("second");
+  channel.port1.postMessage("third");
+
+  await complete;
+
+  assert_array_equals(messages, ["first", "second", "third"]);
+}, "MessagePort message listeners receive ordered messages after start");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  const received = new Promise(function (resolve) {
+    channel.port2.onmessage = function (event) {
+      event.initEvent("mutated", true, true);
+      resolve(event);
+    };
+  });
+
+  channel.port2.start();
+  channel.port1.postMessage("payload");
+
+  const event = await received;
+  assert_equals(event.type, "message", "initEvent should not mutate type during dispatch");
+  assert_false(event.bubbles, "initEvent should not mutate bubbles during dispatch");
+  assert_false(event.cancelable, "initEvent should not mutate cancelable during dispatch");
+}, "MessagePort message dispatch suppresses initEvent mutation while dispatching");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  const delivered = [];
+  const complete = new Promise(function (resolve) {
+    channel.port1.onmessage = function (event) {
+      delivered.push("port1:" + event.data);
+      if (delivered.length === 2) {
+        resolve();
+      }
+    };
+    channel.port2.onmessage = function (event) {
+      delivered.push("port2:" + event.data);
+      if (delivered.length === 2) {
+        resolve();
+      }
+    };
+  });
+
+  channel.port1.start();
+  channel.port2.start();
+  channel.port1.postMessage("to-port2");
+  channel.port2.postMessage("to-port1");
+
+  await complete;
+
+  assert_array_equals(delivered.sort(), ["port1:to-port1", "port2:to-port2"]);
+}, "MessageChannel ports can send messages in both directions");
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  let delivered = false;
+
+  channel.port2.onmessage = function () {
+    delivered = true;
+  };
+  channel.port2.start();
+  channel.port2.close();
+  channel.port1.postMessage("after-close");
+
+  await Promise.resolve();
+
+  assert_false(delivered);
+}, "MessagePort.close prevents future delivery");
+</script>

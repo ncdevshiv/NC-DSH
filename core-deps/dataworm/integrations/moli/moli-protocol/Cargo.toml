@@ -1,0 +1,61 @@
+[package]
+license.workspace = true
+name = "moli-protocol"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[features]
+test-support = []
+
+[dependencies]
+anyhow = "1.0.100"
+axum = { version = "0.8.6", features = ["ws"] }
+base64 = "0.22"
+indexmap = "2.6"
+moli-bounded-buffer = { path = "../moli-bounded-buffer" }
+moli-core = { path = "../moli-core" }
+moli-page-types = { path = "../moli-page-types" }
+moli-browser-profile = { path = "../moli-browser-profile" }
+moli-cookie-jar = { path = "../moli-cookie-jar" }
+moli-encoding = { path = "../moli-encoding" }
+moli-protocol-cdp = { path = "../moli-protocol-cdp" }
+moli-fetch = { path = "../moli-fetch" }
+moli-css-parse = { path = "../moli-css-parse" }
+moli-shared-worker = { path = "../moli-shared-worker" }
+moli-site = { path = "../moli-site" }
+moli-storage-key = { path = "../moli-storage-key" }
+moli-trace = { path = "../moli-trace" }
+moli-url = { path = "../moli-url" }
+moli-url-policy = { path = "../moli-url-policy" }
+moli-v8-platform = { path = "../moli-v8-platform" }
+moli-web-mime = { path = "../moli-web-mime" }
+parking_lot = "0.12"
+percent-encoding = "2.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+serde_path_to_error = "0.1"
+strum = { version = "0.28.0", features = ["derive"] }
+tokio = { version = "1.51.0", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync"] }
+tracing = "0.1.41"
+url = "2.5.7"
+v8 = "146.8.0"
+time = "0.3"
+chromiumoxide_cdp = "0.9.1"
+data-url = "0.3.2"
+content_disposition = "0.4.0"
+moli-crypto = { path = "../moli-crypto" }
+http = "1"
+sanitize-filename = "=0.6.0"
+
+[dev-dependencies]
+moli-cookie-jar = { path = "../moli-cookie-jar", features = ["test-support"] }
+moli-image = { path = "../moli-image" }
+moli-storage-service = { path = "../moli-storage-service" }
+moli-v8-init = { path = "../moli-v8-init" }
+
+[build-dependencies]
+vergen-gitcl = "10.0.2"
+
+[lints]
+workspace = true

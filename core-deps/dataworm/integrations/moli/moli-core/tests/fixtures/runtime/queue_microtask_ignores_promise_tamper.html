@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <body
+    data-promise-resolve-tampered="yes"
+    data-promise-resolve-used="no"
+    data-queue-microtask-fired="no"
+  >
+    <script>
+      Promise.resolve = () => {
+        document.body.setAttribute("data-promise-resolve-used", "yes");
+        throw new Error("window.queueMicrotask must not use Promise.resolve");
+      };
+
+      window.queueMicrotask(() => {
+        document.body.setAttribute("data-queue-microtask-fired", "yes");
+      });
+    </script>
+  </body>
+</html>

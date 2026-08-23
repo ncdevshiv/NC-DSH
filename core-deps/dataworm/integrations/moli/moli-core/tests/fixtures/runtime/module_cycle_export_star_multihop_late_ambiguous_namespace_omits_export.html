@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrder.push("dcl");
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrderResult =
+          window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrder.join(",");
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceDclSawDescriptor =
+          window.moduleCycleExportStarMultihopLateAmbiguousNamespaceDescriptor === true;
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceDclSawNoShared =
+          window.moduleCycleExportStarMultihopLateAmbiguousNamespaceHasShared === false;
+      });
+    </script>
+    <script type="module">
+      try {
+        const ns = await import(
+          "/assets/module-cycle-export-star-multihop-late-ambiguous-outer-barrel.mjs"
+        );
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrder.push(
+          "import-resolved"
+        );
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceImported = true;
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceHasShared =
+          Object.prototype.hasOwnProperty.call(ns, "shared");
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceDescriptor =
+          Object.getOwnPropertyDescriptor(ns, "shared") == null;
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrderResult =
+          window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrder.join(",");
+      } catch (error) {
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrder.push(
+          "import-rejected"
+        );
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceError =
+          error && error.message;
+        window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrderResult =
+          window.moduleCycleExportStarMultihopLateAmbiguousNamespaceOrder.join(",");
+      }
+    </script>
+  </body>
+</html>

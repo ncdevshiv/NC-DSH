@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>
+  <div id="remove-target"><div id="remove-first"></div><div id="remove-second"></div><div id="remove-third"></div><div id="remove-last"></div></div>
+  <div id="replace-target"><div id="replace-first"></div><div id="replace-second"></div><div id="replace-third"></div><div id="replace-last"></div></div>
+</body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const target = document.getElementById("remove-target");
+  const childNodes = target.childNodes;
+  const second = childNodes[1];
+
+  assert_equals(second.id, "remove-second");
+  second.remove();
+
+  assert_equals(childNodes, target.childNodes);
+  assert_equals(childNodes[4], undefined);
+  assert_equals(childNodes[3], undefined);
+  assert_equals(childNodes.length, 3);
+  assert_array_equals(Array.from(childNodes).map((node) => node.id), [
+    "remove-first",
+    "remove-third",
+    "remove-last",
+  ]);
+}, "Node.childNodes cached live NodeList updates indexed access after remove");
+
+test(function () {
+  const target = document.getElementById("replace-target");
+  const childNodes = target.childNodes;
+
+  assert_array_equals(Array.from(childNodes).map((node) => node.id), [
+    "replace-first",
+    "replace-second",
+    "replace-third",
+    "replace-last",
+  ]);
+
+  target.replaceChild(childNodes[2], childNodes[1]);
+
+  assert_equals(childNodes, target.childNodes);
+  assert_array_equals(Array.from(childNodes).map((node) => node.id), [
+    "replace-first",
+    "replace-third",
+    "replace-last",
+  ]);
+}, "Node.childNodes cached live NodeList updates after replaceChild moves a child");
+</script>

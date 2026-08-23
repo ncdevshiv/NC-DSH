@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleEscapedSpecifierOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleEscapedSpecifierOrder.push("dcl");
+        window.moduleEscapedSpecifierOrderAtDcl =
+          window.moduleEscapedSpecifierOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import fallback, {
+        value
+      } from "/assets/module-escaped-string-literal-specifiers-barrel\u002emjs";
+
+      const loaded = await import("/assets/module-escaped-string-literal-specifiers-source\u002emjs");
+
+      window.moduleEscapedSpecifierOrder.push("module");
+      window.moduleEscapedSpecifierResult =
+        `${fallback}:${value}:${loaded.value}:${loaded.default}`;
+      window.moduleEscapedSpecifierFinalOrder =
+        window.moduleEscapedSpecifierOrder.join(",");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const SLOW_URL = "/wpt/runtime/xhr/slow";
+
+promise_test(async function () {
+  const xhr = new XMLHttpRequest();
+  const events = [];
+  let snapshot = null;
+
+  await new Promise(function (resolve) {
+    xhr.onreadystatechange = function () {
+      events.push("readystatechange:" + xhr.readyState);
+    };
+    xhr.ontimeout = function () {
+      events.push("timeout");
+    };
+    xhr.onerror = function () {
+      events.push("error");
+    };
+    xhr.onload = function () {
+      events.push("load");
+    };
+    xhr.onloadend = function () {
+      events.push("loadend");
+      setTimeout(function () {
+        snapshot = {
+          events: events.slice(),
+          readyState: xhr.readyState,
+          status: xhr.status,
+          statusText: xhr.statusText,
+          responseText: xhr.responseText,
+          responseURL: xhr.responseURL,
+          contentType: xhr.getResponseHeader("Content-Type"),
+          allHeaders: xhr.getAllResponseHeaders(),
+        };
+        resolve();
+      }, 125);
+    };
+
+    xhr.open("GET", SLOW_URL);
+    xhr.timeout = 20;
+    xhr.send();
+  });
+
+  assert_array_equals(
+    snapshot.events,
+    ["readystatechange:1", "readystatechange:4", "timeout", "loadend"],
+    "timeout should transition to DONE, fire timeout, and suppress late load/error",
+  );
+  assert_equals(snapshot.readyState, XMLHttpRequest.DONE, "timeout should finish at DONE");
+  assert_equals(snapshot.status, 0, "timeout should clear status");
+  assert_equals(snapshot.statusText, "", "timeout should clear statusText");
+  assert_equals(snapshot.responseText, "", "timeout should clear responseText");
+  assert_equals(snapshot.responseURL, "", "timeout should clear responseURL");
+  assert_equals(snapshot.contentType, null, "timeout should clear response headers");
+  assert_equals(snapshot.allHeaders, "", "timeout should clear all response headers");
+}, "XMLHttpRequest times out slow requests and suppresses late response delivery");
+</script>

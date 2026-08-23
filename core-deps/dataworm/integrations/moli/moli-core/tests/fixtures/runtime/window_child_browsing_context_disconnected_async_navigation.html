@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body data-frame-removed="false" data-load-fired="false">
+    <iframe id="child" src="/compat/window-child-browsing-context-disconnected-slow-child"></iframe>
+    <script>
+      const iframe = document.getElementById('child');
+      iframe.addEventListener('load', () => {
+        document.body.setAttribute('data-load-fired', 'true');
+      });
+      document.body.setAttribute(
+        'data-before-remove-document',
+        iframe.contentDocument?.body?.getAttribute('data-child') ?? 'not-ready'
+      );
+      iframe.remove();
+      document.body.setAttribute('data-frame-removed', 'true');
+    </script>
+  </body>
+</html>

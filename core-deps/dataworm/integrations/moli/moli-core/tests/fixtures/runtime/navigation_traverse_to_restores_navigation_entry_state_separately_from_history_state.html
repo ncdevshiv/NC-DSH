@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<body
+  data-target-key=""
+  data-sync-hash=""
+  data-sync-history-state=""
+  data-sync-nav-state=""
+  data-timeout-hash=""
+  data-timeout-history-state=""
+  data-timeout-nav-state=""
+  data-event-navigation-type=""
+  data-event-from-url=""
+  data-event-history-state=""
+  data-event-nav-state=""
+></body>
+<script>
+window.addEventListener("load", () => {
+  navigation.updateCurrentEntry({ state: { nav: 0 } });
+  const targetKey = navigation.currentEntry.key;
+  history.pushState({ step: 1 }, "", "#one");
+
+  navigation.oncurrententrychange = (event) => {
+    document.body.setAttribute(
+      "data-event-navigation-type",
+      String(event.navigationType ?? "null"),
+    );
+    document.body.setAttribute(
+      "data-event-from-url",
+      String(event.from?.url ?? "null"),
+    );
+    document.body.setAttribute(
+      "data-event-history-state",
+      JSON.stringify(history.state),
+    );
+    document.body.setAttribute(
+      "data-event-nav-state",
+      JSON.stringify(navigation.currentEntry.getState() ?? null),
+    );
+  };
+
+  document.body.setAttribute("data-target-key", String(targetKey));
+  navigation.traverseTo(targetKey);
+  document.body.setAttribute("data-sync-hash", location.hash);
+  document.body.setAttribute(
+    "data-sync-history-state",
+    JSON.stringify(history.state),
+  );
+  document.body.setAttribute(
+    "data-sync-nav-state",
+    JSON.stringify(navigation.currentEntry.getState() ?? null),
+  );
+
+  setTimeout(() => {
+    document.body.setAttribute("data-timeout-hash", location.hash);
+    document.body.setAttribute(
+      "data-timeout-history-state",
+      JSON.stringify(history.state),
+    );
+    document.body.setAttribute(
+      "data-timeout-nav-state",
+      JSON.stringify(navigation.currentEntry.getState() ?? null),
+    );
+  }, 0);
+});
+</script>
+</html>

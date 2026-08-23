@@ -1,0 +1,27 @@
+# OpenMem — ignore list
+
+# Runtime data (auto-generated; may contain private indexed content)
+data/
+generated_skills/
+.openmem/
+*.pid
+
+# Python artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environments & builds
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Local tooling scratch & unrelated local artifacts
+.tmp_*/
+.nc-code/
+.dataworm/
+
+# Machine-specific configuration (see config.example.json)
+config.json

@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.parserOwnedTlaRestoreOrder = [];
+      window.parserOwnedTlaRestoreErrors = 0;
+      window.addEventListener("error", () => {
+        window.parserOwnedTlaRestoreErrors += 1;
+        window.parserOwnedTlaRestoreOrder.push("window-error");
+        queueMicrotask(() => {
+          window.parserOwnedTlaRestoreOrder.push("window-error-microtask");
+          window.parserOwnedTlaRestoreMicrotaskOrder =
+            window.parserOwnedTlaRestoreOrder.join(",");
+          window.parserOwnedTlaRestoreFinalOrder =
+            window.parserOwnedTlaRestoreOrder.join(",");
+        });
+        window.parserOwnedTlaRestoreFinalOrder =
+          window.parserOwnedTlaRestoreOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      await Promise.reject(new Error("tla-broken"));
+    </script>
+    <script>
+      window.parserOwnedTlaRestoreOrder.push("restore-inline");
+      window.parserOwnedTlaRestoreRestoreOrder =
+        window.parserOwnedTlaRestoreOrder.join(",");
+      window.parserOwnedTlaRestoreFinalOrder =
+        window.parserOwnedTlaRestoreOrder.join(",");
+    </script>
+  </body>
+</html>

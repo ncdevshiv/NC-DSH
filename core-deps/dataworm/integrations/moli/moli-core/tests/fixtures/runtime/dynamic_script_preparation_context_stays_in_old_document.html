@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.dynamicPreparationContextOrder = [];
+      window.dynamicPreparationContextResult = "initial";
+      window.staleDynamicRan = false;
+      window.documentOpenAsyncRan = false;
+
+      const slowInOrder = document.createElement("script");
+      slowInOrder.async = false;
+      slowInOrder.src = "/assets/dynamic_preparation_context_stale.js";
+      document.head.appendChild(slowInOrder);
+
+      const fastAsync = document.createElement("script");
+      fastAsync.src = "/assets/dynamic_preparation_context_open.js";
+      document.head.appendChild(fastAsync);
+    </script>
+  </head>
+  <body></body>
+</html>

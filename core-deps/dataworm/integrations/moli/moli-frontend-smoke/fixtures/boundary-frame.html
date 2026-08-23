@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Browsing-context boundary frame</title>
+  </head>
+  <body>
+    <main id="frame-root">
+      <h2 id="frame-title">Boundary frame</h2>
+      <ol id="frame-events"></ol>
+      <div id="nested-mount"></div>
+    </main>
+    <script>
+      (() => {
+        const parameters = new URLSearchParams(location.search);
+        const scenario = parameters.get("scenario") || "default";
+        const phase = parameters.get("phase") || "initial";
+        const root = document.querySelector("#frame-root");
+        const events = document.querySelector("#frame-events");
+        const nestedMount = document.querySelector("#nested-mount");
+        root.dataset.scenario = scenario;
+        root.dataset.phase = phase;
+        root.dataset.hostKind = location.hostname === "localhost" ? "localhost" : "ipv4";
+        document.querySelector("#frame-title").textContent = `${scenario}:${phase}`;
+
+        const appendEvent = (name, value) => {
+          const item = document.createElement("li");
+          item.dataset.event = name;
+          item.textContent = `${name}:${value}`;
+          events.append(item);
+        };
+        const emit = (payload) => {
+          parent.postMessage(
+            { source: "moli-boundary-frame", scenario, phase, ...payload },
+            "*",
+          );
+        };
+
+        addEventListener("message", (event) => {
+          const data = event.data;
+          if (!data || data.source !== "moli-boundary-parent") {
+            return;
+          }
+          if (data.command === "bind-port") {
+            const port = event.ports[0];
+            if (!port) {
+              return;
+            }
+            appendEvent("port", "bound");
+            port.onmessage = (portEvent) => {
+              const label = String(portEvent.data?.label || "missing");
+              appendEvent("port-message", label);
+              port.postMessage({ type: "pong", label });
+            };
+            port.start();
+            port.postMessage({ type: "port-ready", scenario });
+            return;
+          }
+          if (data.command === "render") {
+            const label = String(data.label || "missing");
+            appendEvent("render", label);
+            emit({ type: "rendered", label });
+            return;
+          }
+          if (data.command === "spawn-nested") {
+            const nested = document.createElement("iframe");
+            nested.title = "nested alternate-origin frame";
+            nested.src =
+              "/support/alternate-origin-frame?scenario=nested-leaf&phase=leaf-ready";
+            const onNestedMessage = (nestedEvent) => {
+              if (
+                nestedEvent.source !== nested.contentWindow ||
+                nestedEvent.data?.source !== "moli-boundary-frame" ||
+                nestedEvent.data?.type !== "ready"
+              ) {
+                return;
+              }
+              removeEventListener("message", onNestedMessage);
+              appendEvent("nested", "ready");
+              emit({ type: "nested-ready" });
+            };
+            addEventListener("message", onNestedMessage);
+            nestedMount.append(nested);
+          }
+        });
+
+        appendEvent("ready", `${scenario}:${phase}`);
+        emit({ type: "ready" });
+      })();
+    </script>
+  </body>
+</html>

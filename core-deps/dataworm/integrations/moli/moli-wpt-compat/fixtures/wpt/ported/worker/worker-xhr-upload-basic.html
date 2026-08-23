@@ -1,0 +1,249 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function byteLength(value) {
+  return new TextEncoder().encode(value).length;
+}
+
+function uploadCompletionEvents(size) {
+  return [
+    `loadstart:true:true:true:${size}:${size}`,
+    `progress:true:true:true:${size}:${size}`,
+    `load:true:true:true:${size}:${size}`,
+    `loadend:true:true:true:${size}:${size}`,
+  ];
+}
+
+function next_worker_result(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+    }
+
+    function onMessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onError(event) {
+      cleanup();
+      reject(event.error || new Error(event.message || "worker error"));
+    }
+
+    worker.addEventListener("message", onMessage);
+    worker.addEventListener("error", onError);
+  });
+}
+
+async function run_worker_upload_case(message) {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-xhr-upload-worker.js",
+    location.href,
+  ).href;
+  const worker = new Worker(workerUrl);
+
+  try {
+    worker.postMessage(message);
+    const result = await next_worker_result(worker);
+    assert_false(!!result.data.error, result.data.error || "worker should not report an error");
+    return result.data;
+  } finally {
+    worker.terminate();
+  }
+}
+
+promise_test(async function () {
+  const payload = "upload=alpha&count=2";
+  const result = await run_worker_upload_case({ kind: "payload", payload });
+
+  assert_equals(result.status, 200, "worker XHR upload POST status");
+  assert_equals(
+    result.response.body,
+    payload,
+    "worker XHR upload should still send the request body",
+  );
+  assert_array_equals(
+    result.uploadEvents,
+    [
+      "loadstart:true:true:true:20:20",
+      "progress:true:true:true:20:20",
+      "load:true:true:true:20:20",
+      "loadend:true:true:true:20:20",
+    ],
+    "worker XHR upload should emit completion progress events against xhr.upload",
+  );
+  assert_array_equals(
+    result.uploadOrder,
+    [
+      "listener-before:loadstart",
+      "handler:loadstart",
+      "listener-after:loadstart",
+      "listener-before:progress",
+      "handler:progress",
+      "listener-after:progress",
+      "listener-before:load",
+      "handler:load",
+      "listener-after:load",
+      "listener-before:loadend",
+      "handler:loadend",
+      "listener-after:loadend",
+    ],
+    "worker XHR upload handler attributes should participate in listener registration order",
+  );
+  assert_array_equals(
+    result.xhrEvents,
+    ["load", "loadend"],
+    "worker XHR should still complete normally",
+  );
+}, "Dedicated workers dispatch XMLHttpRequestUpload events for request bodies");
+
+promise_test(async function () {
+  const blob = await run_worker_upload_case({ kind: "blob" });
+  assert_array_equals(
+    blob.uploadEvents,
+    uploadCompletionEvents(byteLength("blob-upload")),
+    "worker Blob request bodies should dispatch upload completion events with byte totals",
+  );
+  assert_equals(blob.response.body, "blob-upload", "worker Blob upload body should be sent");
+
+  const buffer = await run_worker_upload_case({ kind: "buffer" });
+  assert_array_equals(
+    buffer.uploadEvents,
+    uploadCompletionEvents(5),
+    "worker BufferSource request bodies should dispatch upload completion events with byte totals",
+  );
+  assert_equals(buffer.response.body, "ABC\u0000D", "worker BufferSource upload body should be sent");
+
+  const formdata = await run_worker_upload_case({ kind: "formdata" });
+  assert_equals(formdata.status, 200, "worker FormData upload POST status");
+  assert_array_equals(
+    formdata.uploadEvents,
+    uploadCompletionEvents(byteLength(formdata.response.body)),
+    "worker FormData request bodies should dispatch upload completion events with multipart byte totals",
+  );
+  assert_true(
+    formdata.response.body.includes('Content-Disposition: form-data; name="alpha"'),
+    "worker FormData upload body should include string fields",
+  );
+  assert_true(
+    formdata.response.body.includes('Content-Disposition: form-data; name="file"; filename="blob"'),
+    "worker FormData upload body should include Blob file parts",
+  );
+}, "Dedicated workers dispatch XMLHttpRequestUpload events for Blob, BufferSource, and FormData bodies");
+
+promise_test(async function () {
+  const result = await run_worker_upload_case({ kind: "none" });
+
+  assert_equals(result.status, 200, "worker XHR send() without an argument should complete");
+  assert_equals(result.response.body, "", "worker XHR send() without an argument should send no body");
+  assert_array_equals(
+    result.uploadEvents,
+    [],
+    "worker XHR send() without an argument should not dispatch upload events",
+  );
+
+  const nullBody = await run_worker_upload_case({ kind: "null" });
+  assert_equals(nullBody.status, 200, "worker XHR send(null) should complete");
+  assert_equals(nullBody.response.body, "", "worker XHR send(null) should send no body");
+  assert_array_equals(
+    nullBody.uploadEvents,
+    [],
+    "worker XHR send(null) should not dispatch upload events",
+  );
+}, "Dedicated worker XMLHttpRequestUpload stays silent when no request body is supplied");
+
+promise_test(async function () {
+  const result = await run_worker_upload_case({ kind: "empty-string" });
+
+  assert_equals(result.status, 200, "worker XHR empty upload POST status");
+  assert_equals(result.response.body, "", "worker XHR empty string body should be sent");
+  assert_array_equals(
+    result.uploadEvents,
+    [
+      "loadstart:true:true:true:0:0",
+      "progress:true:true:true:0:0",
+      "load:true:true:true:0:0",
+      "loadend:true:true:true:0:0",
+    ],
+    "worker XHR send(\"\") should dispatch upload completion events with zero-byte totals",
+  );
+}, "Dedicated workers dispatch zero-byte upload events for an empty string request body");
+
+promise_test(async function () {
+  const result = await run_worker_upload_case({ kind: "abort-from-loadstart" });
+
+  assert_equals(result.status, 0, "worker XHR abort should reset status");
+  assert_array_equals(
+    result.uploadEvents,
+    [
+      "loadstart:true:true:true:12:12",
+      "abort:true:true:true:0:0",
+      "loadend:true:true:true:0:0",
+    ],
+    "worker XHR upload abort should stop completion progress and emit upload abort/loadend",
+  );
+  assert_array_equals(
+    result.uploadOrder,
+    [
+      "listener-before:loadstart",
+      "handler:loadstart",
+      "listener-after:loadstart",
+      "listener-before:abort",
+      "handler:abort",
+      "listener-after:abort",
+      "listener-before:loadend",
+      "handler:loadend",
+      "listener-after:loadend",
+    ],
+    "worker upload abort handler attributes should participate in listener registration order",
+  );
+  assert_array_equals(
+    result.xhrEvents,
+    ["abort", "loadend"],
+    "worker XHR abort should terminate without load/error",
+  );
+}, "Dedicated workers dispatch XMLHttpRequestUpload abort events when abort() runs during upload loadstart");
+
+promise_test(async function () {
+  const result = await run_worker_upload_case({ kind: "abort-from-progress" });
+
+  assert_equals(result.status, 0, "worker XHR abort should reset status");
+  assert_array_equals(
+    result.uploadEvents,
+    [
+      "loadstart:true:true:true:12:12",
+      "progress:true:true:true:12:12",
+      "abort:true:true:true:0:0",
+      "loadend:true:true:true:0:0",
+    ],
+    "worker XHR upload abort from progress should stop completion and emit upload abort/loadend",
+  );
+  assert_array_equals(
+    result.uploadOrder,
+    [
+      "listener-before:loadstart",
+      "handler:loadstart",
+      "listener-after:loadstart",
+      "listener-before:progress",
+      "handler:progress",
+      "listener-after:progress",
+      "listener-before:abort",
+      "handler:abort",
+      "listener-after:abort",
+      "listener-before:loadend",
+      "handler:loadend",
+      "listener-after:loadend",
+    ],
+    "worker upload progress abort should preserve listener registration order",
+  );
+  assert_array_equals(
+    result.xhrEvents,
+    ["abort", "loadend"],
+    "worker XHR abort from upload progress should terminate without load/error",
+  );
+}, "Dedicated workers dispatch XMLHttpRequestUpload abort events when abort() runs during upload progress");
+</script>

@@ -1,0 +1,85 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const ECHO_BODY_HEX_URL = "/wpt/runtime/fetch/echo-body-hex";
+
+async function sendBody(body) {
+  const response = await fetch(ECHO_BODY_HEX_URL, {
+    method: "POST",
+    body,
+  });
+  assert_equals(response.status, 200, "fetch binary request status");
+  return response.json();
+}
+
+function bytesHex(bytes) {
+  let output = "";
+  for (const byte of bytes) {
+    output += byte.toString(16).padStart(2, "0");
+  }
+  return output;
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve) {
+    worker.addEventListener("message", resolve, { once: true });
+  });
+}
+
+promise_test(async function () {
+  const bytes = [0x00, 0xff, 0x41, 0x80, 0x0a, 0x0d];
+  const payload = await sendBody(
+    new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" }),
+  );
+
+  assert_equals(
+    payload.body_hex,
+    bytesHex(bytes),
+    "Fetch Blob request bodies should preserve non-UTF-8 bytes",
+  );
+}, "fetch() preserves non-UTF-8 bytes in Blob request bodies");
+
+promise_test(async function () {
+  const bytes = [0x00, 0xff, 0x41, 0x80];
+  const payload = await sendBody(new Uint8Array(bytes));
+
+  assert_equals(
+    payload.body_hex,
+    bytesHex(bytes),
+    "Fetch TypedArray request bodies should preserve non-UTF-8 bytes",
+  );
+}, "fetch() preserves non-UTF-8 bytes in TypedArray request bodies");
+
+promise_test(async function () {
+  const buffer = new Uint8Array([0xee, 0x00, 0xff, 0x80, 0xdd]).buffer;
+  const payload = await sendBody(new DataView(buffer, 1, 3));
+
+  assert_equals(
+    payload.body_hex,
+    bytesHex([0x00, 0xff, 0x80]),
+    "Fetch ArrayBufferView request bodies should only send the selected byte range",
+  );
+}, "fetch() preserves the byte range of ArrayBufferView request bodies");
+
+promise_test(async function () {
+  const worker = new Worker(
+    new URL("/wpt/ported/fetch/resources/fetch-binary-body-worker.js", location.href).href,
+  );
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.error, undefined, "worker fetch should not reject");
+    assert_equals(message.data.status, 200, "worker fetch response status");
+    assert_equals(
+      message.data.body_hex,
+      bytesHex([0x00, 0xff, 0x41, 0x80]),
+      "Worker fetch TypedArray request bodies should preserve non-UTF-8 bytes",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "dedicated worker fetch() preserves non-UTF-8 bytes in request bodies");
+</script>

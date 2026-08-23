@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("Worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-http-query-main.js",
+    location.href
+  ).href;
+  const oneUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-http-query-dep.js?case=one",
+    location.href
+  ).href;
+  const twoUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-http-query-dep.js?case=two",
+    location.href
+  ).href;
+  const worker = new Worker(workerUrl, { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.error, undefined, "module worker should not fail");
+    assert_equals(message.data.oneUrl, oneUrl, "first query import should preserve its URL");
+    assert_equals(message.data.sameOneUrl, oneUrl, "duplicate query import should share the same module URL");
+    assert_equals(message.data.twoUrl, twoUrl, "second query import should preserve its URL");
+    assert_equals(message.data.resolvedOne, oneUrl, "import.meta.resolve should preserve query strings");
+    assert_equals(message.data.resolvedTwo, twoUrl, "import.meta.resolve should distinguish query strings");
+    assert_equals(message.data.oneFirst, 1, "first query module should start at its own counter");
+    assert_equals(message.data.oneSecond, 2, "same query module should reuse the first module record");
+    assert_equals(message.data.sameOneCounter, 2, "duplicate query namespace should observe the shared live binding");
+    assert_equals(message.data.twoFirst, 1, "different query module should get an independent module record");
+    assert_equals(message.data.twoCounter, 1, "second query module state should stay independent");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers use full HTTP query URLs as module identity");
+</script>

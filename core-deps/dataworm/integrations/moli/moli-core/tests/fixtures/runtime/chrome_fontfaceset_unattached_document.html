@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <body data-document-ok="" data-detached-ok="">
+    <script>
+      const body = document.body;
+      let documentOk = true;
+      let detachedOk = true;
+      let fontFaceSet;
+      try {
+        let detached = document.implementation.createHTMLDocument('detached');
+        detached.fonts.size;
+        const face = new FontFace('DetachedFace', 'local(F)');
+        detached.fonts.add(face);
+        detached.fonts.delete(face);
+        detached.fonts.has(face);
+        detached.fonts.clear();
+        detached.fonts.check('10px DetachedFace');
+        detached.fonts.load('10px DetachedFace');
+        detached.fonts.ready;
+        detached.fonts.forEach(() => {});
+        detached.fonts.status;
+        fontFaceSet = detached.fonts;
+      } catch (error) {
+        documentOk = false;
+      }
+
+      try {
+        const face = new FontFace('DetachedFace2', 'local(F)');
+        fontFaceSet.add(face);
+        fontFaceSet.delete(face);
+        fontFaceSet.has(face);
+        fontFaceSet.clear();
+        fontFaceSet.check('10px DetachedFace2');
+        fontFaceSet.load('10px DetachedFace2');
+        fontFaceSet.ready;
+        fontFaceSet.forEach(() => {});
+        fontFaceSet.status;
+      } catch (error) {
+        detachedOk = false;
+      }
+
+      body.setAttribute('data-document-ok', String(documentOk));
+      body.setAttribute('data-detached-ok', String(detachedOk));
+    </script>
+  </body>
+</html>

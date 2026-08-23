@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      addEventListener("DOMContentLoaded", () => {
+        window.nativeBridgeError = null;
+
+        try {
+          const bridge = globalThis.__moliNativeBridge;
+          window.nativeBridgeHasBridge = !!bridge;
+          const bridgeWindowA = bridge.window;
+          const bridgeWindowB = bridge.window;
+          window.nativeBridgeHasWindow = !!bridgeWindowA;
+
+          const documentA = document;
+          const documentB = bridge.document;
+          window.nativeBridgeHasDocument = !!documentA;
+
+          const bodyA = documentA.body;
+          const bodyB = documentA.body;
+          const rootA = documentA.documentElement;
+          const rootB = documentA.documentElement;
+          window.nativeBridgeHasBody = !!bodyA;
+          window.nativeBridgeHasDocumentElement = !!rootA;
+
+          const child = documentA.createElement("SPAN");
+          child.setAttribute("data-kind", "native");
+          child.setAttribute("id", "native-child");
+          child.textContent = "native-child";
+          const appended = bodyA.appendChild(child);
+
+          window.nativeBridgeWindowIdentity = bridgeWindowA === bridgeWindowB;
+          window.nativeBridgePublicWindowIdentity =
+            window === globalThis && window === self && window === window.window;
+          window.nativeBridgeBridgeWindowResolvesToPublicWindow = bridgeWindowA.window === window;
+          window.nativeBridgeBridgeSelfResolvesToPublicWindow = bridgeWindowA.self === window;
+          window.nativeBridgeWindowDocumentIdentity = bridgeWindowA.document === documentA;
+          window.nativeBridgeDocumentIdentity = documentA === documentB;
+          window.nativeBridgeBodyIdentity = bodyA === bodyB;
+          window.nativeBridgeDocumentElementIdentity = rootA === rootB;
+          window.nativeBridgeAppendReturnsSameWrapper = appended === child;
+          window.nativeBridgeTagName = child.tagName;
+          window.nativeBridgeNodeName = child.nodeName;
+          window.nativeBridgeNodeType = child.nodeType;
+          window.nativeBridgeAttrBeforeRemove = child.getAttribute("data-kind");
+          child.removeAttribute("data-kind");
+          window.nativeBridgeAttrAfterRemove = child.getAttribute("data-kind");
+          window.nativeBridgeIdAttr = child.getAttribute("id");
+          window.nativeBridgeBodyText = bodyA.textContent.replace(/\s+/g, "");
+
+          const textNode = documentA.createTextNode("typed-text");
+          const commentNode = documentA.createComment("typed-comment");
+          const piNode = documentA.createProcessingInstruction("typed-target", "typed-data");
+          const fragmentNode = documentA.createDocumentFragment();
+          fragmentNode.appendChild(documentA.createElement("em"));
+
+          window.nativeBridgeTextInstance = textNode instanceof Text;
+          window.nativeBridgeTextConstructor = textNode.constructor.name;
+          window.nativeBridgeCommentInstance = commentNode instanceof Comment;
+          window.nativeBridgeCommentConstructor = commentNode.constructor.name;
+          window.nativeBridgePiInstance = piNode instanceof ProcessingInstruction;
+          window.nativeBridgePiConstructor = piNode.constructor.name;
+          window.nativeBridgeFragmentInstance = fragmentNode instanceof DocumentFragment;
+          window.nativeBridgeFragmentConstructor = fragmentNode.constructor.name;
+        } catch (error) {
+          window.nativeBridgeError = String(error);
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <main>seed</main>
+  </body>
+</html>

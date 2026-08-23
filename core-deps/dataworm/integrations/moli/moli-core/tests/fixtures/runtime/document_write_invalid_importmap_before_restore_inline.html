@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.documentWriteInvalidImportMapProgressOrder = [];
+      window.documentWriteInvalidImportMapProgressErrors = 0;
+      window.addEventListener("error", () => {
+        window.documentWriteInvalidImportMapProgressOrder.push("window-error");
+        queueMicrotask(() => {
+          window.documentWriteInvalidImportMapProgressOrder.push(
+            "window-error-microtask",
+          );
+          window.documentWriteInvalidImportMapProgressMicrotaskOrder =
+            window.documentWriteInvalidImportMapProgressOrder.join(",");
+          window.documentWriteInvalidImportMapProgressFinalOrder =
+            window.documentWriteInvalidImportMapProgressOrder.join(",");
+        });
+        window.documentWriteInvalidImportMapProgressFinalOrder =
+          window.documentWriteInvalidImportMapProgressOrder.join(",");
+      });
+      document.write(
+        '<script type="importmap" onerror="window.documentWriteInvalidImportMapProgressOrder.push(\'error\'); window.documentWriteInvalidImportMapProgressErrors += 1; window.documentWriteInvalidImportMapProgressFinalOrder = window.documentWriteInvalidImportMapProgressOrder.join(\',\');">{\"imports\":{\"fixture\":\"/fixtures/esm/fixture.mjs\",}}<\/script>' +
+          '<script>window.documentWriteInvalidImportMapProgressOrder.push("restore-inline"); window.documentWriteInvalidImportMapProgressRestoreOrder = window.documentWriteInvalidImportMapProgressOrder.join(","); window.documentWriteInvalidImportMapProgressFinalOrder = window.documentWriteInvalidImportMapProgressOrder.join(",");<\/script>'
+      );
+    </script>
+  </body>
+</html>

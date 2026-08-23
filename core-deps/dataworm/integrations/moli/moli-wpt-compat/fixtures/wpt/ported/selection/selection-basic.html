@@ -1,0 +1,363 @@
+<!doctype html>
+<meta charset="utf-8">
+<p id="p1">The quick brown fox</p>
+<p id="p2">jumps over the lazy dog</p>
+<div id="contains-node-nested"><span id="contains-node-child">nested child</span></div>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return error;
+  }
+  throw new Error(description || "expected exception");
+}
+
+// Selection range-check throws now use real DOMException instances per
+// DOM spec (name=IndexSizeError, code=1) instead of plain Error whose
+// message is "IndexSizeError". Accept both shapes: legacy Error-message
+// match OR DOMException-name match.
+function assert_throws_error_message(expectedMessage, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    if (error && error.name === expectedMessage) {
+      return error;
+    }
+    assert_equals(error && error.name, "Error", description);
+    assert_equals(error && error.message, expectedMessage, description);
+    return error;
+  }
+  throw new Error(description || "expected exception");
+}
+
+test(function () {
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+
+  assert_true(selection instanceof Selection);
+  assert_equals(selection.rangeCount, 0);
+  assert_equals(selection.type, "None");
+  assert_true(selection.isCollapsed);
+  assert_equals(selection.anchorNode, null);
+  assert_equals(selection.focusNode, null);
+  assert_equals(selection.anchorOffset, 0);
+  assert_equals(selection.focusOffset, 0);
+  assert_equals(selection.direction, "none");
+}, "window.getSelection() exposes an initially empty Selection");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+
+  selection.collapse(text, 4);
+  assert_equals(selection.rangeCount, 1);
+  assert_equals(selection.type, "Caret");
+  assert_true(selection.isCollapsed);
+  assert_equals(selection.anchorNode, text);
+  assert_equals(selection.focusNode, text);
+  assert_equals(selection.anchorOffset, 4);
+  assert_equals(selection.focusOffset, 4);
+
+  selection.setPosition(text);
+  assert_equals(selection.anchorOffset, 0);
+  assert_equals(selection.focusOffset, 0);
+
+  selection.collapse(null);
+  assert_equals(selection.rangeCount, 0);
+  assert_equals(selection.type, "None");
+}, "Selection.collapse() and setPosition() update caret state");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+
+  selection.collapse(text, undefined);
+  assert_equals(selection.anchorOffset, 0);
+  assert_equals(selection.focusOffset, 0);
+  selection.collapse(text, null);
+  assert_equals(selection.anchorOffset, 0);
+  selection.collapse(text, NaN);
+  assert_equals(selection.anchorOffset, 0);
+  selection.collapse(text, Infinity);
+  assert_equals(selection.anchorOffset, 0);
+  selection.collapse(text, "2.9");
+  assert_equals(selection.anchorOffset, 2);
+  selection.setPosition(text, -4294967294);
+  assert_equals(selection.anchorOffset, 2);
+  selection.setPosition(text, { valueOf() { return 3; } });
+  assert_equals(selection.anchorOffset, 3);
+  selection.collapse(text, { toString() { return "4"; } });
+  assert_equals(selection.anchorOffset, 4);
+}, "Selection.collapse() and setPosition() convert optional offsets as WebIDL unsigned long");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+  selection.collapse(text, 4);
+
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.collapse(text, -1);
+  }, "wrapped negative collapse offset should be range-checked");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.setPosition(text, 999);
+  }, "too large setPosition offset should throw");
+  assert_throws_name("Error", function () {
+    selection.collapse(text, { valueOf() { throw new Error("boom"); } });
+  }, "throwing collapse offset conversion should propagate");
+  assert_throws_name("TypeError", function () {
+    selection.setPosition(text, Symbol("offset"));
+  }, "Symbol setPosition offset conversion should throw");
+  assert_throws_name("TypeError", function () {
+    selection.collapse(text, 1n);
+  }, "BigInt collapse offset conversion should throw");
+  assert_equals(selection.anchorOffset, 4);
+  assert_equals(selection.focusOffset, 4);
+}, "Selection.collapse() and setPosition() reject invalid converted offsets");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+  selection.collapse(text, 1);
+
+  selection.extend(text, undefined);
+  assert_equals(selection.anchorOffset, 1);
+  assert_equals(selection.focusOffset, 0);
+  selection.extend(text, null);
+  assert_equals(selection.focusOffset, 0);
+  selection.extend(text, NaN);
+  assert_equals(selection.focusOffset, 0);
+  selection.extend(text, Infinity);
+  assert_equals(selection.focusOffset, 0);
+  selection.extend(text, "2.9");
+  assert_equals(selection.focusOffset, 2);
+  selection.extend(text, -4294967293);
+  assert_equals(selection.focusOffset, 3);
+  selection.extend(text, { valueOf() { return 4; } });
+  assert_equals(selection.focusOffset, 4);
+  selection.extend(text, { toString() { return "5"; } });
+  assert_equals(selection.focusOffset, 5);
+}, "Selection.extend() converts optional offsets as WebIDL unsigned long");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+  selection.collapse(text, 2);
+
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.extend(text, -1);
+  }, "wrapped negative extend offset should be range-checked");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.extend(text, 999);
+  }, "too large extend offset should throw");
+  assert_throws_name("Error", function () {
+    selection.extend(text, { valueOf() { throw new Error("boom"); } });
+  }, "throwing extend offset conversion should propagate");
+  assert_throws_name("TypeError", function () {
+    selection.extend(text, Symbol("offset"));
+  }, "Symbol extend offset conversion should throw");
+  assert_throws_name("TypeError", function () {
+    selection.extend(text, 1n);
+  }, "BigInt extend offset conversion should throw");
+  assert_equals(selection.anchorOffset, 2);
+  assert_equals(selection.focusOffset, 2);
+}, "Selection.extend() rejects invalid converted offsets");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+
+  selection.setBaseAndExtent(text, undefined, text, null);
+  assert_equals(selection.anchorOffset, 0);
+  assert_equals(selection.focusOffset, 0);
+  selection.setBaseAndExtent(text, NaN, text, Infinity);
+  assert_equals(selection.anchorOffset, 0);
+  assert_equals(selection.focusOffset, 0);
+  selection.setBaseAndExtent(text, "2.9", text, -4294967293);
+  assert_equals(selection.anchorOffset, 2);
+  assert_equals(selection.focusOffset, 3);
+  selection.setBaseAndExtent(
+    text,
+    { valueOf() { return 4; } },
+    text,
+    { toString() { return "5"; } }
+  );
+  assert_equals(selection.anchorOffset, 4);
+  assert_equals(selection.focusOffset, 5);
+}, "Selection.setBaseAndExtent() converts required offsets as WebIDL unsigned long");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+  selection.setBaseAndExtent(text, 1, text, 3);
+
+  assert_throws_name("TypeError", function () {
+    selection.setBaseAndExtent(text);
+  }, "missing baseOffset should throw");
+  assert_throws_name("TypeError", function () {
+    selection.setBaseAndExtent(text, 1, text);
+  }, "missing extentOffset should throw");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.setBaseAndExtent(text, -1, text, 3);
+  }, "wrapped negative baseOffset should be range-checked");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.setBaseAndExtent(text, 1, text, 999);
+  }, "too large extentOffset should throw");
+  assert_throws_name("Error", function () {
+    selection.setBaseAndExtent(text, { valueOf() { throw new Error("boom"); } }, text, 3);
+  }, "throwing baseOffset conversion should propagate");
+  assert_throws_name("Error", function () {
+    selection.setBaseAndExtent(text, 1, text, { valueOf() { throw new Error("boom"); } });
+  }, "throwing extentOffset conversion should propagate");
+  assert_throws_name("TypeError", function () {
+    selection.setBaseAndExtent(text, Symbol("offset"), text, 3);
+  }, "Symbol baseOffset conversion should throw");
+  assert_throws_name("TypeError", function () {
+    selection.setBaseAndExtent(text, 1, text, 1n);
+  }, "BigInt extentOffset conversion should throw");
+  assert_equals(selection.anchorOffset, 1);
+  assert_equals(selection.focusOffset, 3);
+}, "Selection.setBaseAndExtent() rejects invalid converted offsets");
+
+test(function () {
+  const selection = window.getSelection();
+  const p1 = document.getElementById("p1");
+  selection.removeAllRanges();
+
+  const range = document.createRange();
+  range.selectNodeContents(p1);
+  selection.addRange(range);
+
+  assert_equals(selection.rangeCount, 1);
+  assert_equals(selection.type, "Range");
+  assert_false(selection.isCollapsed);
+  assert_equals(selection.getRangeAt(0), range);
+  assert_equals(selection.getRangeAt(undefined), range);
+  assert_equals(selection.getRangeAt(null), range);
+  assert_equals(selection.getRangeAt(NaN), range);
+  assert_equals(selection.getRangeAt(Infinity), range);
+  assert_equals(selection.getRangeAt("0.9"), range);
+  assert_equals(selection.getRangeAt(4294967296), range);
+  assert_equals(selection.getRangeAt({ valueOf() { return 0; } }), range);
+  assert_equals(selection.getRangeAt({ toString() { return "0"; } }), range);
+
+  assert_throws_name("TypeError", function () {
+    selection.getRangeAt();
+  }, "missing getRangeAt index should throw");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.getRangeAt(1);
+  }, "index 1 should be outside the singleton range list");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.getRangeAt("1.9");
+  }, "decimal string index should truncate before range list lookup");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.getRangeAt(-1);
+  }, "wrapped negative index should be outside the singleton range list");
+  assert_throws_name("Error", function () {
+    selection.getRangeAt({ valueOf() { throw new Error("boom"); } });
+  }, "throwing getRangeAt index conversion should propagate");
+  assert_throws_name("TypeError", function () {
+    selection.getRangeAt(Symbol("index"));
+  }, "Symbol getRangeAt index conversion should throw");
+  assert_throws_name("TypeError", function () {
+    selection.getRangeAt(0n);
+  }, "BigInt getRangeAt index conversion should throw");
+  assert_equals(selection.getRangeAt(0), range);
+
+  selection.removeAllRanges();
+  assert_equals(selection.rangeCount, 0);
+  assert_equals(selection.type, "None");
+  assert_throws_error_message("IndexSizeError", function () {
+    selection.getRangeAt(0);
+  }, "getRangeAt(0) should throw when the selection has no ranges");
+}, "Selection.addRange(), getRangeAt(), and removeAllRanges() manage selected ranges");
+
+test(function () {
+  const selection = window.getSelection();
+  const p1 = document.getElementById("p1");
+  const nested = document.getElementById("contains-node-nested");
+  const nestedChild = document.getElementById("contains-node-child");
+  const text = p1.firstChild;
+  selection.removeAllRanges();
+
+  assert_throws_name("TypeError", function () {
+    selection.containsNode();
+  }, "missing containsNode node should throw");
+  assert_throws_name("TypeError", function () {
+    selection.containsNode(null);
+  }, "null containsNode node should throw");
+  assert_throws_name("TypeError", function () {
+    selection.containsNode({});
+  }, "plain object containsNode node should throw");
+
+  const range = document.createRange();
+  range.setStart(text, 4);
+  range.setEnd(text, 9);
+  selection.addRange(range);
+
+  assert_false(selection.containsNode(text), "partially selected text node should not be fully contained");
+  assert_true(selection.containsNode(text, true), "partially selected text node should be partially contained");
+  assert_false(selection.containsNode(p1), "ancestor should not be fully contained");
+  assert_true(selection.containsNode(p1, true), "allowPartialContainment should include ancestor");
+  assert_false(selection.containsNode(p1, false), "explicit false should keep full containment semantics");
+  assert_true(selection.containsNode(p1, "non-empty"), "truthy values should enable partial containment");
+  assert_false(selection.containsNode(p1, 0), "falsy values should disable partial containment");
+
+  selection.removeAllRanges();
+  const fullTextRange = document.createRange();
+  fullTextRange.selectNodeContents(text);
+  selection.addRange(fullTextRange);
+  assert_true(selection.containsNode(text), "fully selected text node should be fully contained");
+
+  selection.removeAllRanges();
+  const nestedContentsRange = document.createRange();
+  nestedContentsRange.selectNodeContents(nested);
+  selection.addRange(nestedContentsRange);
+  assert_false(selection.containsNode(nested), "selected element contents should not fully contain the element boundary");
+  assert_true(selection.containsNode(nested, true), "selected element contents should partially contain the element");
+  assert_false(selection.containsNode(nestedChild), "selected element contents should not fully contain child element boundaries");
+  assert_true(selection.containsNode(nestedChild, true), "selected element contents should partially contain child elements");
+
+  selection.removeAllRanges();
+  assert_false(selection.containsNode(text), "valid node should return false for an empty selection");
+}, "Selection.containsNode() validates Node input and converts allowPartialContainment to boolean");
+
+test(function () {
+  const selection = window.getSelection();
+  const text = document.getElementById("p1").firstChild;
+  selection.removeAllRanges();
+
+  selection.collapse(text, 4);
+  selection.modify(
+    { toString() { return "move"; } },
+    { toString() { return "forward"; } },
+    { toString() { return "character"; } }
+  );
+  assert_equals(selection.anchorOffset, 5, "modify should convert DOMString-like arguments");
+
+  selection.modify(undefined, "forward", "character");
+  assert_equals(selection.anchorOffset, 5, "undefined action should use the default empty string");
+  selection.modify(null, "forward", "character");
+  assert_equals(selection.anchorOffset, 5, "null action should stringify to a non-move action");
+
+  assert_throws_name("TypeError", function () {
+    selection.modify(Symbol("move"), "forward", "character");
+  }, "Symbol modify action conversion should throw");
+  assert_equals(selection.anchorOffset, 5);
+  assert_throws_name("Error", function () {
+    selection.modify("move", { toString() { throw new Error("boom"); } }, "character");
+  }, "throwing modify direction stringification should propagate");
+  assert_equals(selection.anchorOffset, 5);
+}, "Selection.modify() converts optional DOMString arguments with WebIDL semantics");
+</script>

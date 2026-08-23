@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      const importmap = document.createElement("script");
+      importmap.type = "importmap";
+      importmap.text = JSON.stringify({
+        imports: {
+          fixture: "/assets/importmap-initial-target.mjs",
+        },
+      });
+
+      const moduleScript = document.createElement("script");
+      moduleScript.type = "module";
+      moduleScript.text = `
+        import { greeting } from "fixture";
+        window.dynamicImportMapGreeting = greeting;
+      `;
+
+      document.head.appendChild(importmap);
+      document.head.appendChild(moduleScript);
+    </script>
+  </head>
+  <body>
+    <script>
+      testing.eventually(() => {
+        testing.expectEqual("initial", window.dynamicImportMapGreeting);
+      });
+    </script>
+  </body>
+</html>

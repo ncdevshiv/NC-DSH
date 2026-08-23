@@ -1,0 +1,105 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_worker_message(worker, predicate) {
+  return new Promise(function (resolve, reject) {
+    worker.addEventListener("message", function handler(event) {
+      if (predicate && !predicate(event.data)) {
+        return;
+      }
+      worker.removeEventListener("message", handler);
+      resolve(event);
+    });
+    worker.addEventListener("error", function (event) {
+      reject(new Error(event.message || "worker error"));
+    }, { once: true });
+  });
+}
+
+async function run_order_case(mode) {
+  const worker = new Worker(
+    worker_url(
+      [
+        "function reportWhenComplete(order) {",
+        "  if (order.length === 2) {",
+        "    postMessage({ kind: 'result', order });",
+        "  }",
+        "}",
+        "onmessage = function (event) {",
+        "  if (!event.data || event.data.kind !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const mode = event.data.mode;",
+        "  const port = event.ports[0];",
+        "  const order = [];",
+        "  if (mode === 'listener-first') {",
+        "    port.addEventListener('message', function () {",
+        "      order.push('listener');",
+        "      reportWhenComplete(order);",
+        "    });",
+        "    port.onmessage = function () {",
+        "      order.push('onmessage');",
+        "      reportWhenComplete(order);",
+        "    };",
+        "  } else {",
+        "    port.onmessage = function () {",
+        "      order.push('onmessage');",
+        "      reportWhenComplete(order);",
+        "    };",
+        "    port.addEventListener('message', function () {",
+        "      order.push('listener');",
+        "      reportWhenComplete(order);",
+        "    });",
+        "  }",
+        "  port.start();",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const ready = next_worker_message(worker, function (data) {
+      return data && data.kind === "ready";
+    });
+    worker.postMessage({ kind: "connect", mode }, [channel.port2]);
+    await ready;
+
+    const result = next_worker_message(worker, function (data) {
+      return data && data.kind === "result";
+    });
+    channel.port1.postMessage("go");
+    return (await result).data.order;
+  } finally {
+    channel.port1.close();
+    worker.terminate();
+  }
+}
+
+async function assert_worker_message_listener_first_order() {
+  assert_array_equals(
+    await run_order_case("listener-first"),
+    ["listener", "onmessage"],
+  );
+}
+
+async function assert_worker_message_onmessage_first_order() {
+  assert_array_equals(
+    await run_order_case("onmessage-first"),
+    ["onmessage", "listener"],
+  );
+}
+
+promise_test(async function () {
+  await assert_worker_message_listener_first_order();
+  await assert_worker_message_onmessage_first_order();
+}, "Worker-owned MessagePort message dispatch preserves listener ordering");
+</script>

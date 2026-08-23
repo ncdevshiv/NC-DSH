@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe
+      id="child"
+      src="/compat/window-child-browsing-context-script-globals-child"
+    ></iframe>
+    <script>
+      const childDocument = document.getElementById('child').contentDocument;
+      const childBody = childDocument?.body;
+
+      document.body.setAttribute(
+        'data-child-shared',
+        childBody?.getAttribute('data-shared') ?? 'null'
+      );
+      document.body.setAttribute(
+        'data-child-reader',
+        childBody?.getAttribute('data-reader') ?? 'null'
+      );
+      document.body.setAttribute(
+        'data-child-window-shared',
+        childBody?.getAttribute('data-window-shared') ?? 'null'
+      );
+      document.body.setAttribute(
+        'data-child-window-reader-type',
+        childBody?.getAttribute('data-window-reader-type') ?? 'null'
+      );
+      document.body.setAttribute(
+        'data-top-shared-leak',
+        String('childShared' in window)
+      );
+      document.body.setAttribute(
+        'data-top-reader-leak',
+        String('childReader' in window)
+      );
+    </script>
+  </body>
+</html>

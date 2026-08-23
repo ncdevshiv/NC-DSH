@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      sessionStorage.removeItem("navigateResultOrder");
+      sessionStorage.removeItem("navigateSourceLog");
+      sessionStorage.removeItem("navigateCommittedType");
+      sessionStorage.removeItem("navigateCommittedUrl");
+      sessionStorage.removeItem("navigateFinishedType");
+      sessionStorage.removeItem("navigateFinishedUrl");
+      let committedSettled = false;
+      let finishedSettled = false;
+      const log = [];
+      navigation.addEventListener("currententrychange", (event) => {
+        log.push(
+          "listener:" +
+            String(event.navigationType) +
+            ":" +
+            (event.from?.url ?? "null")
+        );
+        sessionStorage.setItem("navigateSourceLog", log.join("|"));
+      });
+      navigation.oncurrententrychange = (event) => {
+        log.push(
+          "prop:" +
+            String(event.navigationType) +
+            ":" +
+            (event.from?.url ?? "null")
+        );
+        sessionStorage.setItem("navigateSourceLog", log.join("|"));
+      };
+      sessionStorage.setItem("navigateSourceLog", "before");
+      const result = navigation.navigate(
+        "/compat/navigation-navigate-result-promises-destination"
+      );
+      sessionStorage.setItem(
+        "navigateResultOrder",
+        [
+        "surface:" +
+          String(
+            !!result &&
+              typeof result.committed?.then === "function" &&
+              typeof result.finished?.then === "function"
+          ),
+        "sync:" + String(committedSettled) + "," + String(finishedSettled),
+      ].join("|")
+      );
+      result.committed.then((entry) => {
+        committedSettled = true;
+        sessionStorage.setItem(
+          "navigateResultOrder",
+          sessionStorage.getItem("navigateResultOrder") + "|committed"
+        );
+        sessionStorage.setItem(
+          "navigateCommittedType",
+          Object.prototype.toString.call(entry)
+        );
+        sessionStorage.setItem("navigateCommittedUrl", String(entry?.url ?? ""));
+      });
+      result.finished.then((entry) => {
+        finishedSettled = true;
+        sessionStorage.setItem(
+          "navigateResultOrder",
+          sessionStorage.getItem("navigateResultOrder") + "|finished"
+        );
+        sessionStorage.setItem(
+          "navigateFinishedType",
+          Object.prototype.toString.call(entry)
+        );
+        sessionStorage.setItem("navigateFinishedUrl", String(entry?.url ?? ""));
+      });
+      sessionStorage.setItem(
+        "navigateSourceLog",
+        (sessionStorage.getItem("navigateSourceLog") || "") + "|after-call"
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,118 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body>
+<template id="fixture">
+  <div id="bar">
+    <span id="foo" data-yes>first</span>
+  </div>
+  <div id="foo">
+    <span id="foo">nested</span>
+  </div>
+</template>
+<script>
+function ids(nodes) {
+  return Array.from(nodes).map((node) => node.id);
+}
+
+test(function () {
+  const fragment = new DocumentFragment();
+  const text = document.createTextNode("text");
+
+  assert_equals(fragment.constructor.name, "DocumentFragment");
+  assert_true(fragment instanceof DocumentFragment);
+  assert_equals(fragment.toString(), "[object DocumentFragment]");
+  assert_equals(fragment.ownerDocument, document);
+  assert_equals(fragment.nodeType, Node.DOCUMENT_FRAGMENT_NODE);
+  assert_equals(fragment.nodeName, "#document-fragment");
+
+  fragment.appendChild(text);
+  assert_equals(fragment.firstChild, text);
+  assert_equals(fragment.textContent, "text");
+}, "DocumentFragment constructor creates a valid fragment for the current document");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const first = document.createElement("span");
+  const second = document.createElement("span");
+
+  first.id = "first";
+  second.id = "second";
+  fragment.append(first, second);
+
+  assert_equals(fragment.childElementCount, 2);
+  assert_array_equals(ids(fragment.children), ["first", "second"]);
+  assert_equals(document.getElementById("first"), null);
+
+  document.body.appendChild(fragment);
+
+  assert_equals(fragment.childElementCount, 0);
+  assert_equals(document.getElementById("first"), first);
+  assert_equals(document.getElementById("second"), second);
+}, "Appending a DocumentFragment inserts its children and empties the fragment");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const first = document.createElement("div");
+  const second = document.createElement("span");
+  const empty = document.createElement("p");
+
+  first.id = "foo";
+  second.id = "foo";
+  empty.id = "";
+  fragment.append(first, second, empty);
+
+  assert_equals(typeof DocumentFragment.prototype.getElementById, "function");
+  assert_equals(typeof fragment.getElementById, "function");
+  assert_equals(fragment.getElementById("foo"), first);
+  assert_equals(fragment.getElementById("missing"), null);
+  assert_equals(fragment.getElementById(""), null);
+}, "DocumentFragment getElementById() returns the first non-empty id match");
+
+test(function () {
+  const content = document.getElementById("fixture").content;
+
+  assert_true(content instanceof DocumentFragment);
+  assert_equals(document.getElementById("foo"), null);
+  assert_true(content.getElementById("foo").hasAttribute("data-yes"));
+  assert_equals(content.querySelector("#foo").textContent, "first");
+  assert_array_equals(ids(content.querySelectorAll("#foo")), ["foo", "foo", "foo"]);
+}, "Template content exposes DocumentFragment query helpers outside the document tree");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(document.createElement("div"));
+
+  assert_array_equals(Array.from(fragment.querySelectorAll("img")), []);
+
+  const image = document.createElement("img");
+  image.id = "late";
+  fragment.appendChild(image);
+
+  assert_array_equals(ids(fragment.querySelectorAll("img")), ["late"]);
+}, "DocumentFragment querySelectorAll() still works after modification");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const root = document.createElement("div");
+  const child = document.createElement("span");
+
+  root.id = "root";
+  child.id = "child";
+  child.textContent = "child text";
+  root.appendChild(child);
+  fragment.appendChild(root);
+
+  const shallow = fragment.cloneNode(false);
+  const deep = fragment.cloneNode(true);
+
+  assert_true(shallow instanceof DocumentFragment);
+  assert_equals(shallow.childElementCount, 0);
+  assert_true(deep instanceof DocumentFragment);
+  assert_equals(deep.childElementCount, 1);
+  assert_equals(deep.getElementById("child").textContent, "child text");
+  assert_equals(fragment.getElementById("child"), child);
+}, "DocumentFragment cloneNode() supports shallow and deep cloning");
+</script>

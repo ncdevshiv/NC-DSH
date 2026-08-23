@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    worker.addEventListener("message", resolve, { once: true });
+    worker.addEventListener("error", function (event) {
+      reject(new Error("Worker error: " + event.message));
+    }, { once: true });
+  });
+}
+
+promise_test(async function () {
+  const dependencyUrl = worker_url([
+    "self.__dataTlaOrder = ['dep-start'];",
+    "await Promise.resolve().then(function () { self.__dataTlaOrder.push('dep-after'); });",
+    "export const marker = self.__dataTlaOrder.join('|');",
+    "export default `default:${await Promise.resolve().then(function () { self.__dataTlaOrder.push('dep-default'); return 'value'; })}`;",
+  ].join("\n"));
+  const source = [
+    "import defaultValue, { marker } from " + JSON.stringify(dependencyUrl) + ";",
+    "self.__dataTlaOrder.push('main');",
+    "postMessage({",
+    "  marker,",
+    "  defaultValue,",
+    "  order: self.__dataTlaOrder.join('|'),",
+    "  importScriptsType: typeof importScripts,",
+    "});",
+  ].join("\n");
+  const worker = new Worker(worker_url(source), { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.marker, "dep-start|dep-after", "static imports should wait for dependency top-level await before validating exports");
+    assert_equals(message.data.defaultValue, "default:value", "default export expressions with top-level await should be readable after dependency evaluation");
+    assert_equals(message.data.order, "dep-start|dep-after|dep-default|main", "main module body should run after awaited dependency evaluation");
+    assert_equals(message.data.importScriptsType, "function", "module workers should expose WorkerGlobalScope.importScripts");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers wait for data: dependency top-level await before evaluating the importer");
+
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-tla-main.js",
+    location.href
+  ).href;
+  const worker = new Worker(workerUrl, { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.error, undefined, "HTTP top-level-await dependency worker should not fail");
+    assert_equals(message.data.middle, "leaf-start|leaf-after|middle-start|middle-after", "transitive static imports should wait for awaited dependencies");
+    assert_equals(message.data.dynamic, "dynamic-start|dynamic-after", "await import() should resolve after dependency top-level await");
+    assert_equals(message.data.dynamicOrder, "dynamic-start|dynamic-after", "dynamic import namespace should be observed only after its own top-level await completes");
+    assert_equals(message.data.promised, "promise-start|promise-after", "bare import() promise should resolve to a namespace after dependency top-level await");
+    assert_equals(message.data.promisedThenValue, "promise-start|promise-after", "bare import().then() should observe exports after dependency top-level await");
+    assert_equals(message.data.promisedOrder, "promise-start|promise-after", "bare import() dependency side effects should complete before promise fulfillment");
+    assert_equals(message.data.reexportedSource, "reexport-source-start|reexport-source-after", "export-list reexports should wait for awaited dependency evaluation");
+    assert_equals(message.data.starSource, "reexport-source-start|reexport-source-after", "export-star reexports should wait for awaited dependency evaluation");
+    assert_equals(message.data.reexportOrder, "reexport-source-start|reexport-source-after", "reexport dependency side effects should complete before importer observes bindings");
+    assert_equals(
+      message.data.order,
+      "leaf-start|leaf-after|middle-start|middle-after|main-start|main-after-dynamic",
+      "HTTP dependency graph side effects should preserve awaited evaluation order",
+    );
+    assert_equals(message.data.importScriptsType, "function", "module workers should expose WorkerGlobalScope.importScripts");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers wait for transitive HTTP dependency top-level await and dynamic import");
+</script>

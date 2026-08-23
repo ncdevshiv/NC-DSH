@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const setResponse = await fetch("/wpt/runtime/cookies/http-set");
+  assert_equals(await setResponse.text(), "http-cookie=set", "setter route response");
+
+  const checkResponse = await fetch("/wpt/runtime/cookies/http-check");
+  assert_equals(
+    await checkResponse.text(),
+    "http-cookie=seen",
+    "cookie jar should carry the cookie into the next same-origin request",
+  );
+}, "HTTP cookies persist across same-origin fetch requests");
+
+promise_test(async function () {
+  const response = await fetch("/wpt/runtime/cookies/redirect-chain/start");
+
+  assert_true(response.redirected, "redirect-chain fetch should follow redirects");
+  assert_true(
+    response.url.endsWith("/wpt/runtime/cookies/redirect-chain/final"),
+    "final response URL should be the redirect-chain destination",
+  );
+  assert_equals(
+    await response.text(),
+    "cookie-chain=ok",
+    "cookies should be carried and replaced across the redirect chain",
+  );
+}, "HTTP cookies carry and update across redirect chains");
+</script>

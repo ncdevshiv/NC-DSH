@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const SLOW_URL = "/wpt/runtime/xhr/very-slow";
+
+promise_test(async function () {
+  const xhr = new XMLHttpRequest();
+  const events = [];
+  let snapshot = null;
+
+  await new Promise(function (resolve) {
+    xhr.onabort = function () {
+      events.push("abort");
+    };
+    xhr.onerror = function () {
+      events.push("error");
+    };
+    xhr.onload = function () {
+      events.push("load");
+    };
+    xhr.onloadend = function () {
+      events.push("loadend");
+      setTimeout(function () {
+        snapshot = {
+          events: events.slice(),
+          readyState: xhr.readyState,
+          status: xhr.status,
+          responseText: xhr.responseText,
+          responseURL: xhr.responseURL,
+        };
+        resolve();
+      }, 125);
+    };
+
+    xhr.open("GET", SLOW_URL);
+    xhr.send();
+    setTimeout(function () {
+      xhr.abort();
+    }, 20);
+  });
+
+  assert_array_equals(
+    snapshot.events,
+    ["abort", "loadend"],
+    "late response completion should not surface load or error after abort",
+  );
+  assert_equals(snapshot.readyState, XMLHttpRequest.UNSENT, "abort should reset readyState");
+  assert_equals(snapshot.status, 0, "abort should clear status");
+  assert_equals(snapshot.responseText, "", "abort should clear responseText");
+  assert_equals(snapshot.responseURL, "", "abort should clear responseURL");
+}, "XMLHttpRequest suppresses late response delivery after aborting a slow request");
+</script>

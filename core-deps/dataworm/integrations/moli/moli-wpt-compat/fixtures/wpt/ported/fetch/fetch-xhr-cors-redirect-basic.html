@@ -1,0 +1,191 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/runtime/fixture-server-config.js"></script>
+<script>
+function alternate_url(path) {
+  return location.protocol + "//" + location.hostname + ":" + __lmFixtureServerConfig.alternatePort + path;
+}
+
+function xhr_result(url, withCredentials) {
+  return new Promise(function (resolve) {
+    const events = [];
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      events.push("load");
+    };
+    xhr.onerror = function () {
+      events.push("error");
+    };
+    xhr.onloadend = function () {
+      events.push("loadend");
+      resolve({
+        events,
+        status: xhr.status,
+        responseText: xhr.responseText,
+        responseURL: xhr.responseURL,
+      });
+    };
+    xhr.open("GET", url);
+    xhr.withCredentials = !!withCredentials;
+    xhr.send();
+  });
+}
+
+function xhr_post_result(url) {
+  return new Promise(function (resolve) {
+    const events = [];
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      events.push("load");
+    };
+    xhr.onerror = function () {
+      events.push("error");
+    };
+    xhr.onloadend = function () {
+      events.push("loadend");
+      resolve({
+        events,
+        status: xhr.status,
+        responseText: xhr.responseText,
+        responseURL: xhr.responseURL,
+      });
+    };
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", "text/plain");
+    xhr.send("payload");
+  });
+}
+
+promise_test(async function () {
+  const response = await fetch("/wpt/runtime/cors/redirect/to-credentials-allow", {
+    credentials: "include",
+  });
+  assert_equals(response.type, "cors");
+  assert_true(response.redirected, "fetch response should expose redirect state");
+  assert_true(response.url.endsWith("/wpt/runtime/cors/credentials/allow"));
+  assert_equals(await response.text(), "cors-credentials-ok");
+}, "fetch keeps the document origin on a same-origin to cross-origin credentialed CORS redirect");
+
+promise_test(async function () {
+  const result = await xhr_result("/wpt/runtime/cors/redirect/to-credentials-allow", true);
+  assert_array_equals(result.events, ["load", "loadend"]);
+  assert_equals(result.status, 200);
+  assert_true(result.responseURL.endsWith("/wpt/runtime/cors/credentials/allow"));
+  assert_equals(result.responseText, "cors-credentials-ok");
+}, "XMLHttpRequest keeps the document origin on a same-origin to cross-origin credentialed CORS redirect");
+
+promise_test(async function () {
+  const response = await fetch(alternate_url("/wpt/runtime/cors/redirect/to-same-origin-echo"));
+  assert_equals(response.type, "basic");
+  assert_true(response.redirected, "fetch response should expose redirect state");
+  assert_true(response.url.endsWith("/wpt/runtime/cors/redirect/same-origin-echo"));
+  const payload = JSON.parse(await response.text());
+  assert_equals(payload.response, "cors-redirect-same-origin-echo");
+  assert_equals(payload.origin, "null");
+}, "fetch serializes Origin as null after a cross-origin redirect returns to the document origin");
+
+promise_test(async function () {
+  const result = await xhr_result(alternate_url("/wpt/runtime/cors/redirect/to-same-origin-echo"));
+  assert_array_equals(result.events, ["load", "loadend"]);
+  assert_equals(result.status, 200);
+  assert_true(result.responseURL.endsWith("/wpt/runtime/cors/redirect/same-origin-echo"));
+  const payload = JSON.parse(result.responseText);
+  assert_equals(payload.response, "cors-redirect-same-origin-echo");
+  assert_equals(payload.origin, "null");
+}, "XMLHttpRequest serializes Origin as null after a cross-origin redirect returns to the document origin");
+
+promise_test(async function () {
+  const response = await fetch("/wpt/runtime/cors/redirect/to-alt-to-same-origin-echo");
+  assert_equals(response.type, "basic");
+  assert_true(response.redirected, "fetch response should expose redirect state");
+  assert_true(response.url.endsWith("/wpt/runtime/cors/redirect/same-origin-echo"));
+  const payload = JSON.parse(await response.text());
+  assert_equals(payload.response, "cors-redirect-same-origin-echo");
+  assert_equals(payload.origin, "null");
+}, "fetch serializes Origin as null after a same-site cross-origin redirect chain returns to the document origin");
+
+promise_test(async function () {
+  const result = await xhr_result("/wpt/runtime/cors/redirect/to-alt-to-same-origin-echo");
+  assert_array_equals(result.events, ["load", "loadend"]);
+  assert_equals(result.status, 200);
+  assert_true(result.responseURL.endsWith("/wpt/runtime/cors/redirect/same-origin-echo"));
+  const payload = JSON.parse(result.responseText);
+  assert_equals(payload.response, "cors-redirect-same-origin-echo");
+  assert_equals(payload.origin, "null");
+}, "XMLHttpRequest serializes Origin as null after a same-site cross-origin redirect chain returns to the document origin");
+
+promise_test(async function () {
+  const response = await fetch("/wpt/runtime/cors/redirect/to-cross-site-to-same-origin-echo");
+  assert_equals(response.type, "basic");
+  assert_true(response.redirected, "fetch response should expose redirect state");
+  assert_true(response.url.endsWith("/wpt/runtime/cors/redirect/same-origin-echo"));
+  const payload = JSON.parse(await response.text());
+  assert_equals(payload.response, "cors-redirect-same-origin-echo");
+  assert_equals(payload.origin, "null");
+}, "fetch serializes Origin as null after a cross-site redirect chain returns to the document origin");
+
+promise_test(async function () {
+  const result = await xhr_result("/wpt/runtime/cors/redirect/to-cross-site-to-same-origin-echo");
+  assert_array_equals(result.events, ["load", "loadend"]);
+  assert_equals(result.status, 200);
+  assert_true(result.responseURL.endsWith("/wpt/runtime/cors/redirect/same-origin-echo"));
+  const payload = JSON.parse(result.responseText);
+  assert_equals(payload.response, "cors-redirect-same-origin-echo");
+  assert_equals(payload.origin, "null");
+}, "XMLHttpRequest serializes Origin as null after a cross-site redirect chain returns to the document origin");
+
+promise_test(async function () {
+  const response = await fetch("/wpt/runtime/cors/redirect/303-to-method-echo", {
+    method: "POST",
+    headers: [["Content-Type", "text/plain"]],
+    body: "payload",
+  });
+  assert_equals(response.type, "cors");
+  assert_true(response.redirected);
+  const payload = JSON.parse(await response.text());
+  assert_equals(payload.response, "cors-redirect-method-echo");
+  assert_equals(payload.method, "GET");
+  assert_equals(payload.body, "");
+  assert_equals(payload.content_type, null);
+}, "fetch rewrites POST to GET after a 303 CORS redirect");
+
+promise_test(async function () {
+  const result = await xhr_post_result("/wpt/runtime/cors/redirect/303-to-method-echo");
+  assert_array_equals(result.events, ["load", "loadend"]);
+  assert_equals(result.status, 200);
+  const payload = JSON.parse(result.responseText);
+  assert_equals(payload.response, "cors-redirect-method-echo");
+  assert_equals(payload.method, "GET");
+  assert_equals(payload.body, "");
+  assert_equals(payload.content_type, null);
+}, "XMLHttpRequest rewrites POST to GET after a 303 CORS redirect");
+
+promise_test(async function () {
+  const response = await fetch("/wpt/runtime/cors/redirect/307-to-method-echo", {
+    method: "POST",
+    headers: [["Content-Type", "text/plain"]],
+    body: "payload",
+  });
+  assert_equals(response.type, "cors");
+  assert_true(response.redirected);
+  const payload = JSON.parse(await response.text());
+  assert_equals(payload.response, "cors-redirect-method-echo");
+  assert_equals(payload.method, "POST");
+  assert_equals(payload.body, "payload");
+  assert_equals(payload.content_type, "text/plain");
+}, "fetch preserves POST after a 307 CORS redirect");
+
+promise_test(async function () {
+  const result = await xhr_post_result("/wpt/runtime/cors/redirect/307-to-method-echo");
+  assert_array_equals(result.events, ["load", "loadend"]);
+  assert_equals(result.status, 200);
+  const payload = JSON.parse(result.responseText);
+  assert_equals(payload.response, "cors-redirect-method-echo");
+  assert_equals(payload.method, "POST");
+  assert_equals(payload.body, "payload");
+  assert_equals(payload.content_type, "text/plain");
+}, "XMLHttpRequest preserves POST after a 307 CORS redirect");
+</script>

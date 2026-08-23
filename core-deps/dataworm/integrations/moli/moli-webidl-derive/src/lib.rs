@@ -1,0 +1,51 @@
+mod attrs;
+mod converter;
+mod expand;
+
+use proc_macro::TokenStream;
+use syn::{DeriveInput, parse_macro_input};
+
+/// Derives positional WebIDL argument parsing for V8 native binding structs.
+///
+/// The generated implementation reads fields from `v8::FunctionCallbackArguments`
+/// and returns a Rust struct. Field attributes control required arguments,
+/// explicit indexes, defaults, nullable values, variadic tails, custom
+/// converters, and hand-written parser hooks.
+#[proc_macro_derive(WebIdlArgs, attributes(webidl))]
+pub fn derive_webidl_args(input: TokenStream) -> TokenStream {
+    match expand::expand_webidl_args(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Derives named WebIDL dictionary member parsing for Rust structs.
+///
+/// The generated implementation reads object properties with ordinary V8
+/// property access so getter side effects and getter exceptions are preserved.
+/// Field attributes control member names, required/default handling,
+/// `nullable`, legacy nullish handling, explicit converters, and hand-written
+/// member parser hooks. Unnamed fields use `camelCase` member names by default,
+/// matching common WebIDL dictionary spelling.
+#[proc_macro_derive(WebIdlDictionary, attributes(webidl))]
+pub fn derive_webidl_dictionary(input: TokenStream) -> TokenStream {
+    match expand::expand_webidl_dictionary(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Derives WebIDL enum token parsing.
+///
+/// Unit enum variants are converted to lowercase tokens by default. Container
+/// `#[webidl(rename_all = "...")]` supports `lowercase`, `kebab-case`,
+/// `camelCase`, and `none`, while variant-level `#[webidl(token = "...")]`
+/// overrides the generated token. Types with custom parsing can use
+/// `#[webidl(parse_with = path)]`, where the path returns `Option<Self>`.
+#[proc_macro_derive(WebIdlEnum, attributes(webidl))]
+pub fn derive_webidl_enum(input: TokenStream) -> TokenStream {
+    match expand::expand_webidl_enum(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}

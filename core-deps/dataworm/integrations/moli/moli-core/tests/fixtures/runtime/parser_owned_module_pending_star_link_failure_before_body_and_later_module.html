@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.parserOwnedPendingStarLinkOrder = [];
+      window.addEventListener("error", () => {
+        window.parserOwnedPendingStarLinkOrder.push("error");
+        window.parserOwnedPendingStarLinkError = "pending-star-link-failure";
+      });
+    </script>
+    <script type="module">
+      import "/assets/module_pending_star_body_cycle_a.mjs";
+    </script>
+    <script type="module">
+      window.parserOwnedPendingStarLinkOrder.push("later-module");
+      window.parserOwnedPendingStarLinkBodyRan =
+        window.pendingStarDeferredLinkBodyRan === true;
+      window.parserOwnedPendingStarLinkContinuation = true;
+      window.parserOwnedPendingStarLinkOrderResult =
+        window.parserOwnedPendingStarLinkOrder.join(",");
+    </script>
+  </body>
+</html>

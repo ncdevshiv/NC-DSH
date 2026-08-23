@@ -1,0 +1,105 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function parse_reporting_api_body(report) {
+  return JSON.parse(report.body)[0];
+}
+
+async function take_csp_reports(token) {
+  const response = await fetch(
+    "/wpt/runtime/csp/reporting/take?token=" + encodeURIComponent(token),
+    { cache: "no-store" },
+  );
+  assert_equals(response.status, 200, "report take endpoint should be reachable");
+  return (await response.json()).reports;
+}
+
+async function wait_for_csp_reports(token, expectations) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    for (const report of await take_csp_reports(token)) {
+      const parsed = parse_reporting_api_body(report);
+      for (const expectation of expectations) {
+        if (!expectation.match &&
+            parsed.type === "csp-violation" &&
+            parsed.body.disposition === "report" &&
+            parsed.body.effectiveDirective === expectation.directive &&
+            parsed.body.blockedURL.includes(expectation.blockedText)) {
+          expectation.match = { parsed, report };
+        }
+      }
+      if (expectations.every(expectation => expectation.match)) {
+        return expectations;
+      }
+    }
+    await new Promise(resolve => step_timeout(resolve, 25));
+  }
+  assert_unreached("timed out waiting for all dedicated worker CSP report-to deliveries");
+}
+
+function next_message(worker) {
+  return new Promise(resolve => {
+    worker.addEventListener("message", resolve, { once: true });
+  });
+}
+
+function has_event(events, directive, blockedText) {
+  return events.some(event => event.disposition === "report" &&
+    event.effectiveDirective === directive &&
+    event.instance &&
+    event.blockedURI.includes(blockedText));
+}
+
+function assert_report_content_type(match, label) {
+  assert_true(
+    match.report.contentType.includes("application/reports+json"),
+    label + " report-to delivery should use Reporting API content type",
+  );
+}
+
+promise_test(async function () {
+  const token = "worker-report-to-report-only-subresources";
+  const worker = new Worker(
+    "/wpt/ported/worker/resources/worker-response-csp-report-to-worker.js",
+    { type: "module" },
+  );
+
+  try {
+    const outcome = (await next_message(worker)).data;
+    assert_equals(outcome.fetchText, "csp-reporting-target");
+    assert_equals(outcome.xhrStatus, 200);
+    assert_equals(outcome.xhrText, "csp-reporting-target");
+    assert_equals(outcome.dynamicValue, "worker-dynamic-import-ok");
+
+    assert_true(
+      has_event(outcome.events, "connect-src", "target.txt?worker-fetch"),
+      "dedicated worker report-only CSP should dispatch a fetch SecurityPolicyViolationEvent",
+    );
+    assert_true(
+      has_event(outcome.events, "connect-src", "target.txt?worker-xhr"),
+      "dedicated worker report-only CSP should dispatch an XHR SecurityPolicyViolationEvent",
+    );
+    assert_true(
+      has_event(outcome.events, "script-src", "worker-response-csp-report-to-dynamic-dependency.js"),
+      "dedicated worker report-only CSP should dispatch a dynamic import SecurityPolicyViolationEvent",
+    );
+
+    const reports = await wait_for_csp_reports(token, [
+      { directive: "connect-src", blockedText: "target.txt?worker-fetch", label: "fetch" },
+      { directive: "connect-src", blockedText: "target.txt?worker-xhr", label: "XHR" },
+      {
+        directive: "script-src",
+        blockedText: "worker-response-csp-report-to-dynamic-dependency.js",
+        label: "dynamic import",
+      },
+    ]);
+    for (const expectation of reports) {
+      assert_report_content_type(expectation.match, expectation.label);
+    }
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated worker response report-only CSP sends report-to without blocking fetch, XHR, or dynamic import");
+</script>

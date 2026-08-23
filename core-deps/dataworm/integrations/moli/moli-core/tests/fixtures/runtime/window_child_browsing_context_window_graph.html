@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="f0"></iframe>
+    <iframe id="f1" srcdoc="<p id='child'>child</p>"></iframe>
+    <script>
+      const f0 = document.getElementById('f0');
+      const f1 = document.getElementById('f1');
+      const w0 = window[0];
+      const w1 = window[1];
+      document.body.setAttribute('data-length', String(window.length));
+      document.body.setAttribute('data-w0-proxy', String(w0 === f0.contentWindow));
+      document.body.setAttribute('data-w1-proxy', String(w1 === f1.contentWindow));
+      document.body.setAttribute('data-w1-top', String(w1.top === window));
+      document.body.setAttribute('data-w1-parent', String(w1.parent === window));
+      document.body.setAttribute(
+        'data-w1-self-graph',
+        String(w1.self === w1 && w1.window === w1 && w1.frames === w1)
+      );
+      document.body.setAttribute(
+        'data-w1-frame-element-id',
+        w1.frameElement?.id ?? 'null'
+      );
+      document.body.setAttribute(
+        'data-w1-document-identity',
+        String(w1.document === f1.contentDocument)
+      );
+      document.body.setAttribute(
+        'data-w1-document-text',
+        w1.document?.body?.textContent?.trim() ?? 'null'
+      );
+      document.body.setAttribute(
+        'data-w1-default-view',
+        String(w1.document?.defaultView === w1)
+      );
+      document.body.setAttribute(
+        'data-w1-parent-window-missing',
+        String(!('parentWindow' in w1.document) && w1.document?.parentWindow === undefined)
+      );
+      f1.addEventListener('load', () => {
+        document.body.setAttribute(
+          'data-w1-proxy-after-load',
+          String(window[1] === w1 && f1.contentWindow === w1)
+        );
+        document.body.setAttribute(
+          'data-w1-document-identity-after-load',
+          String(w1.document === f1.contentDocument)
+        );
+        document.body.setAttribute(
+          'data-w1-document-text-after-load',
+          w1.document?.body?.textContent?.trim() ?? 'null'
+        );
+      });
+    </script>
+  </body>
+</html>

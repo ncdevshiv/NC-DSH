@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.postParseAsyncTaskOrder = [];
+      window.postParseDclSeen = false;
+      document.addEventListener("DOMContentLoaded", () => {
+        window.postParseDclSeen = true;
+        window.postParseAsyncTaskOrder.push("dcl");
+        window.postParseAsyncTaskOrderResult =
+          window.postParseAsyncTaskOrder.join(",");
+      });
+    </script>
+  </head>
+  <body>
+    <main id="late">late</main>
+    <script async src="/assets/parse_time_async_post_parse_first.js"></script>
+    <script async src="/assets/parse_time_async_post_parse_second.js"></script>
+  </body>
+</html>

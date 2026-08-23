@@ -1,0 +1,74 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>
+  <ul id="list"><li id="first">1</li><li>2</li><li>3</li><li>4</li></ul>
+</body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+test(function () {
+  const node = document.getElementById("first");
+  const parent = node.parentNode;
+  const children = parent.children;
+  const item = document.createElement("li");
+
+  assert_true(children instanceof HTMLCollection);
+  assert_equals(children.length, 4);
+  assert_equals(children[0], node);
+  assert_equals(children.item(0), node);
+
+  parent.appendChild(item);
+  assert_equals(children.length, 5);
+  assert_equals(children[4], item);
+
+  parent.removeChild(item);
+  assert_equals(children.length, 4);
+  assert_equals(children[4], undefined);
+}, "ParentNode.children should be a live HTMLCollection");
+
+test(function () {
+  const parent = document.createElement("div");
+  const first = parent.appendChild(document.createElement("span"));
+  const second = parent.appendChild(document.createElement("em"));
+  const third = parent.appendChild(document.createElement("strong"));
+  const children = parent.children;
+
+  assert_equals(children.length, 3);
+  assert_equals(children.item(0), first);
+  assert_equals(children.item(1), second);
+  assert_equals(children.item(3), null, "out-of-range item() should return null");
+  assert_equals(children.item(-1), null, "wrapped negative index should return null when out of range");
+  assert_throws_name("TypeError", () => children.item(), "item() should require its index argument");
+  assert_equals(children.item(undefined), first, "explicit undefined should convert to zero");
+  assert_equals(children.item(null), first, "null should convert to zero");
+  assert_equals(children.item("1.9"), second, "string decimals should truncate through unsigned long conversion");
+  assert_equals(children.item(NaN), first, "NaN should convert to zero");
+  assert_equals(children.item(Infinity), first, "Infinity should convert to zero");
+  assert_equals(children.item(-4294967295), second, "negative values should wrap through unsigned long conversion");
+  assert_equals(children.item(4294967297), second, "large values should wrap through unsigned long conversion");
+  assert_equals(
+    children.item({
+      valueOf() { return {}; },
+      toString() { return "2"; },
+    }),
+    third,
+    "object values should fall back to toString during unsigned long conversion",
+  );
+  assert_throws_name("Error", () => {
+    children.item({ valueOf() { throw new Error("item conversion failed"); } });
+  }, "item() should propagate object conversion exceptions");
+  assert_throws_name("TypeError", () => children.item(Symbol("index")), "item() should reject Symbol conversion");
+  assert_throws_name("TypeError", () => children.item(1n), "item() should reject BigInt conversion");
+}, "HTMLCollection item() uses WebIDL unsigned long conversion");
+</script>

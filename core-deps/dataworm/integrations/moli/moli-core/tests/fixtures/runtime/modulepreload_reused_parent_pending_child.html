@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <title>modulepreload reused parent pending child</title>
+    <script>
+      window.modulepreloadReusedParentOrder = ["classic-before"];
+      window.modulepreloadReusedParentError = "";
+      window.addEventListener("error", (event) => {
+        window.modulepreloadReusedParentError =
+          event.message || String(event.error || "error");
+        window.modulepreloadReusedParentOrder.push("error");
+        window.modulepreloadReusedParentFinalOrder =
+          window.modulepreloadReusedParentOrder.join(",");
+      });
+      const link = document.createElement("link");
+      link.rel = "modulepreload";
+      link.href = "/assets/modulepreload_reused_parent.mjs";
+      document.head.appendChild(link);
+    </script>
+    <script type="module" src="/assets/modulepreload_reused_root_slow.mjs"></script>
+    <script>
+      window.modulepreloadReusedParentOrder.push("classic-after");
+      window.modulepreloadReusedParentClassicAfter = true;
+    </script>
+  </head>
+  <body>
+    <main id="after">after</main>
+  </body>
+</html>

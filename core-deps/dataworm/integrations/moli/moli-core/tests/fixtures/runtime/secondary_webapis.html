@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<body
+  data-file-instance=""
+  data-file-blob-instance=""
+  data-file-name=""
+  data-file-type=""
+  data-file-last-modified=""
+  data-file-size=""
+  data-file-list-tag=""
+  data-file-list-length=""
+  data-file-list-item-same=""
+  data-resize-target=""
+  data-resize-entry-count=""
+  data-resize-observer-instance=""
+  data-resize-rect-width=""
+  data-resize-rect-height=""
+  data-resize-content-box-size=""
+  data-resize-border-box-size=""
+  data-resize-device-pixel-content-box-size=""
+  data-resize-take-records-count=""
+  data-resize-take-records-target=""
+>
+<div id="target" style="width: 37px; height: 19px;"></div>
+<script>
+const file = new File(["abc"], "note.txt", {
+  type: "text/plain",
+  lastModified: 123,
+});
+document.body.setAttribute("data-file-instance", String(file instanceof File));
+document.body.setAttribute("data-file-blob-instance", String(file instanceof Blob));
+document.body.setAttribute("data-file-name", file.name);
+document.body.setAttribute("data-file-type", file.type);
+document.body.setAttribute("data-file-last-modified", String(file.lastModified));
+document.body.setAttribute("data-file-size", String(file.size));
+
+const list = new FileList([file]);
+document.body.setAttribute("data-file-list-tag", Object.prototype.toString.call(list));
+document.body.setAttribute("data-file-list-length", String(list.length));
+document.body.setAttribute("data-file-list-item-same", String(list.item(0) === file));
+
+const target = document.getElementById("target");
+const preObserver = new ResizeObserver(() => {});
+preObserver.observe(target);
+const preRecords = preObserver.takeRecords();
+document.body.setAttribute("data-resize-take-records-count", String(preRecords.length));
+document.body.setAttribute(
+  "data-resize-take-records-target",
+  String(preRecords[0] && preRecords[0].target === target),
+);
+preObserver.disconnect();
+
+const observer = new ResizeObserver((entries, instance) => {
+  document.body.setAttribute("data-resize-target", String(entries[0].target === target));
+  document.body.setAttribute("data-resize-entry-count", String(entries.length));
+  document.body.setAttribute(
+    "data-resize-observer-instance",
+    String(instance instanceof ResizeObserver),
+  );
+  document.body.setAttribute("data-resize-rect-width", String(entries[0].contentRect.width));
+  document.body.setAttribute("data-resize-rect-height", String(entries[0].contentRect.height));
+  document.body.setAttribute(
+    "data-resize-content-box-size",
+    `${entries[0].contentBoxSize.length}:${entries[0].contentBoxSize[0].inlineSize}:${entries[0].contentBoxSize[0].blockSize}`,
+  );
+  document.body.setAttribute(
+    "data-resize-border-box-size",
+    `${entries[0].borderBoxSize.length}:${entries[0].borderBoxSize[0].inlineSize}:${entries[0].borderBoxSize[0].blockSize}`,
+  );
+  document.body.setAttribute(
+    "data-resize-device-pixel-content-box-size",
+    `${entries[0].devicePixelContentBoxSize.length}:${entries[0].devicePixelContentBoxSize[0].inlineSize}:${entries[0].devicePixelContentBoxSize[0].blockSize}`,
+  );
+  observer.disconnect();
+});
+observer.observe(target);
+</script>
+</body>
+</html>

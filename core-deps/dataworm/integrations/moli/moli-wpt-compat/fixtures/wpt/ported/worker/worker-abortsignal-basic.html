@@ -1,0 +1,128 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function worker_fixture_url() {
+  return new URL(
+    "/wpt/ported/worker/resources/worker-abortsignal-worker.js",
+    location.href,
+  ).href;
+}
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "default-abort" });
+    const message = await next_message(worker);
+    assert_true(message.data.aborted, "signal should be marked aborted");
+    assert_array_equals(
+      message.data.events,
+      ["listener", "onabort"],
+      "abort listeners should run in registration order inside the worker",
+    );
+    assert_equals(
+      message.data.reasonName,
+      "AbortError",
+      "default worker abort reason should use AbortError",
+    );
+    assert_equals(
+      message.data.reasonMessage,
+      "The operation was aborted.",
+      "default worker abort reason should keep the AbortError message",
+    );
+    assert_true(
+      message.data.reasonIsDomException,
+      "default worker abort reason should be a DOMException",
+    );
+    assert_equals(
+      message.data.thrown && message.data.thrown.name,
+      "AbortError",
+      "throwIfAborted should throw the AbortError reason inside the worker",
+    );
+    assert_equals(
+      message.data.thrown && message.data.thrown.message,
+      "The operation was aborted.",
+      "throwIfAborted should preserve the AbortError message inside the worker",
+    );
+    assert_true(
+      message.data.thrown && message.data.thrown.isDomException,
+      "throwIfAborted should throw a DOMException inside the worker",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose AbortController default DOMException reasons and throwIfAborted");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "timeout" });
+    const message = await next_message(worker);
+    assert_true(message.data.aborted, "AbortSignal.timeout should abort inside the worker");
+    assert_equals(
+      message.data.reasonName,
+      "TimeoutError",
+      "AbortSignal.timeout should use TimeoutError inside the worker",
+    );
+    assert_equals(
+      message.data.reasonMessage,
+      "signal timed out",
+      "AbortSignal.timeout should keep the TimeoutError message inside the worker",
+    );
+    assert_true(
+      message.data.reasonIsDomException,
+      "AbortSignal.timeout should use a DOMException reason inside the worker",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose AbortSignal.timeout");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage({ mode: "any" });
+    const message = await next_message(worker);
+    assert_true(message.data.aborted, "AbortSignal.any should abort when a source signal aborts");
+    assert_equals(
+      message.data.reason,
+      "second-abort",
+      "AbortSignal.any should preserve the first source reason inside the worker",
+    );
+    assert_array_equals(
+      message.data.events,
+      ["listener", "onabort"],
+      "AbortSignal.any abort listeners should run in registration order inside the worker",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers expose AbortSignal.any");
+</script>

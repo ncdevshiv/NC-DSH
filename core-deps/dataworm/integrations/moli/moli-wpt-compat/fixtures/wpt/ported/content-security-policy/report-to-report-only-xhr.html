@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function parse_reporting_api_body(report) {
+  return JSON.parse(report.body)[0];
+}
+
+async function take_csp_reports(token) {
+  const response = await fetch(
+    "/wpt/runtime/csp/reporting/take?token=" + encodeURIComponent(token),
+    { cache: "no-store" },
+  );
+  assert_equals(response.status, 200, "report take endpoint should be reachable");
+  return (await response.json()).reports;
+}
+
+async function wait_for_csp_report(token, predicate) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    for (const report of await take_csp_reports(token)) {
+      const parsed = parse_reporting_api_body(report);
+      if (predicate(parsed, report)) {
+        return { parsed, report };
+      }
+    }
+    await new Promise(resolve => step_timeout(resolve, 25));
+  }
+  assert_unreached("timed out waiting for CSP XHR report-to delivery");
+}
+
+function wait_for_csp_violation(predicate) {
+  return new Promise(resolve => {
+    function on_violation(event) {
+      if (!predicate(event)) {
+        return;
+      }
+      document.removeEventListener("securitypolicyviolation", on_violation);
+      resolve(event);
+    }
+    document.addEventListener("securitypolicyviolation", on_violation);
+  });
+}
+
+function xhr_text(url) {
+  return new Promise(resolve => {
+    const xhr = new XMLHttpRequest();
+    xhr.onloadend = () => resolve({
+      status: xhr.status,
+      responseText: xhr.responseText,
+    });
+    xhr.open("GET", url);
+    xhr.send();
+  });
+}
+
+promise_test(async function () {
+  const token = "document-report-to-report-only-xhr";
+  const violation_event_promise = wait_for_csp_violation(
+    event => event.blockedURI.includes("/wpt/runtime/csp/reporting/target.txt"),
+  );
+
+  const outcome = await xhr_text("/wpt/runtime/csp/reporting/target.txt?document-xhr");
+  assert_equals(outcome.status, 200);
+  assert_equals(outcome.responseText, "csp-reporting-target");
+
+  const [match, violation_event] = await Promise.all([
+    wait_for_csp_report(token, report => {
+      return report.type === "csp-violation" &&
+        report.body.disposition === "report" &&
+        report.body.effectiveDirective === "connect-src" &&
+        report.body.blockedURL.includes("/wpt/runtime/csp/reporting/target.txt");
+    }),
+    violation_event_promise,
+  ]);
+
+  assert_true(
+    violation_event.disposition === "report" &&
+      violation_event.effectiveDirective === "connect-src" &&
+      violation_event instanceof SecurityPolicyViolationEvent,
+    "document report-only CSP should dispatch an XHR SecurityPolicyViolationEvent",
+  );
+  assert_true(
+    match.report.contentType.includes("application/reports+json"),
+    "document XHR report-to delivery should use Reporting API content type",
+  );
+}, "Document report-only CSP sends report-to without blocking XHR");
+</script>

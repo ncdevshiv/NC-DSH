@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head>
+  <link id="sheet" rel="stylesheet" media="print" href="/assets/stylesheet-media-change-load-handler.css">
+  <script>
+    window.stylesheetMediaLoadCount = 0;
+    document.getElementById("sheet").addEventListener("load", event => {
+      window.stylesheetMediaLoadCount += 1;
+      event.currentTarget.media = "all";
+      document.documentElement.setAttribute("data-stylesheet-media-load-count", String(window.stylesheetMediaLoadCount));
+      document.documentElement.setAttribute("data-stylesheet-media", event.currentTarget.media);
+      document.documentElement.setAttribute("data-stylesheet-media-color", getComputedStyle(document.documentElement).color);
+    });
+  </script>
+</head>
+<body>stylesheet media load handler</body>
+</html>

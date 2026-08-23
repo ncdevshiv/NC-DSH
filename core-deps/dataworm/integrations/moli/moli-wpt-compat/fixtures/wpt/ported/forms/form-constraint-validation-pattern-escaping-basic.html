@@ -1,0 +1,88 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function textInput(value, pattern) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.pattern = pattern;
+  document.body.appendChild(input);
+  return input;
+}
+
+test(function () {
+  const matching = textInput("(ok){1}", "\\(ok\\)\\{1\\}");
+  assert_false(matching.validity.patternMismatch, "escaped v-flag grouping/counting metacharacters should match literally");
+  assert_true(matching.validity.valid, "escaped literal pattern should keep matching controls valid");
+
+  const failing = textInput("(ok){2}", "\\(ok\\)\\{1\\}");
+  assert_true(failing.validity.patternMismatch, "literal escaping should still require the complete value to match");
+}, "patternMismatch supports escaped literal grouping and quantifier metacharacters");
+
+test(function () {
+  const matching = textInput(")]}", "\\)\\]\\}");
+  assert_false(matching.validity.patternMismatch, "escaped closing punctuators should match literally");
+  assert_true(matching.validity.valid, "escaped closing punctuators should keep matching controls valid");
+
+  const failing = textInput(")]", "\\)\\]\\}");
+  assert_true(failing.validity.patternMismatch, "escaped closing punctuators should still require the complete value");
+}, "patternMismatch supports escaped literal closing punctuators");
+
+test(function () {
+  const matching = textInput("-", "[\\-]");
+  assert_false(matching.validity.patternMismatch, "escaped hyphen in a character class should match a literal hyphen");
+
+  const failing = textInput("|", "[\\-]");
+  assert_true(failing.validity.patternMismatch, "escaped class literal should not match other characters");
+}, "patternMismatch supports escaped literal hyphen inside character classes");
+
+test(function () {
+  const matching = textInput("]", "[\\]]");
+  assert_false(matching.validity.patternMismatch, "escaped closing bracket in a character class should match literally");
+
+  const failing = textInput("[", "[\\]]");
+  assert_true(failing.validity.patternMismatch, "escaped class bracket should not match a different bracket");
+}, "patternMismatch supports escaped closing bracket inside character classes");
+
+test(function () {
+  const punctuators = [
+    "(", ")", "[", "]", "{", "}", "/", "-", "|",
+  ];
+  for (const punctuator of punctuators) {
+    const pattern = "[\\" + punctuator + "]";
+    const matching = textInput(punctuator, pattern);
+    assert_false(matching.validity.patternMismatch, "escaped class " + punctuator + " should match literally");
+
+    const failing = textInput("a", pattern);
+    assert_true(failing.validity.patternMismatch, "escaped class " + punctuator + " should not match another character");
+  }
+}, "patternMismatch supports escaped reserved punctuators inside character classes");
+
+test(function () {
+  const invalidDoublePunctuators = [
+    "!!", "##", "%%", ",,", "::", ";;", "<<", "==", ">>", "@@", "``", "~~",
+  ];
+  for (const punctuator of invalidDoublePunctuators) {
+    const input = textInput("x", "[a" + punctuator + "b]");
+    assert_false(
+      input.validity.patternMismatch,
+      "invalid unescaped class double-punctuator " + punctuator + " syntax should be ignored",
+    );
+    assert_true(
+      input.validity.valid,
+      "ignored invalid class double-punctuator " + punctuator + " pattern should not make the control invalid",
+    );
+  }
+}, "invalid unescaped v-flag double-punctuator syntax inside character classes remains ignored");
+
+test(function () {
+  const unescapedHyphen = textInput("a", "[a-z-]");
+  assert_false(unescapedHyphen.validity.patternMismatch, "invalid unescaped hyphen syntax should be ignored under the v flag");
+  assert_true(unescapedHyphen.validity.valid, "ignored invalid pattern should not make the control invalid");
+
+}, "invalid unescaped v-flag pattern syntax remains ignored");
+</script>

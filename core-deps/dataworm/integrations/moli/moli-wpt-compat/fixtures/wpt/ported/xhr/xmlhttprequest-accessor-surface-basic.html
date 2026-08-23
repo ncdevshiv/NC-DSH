@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const xhr = new XMLHttpRequest();
+  const xhrProto = XMLHttpRequest.prototype;
+  const xhrEventTargetProto = XMLHttpRequestEventTarget.prototype;
+  const uploadDesc = Object.getOwnPropertyDescriptor(xhrProto, "upload");
+  const responseURLDesc = Object.getOwnPropertyDescriptor(xhrProto, "responseURL");
+  const withCredentialsDesc = Object.getOwnPropertyDescriptor(xhrProto, "withCredentials");
+  const onloadDesc = Object.getOwnPropertyDescriptor(xhrEventTargetProto, "onload");
+
+  assert_equals(Object.getPrototypeOf(xhrProto), xhrEventTargetProto, "XMLHttpRequest prototype chain");
+  assert_equals(
+    Object.getPrototypeOf(XMLHttpRequestUpload.prototype),
+    xhrEventTargetProto,
+    "XMLHttpRequestUpload prototype chain",
+  );
+
+  assert_true(!!uploadDesc, "upload descriptor should exist");
+  assert_true(uploadDesc.enumerable, "upload should be enumerable");
+  assert_true(uploadDesc.configurable, "upload should be configurable");
+  assert_equals(typeof uploadDesc.get, "function", "upload getter");
+  assert_equals(uploadDesc.set, undefined, "upload setter should be absent");
+
+  assert_true(!!responseURLDesc, "responseURL descriptor should exist");
+  assert_true(responseURLDesc.enumerable, "responseURL should be enumerable");
+  assert_true(responseURLDesc.configurable, "responseURL should be configurable");
+  assert_equals(typeof responseURLDesc.get, "function", "responseURL getter");
+  assert_equals(responseURLDesc.set, undefined, "responseURL setter should be absent");
+
+  assert_true(!!withCredentialsDesc, "withCredentials descriptor should exist");
+  assert_true(withCredentialsDesc.enumerable, "withCredentials should be enumerable");
+  assert_true(withCredentialsDesc.configurable, "withCredentials should be configurable");
+  assert_equals(typeof withCredentialsDesc.get, "function", "withCredentials getter");
+  assert_equals(typeof withCredentialsDesc.set, "function", "withCredentials setter");
+
+  assert_true(!!onloadDesc, "onload descriptor should exist");
+  assert_true(onloadDesc.enumerable, "onload should be enumerable");
+  assert_true(onloadDesc.configurable, "onload should be configurable");
+  assert_equals(typeof onloadDesc.get, "function", "onload getter");
+  assert_equals(typeof onloadDesc.set, "function", "onload setter");
+
+  assert_equals(typeof xhr.upload, "object", "upload should expose an object");
+  assert_equals(
+    Object.prototype.toString.call(xhr.upload),
+    "[object XMLHttpRequestUpload]",
+    "upload brand",
+  );
+  assert_true(xhr.upload instanceof EventTarget, "upload should inherit EventTarget");
+  assert_equals(xhr.responseURL, "", "initial responseURL");
+  assert_equals(xhr.readyState, XMLHttpRequest.UNSENT, "initial readyState");
+  assert_equals(xhr.status, 0, "initial status");
+  assert_equals(Object.keys(xhr).length, 0, "instance should stay free of enumerable own props");
+  assert_equals(
+    Object.getOwnPropertyNames(xhr).length,
+    0,
+    "instance should stay free of own props",
+  );
+}, "XMLHttpRequest exposes upload/withCredentials/responseURL on prototype accessors");
+
+test(function () {
+  const xhr = new XMLHttpRequest();
+  const firstUpload = xhr.upload;
+  const secondUpload = xhr.upload;
+
+  xhr.responseType = "json";
+  xhr.timeout = 250;
+  xhr.withCredentials = true;
+  xhr.onreadystatechange = function () {};
+  xhr.onload = function () {};
+
+  assert_equals(firstUpload, secondUpload, "upload getter should be stable");
+  assert_equals(xhr.responseType, "json", "responseType round-trips through accessor state");
+  assert_equals(xhr.timeout, 250, "timeout round-trips through accessor state");
+  assert_true(xhr.withCredentials, "withCredentials round-trips through accessor state");
+  assert_equals(typeof xhr.onreadystatechange, "function", "onreadystatechange stores listener");
+  assert_equals(typeof xhr.onload, "function", "onload stores listener");
+  assert_equals(Object.keys(xhr).length, 0, "setters should not create enumerable own props");
+  assert_equals(
+    Object.getOwnPropertyNames(xhr).length,
+    0,
+    "setters should not create own props",
+  );
+}, "XMLHttpRequest accessor-backed state stays off the instance surface");
+</script>

@@ -1,0 +1,90 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.pattern = "[A-Z]{3}-[0-9]{2}";
+
+  assert_equals(input.getAttribute("pattern"), "[A-Z]{3}-[0-9]{2}", "pattern property should reflect to the content attribute");
+  assert_false(input.validity.patternMismatch, "empty non-required control should not be patternMismatch");
+  assert_true(input.validity.valid, "empty non-required control should stay valid");
+
+  input.value = "ABC-12";
+  assert_false(input.validity.patternMismatch, "matching value should clear patternMismatch");
+  assert_true(input.checkValidity(), "matching value should pass checkValidity");
+
+  input.value = "abc-12";
+  assert_true(input.validity.patternMismatch, "non-matching value should set patternMismatch");
+  assert_false(input.validity.valid, "patternMismatch should make the control invalid");
+  assert_false(input.checkValidity(), "patternMismatch should fail checkValidity");
+  assert_true(input.validationMessage.length > 0, "patternMismatch should expose a validation message");
+}, "text input validity reflects patternMismatch");
+
+test(function () {
+  const input = document.createElement("input");
+  input.pattern = "[0-9]+";
+  input.value = "123";
+  assert_false(input.validity.patternMismatch, "initial pattern should match");
+
+  input.pattern = "[a-z]+";
+  assert_true(input.validity.patternMismatch, "changing pattern should update validity");
+
+  input.removeAttribute("pattern");
+  assert_false(input.validity.patternMismatch, "removing pattern should clear patternMismatch");
+  assert_true(input.validity.valid, "control should become valid after pattern removal");
+}, "pattern attribute changes update validity");
+
+test(function () {
+  const input = document.createElement("input");
+  input.pattern = "[";
+  input.value = "anything";
+
+  assert_false(input.validity.patternMismatch, "invalid pattern syntax should be ignored");
+  assert_true(input.validity.valid, "invalid pattern syntax should not make the control invalid");
+}, "invalid pattern syntax is ignored for constraint validation");
+
+test(function () {
+  withHost(
+    `<form id="form">
+       <input id="first" pattern="[0-9]{4}" value="abcd">
+       <input id="second" pattern="[a-z]+" value="ready">
+     </form>`,
+    function (host) {
+      const form = host.querySelector("#form");
+      const first = host.querySelector("#first");
+      const second = host.querySelector("#second");
+      const events = [];
+
+      first.addEventListener("invalid", function () {
+        events.push("first");
+      });
+      second.addEventListener("invalid", function () {
+        events.push("second");
+      });
+
+      assert_false(form.checkValidity(), "form should fail when a control has patternMismatch");
+      assert_array_equals(events, ["first"], "form checkValidity should dispatch invalid only for patternMismatch controls");
+
+      events.length = 0;
+      first.value = "1234";
+      assert_true(form.reportValidity(), "form should pass once patternMismatch is cleared");
+      assert_array_equals(events, [], "valid form reportValidity should not dispatch invalid");
+    },
+  );
+}, "form validation aggregates patternMismatch controls");
+</script>

@@ -1,0 +1,167 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(target) {
+  return new Promise(function (resolve) {
+    target.onmessage = resolve;
+  });
+}
+
+function next_messages(port, count) {
+  const events = [];
+  return new Promise(function (resolve) {
+    port.onmessage = function (event) {
+      events.push(event);
+      if (events.length === count) {
+        resolve(events);
+      }
+    };
+  });
+}
+
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+async function assert_window_to_worker_arraybuffer_transfer() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (messageEvent) {",
+        "    const bytes = Array.from(new Uint8Array(messageEvent.data));",
+        "    port.postMessage({",
+        "      kind: 'received-buffer',",
+        "      isArrayBuffer: messageEvent.data instanceof ArrayBuffer,",
+        "      byteLength: messageEvent.data.byteLength,",
+        "      bytes: bytes.join(','),",
+        "      portsLength: messageEvent.ports.length,",
+        "    });",
+        "  };",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const ready = next_message(worker);
+    worker.postMessage("connect", [channel.port2]);
+    assert_equals((await ready).data.kind, "ready", "worker should install the port callback");
+
+    const received = next_message(channel.port1);
+    const buffer = new Uint8Array([7, 8, 9]).buffer;
+    channel.port1.postMessage(buffer, [buffer]);
+
+    assert_equals(buffer.byteLength, 0, "MessagePort sender ArrayBuffer should be detached");
+
+    const reply = (await received).data;
+    assert_equals(reply.kind, "received-buffer", "worker should reply after receiving the buffer");
+    assert_true(reply.isArrayBuffer, "worker should receive an ArrayBuffer");
+    assert_equals(reply.byteLength, 3, "worker should receive the original byte length");
+    assert_equals(reply.bytes, "7,8,9", "worker should receive the transferred bytes");
+    assert_equals(reply.portsLength, 0, "ArrayBuffer transfer should not populate event.ports");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}
+
+async function assert_worker_to_window_arraybuffer_transfer() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (messageEvent) {",
+        "    if (messageEvent.data !== 'send-buffer') {",
+        "      return;",
+        "    }",
+        "    const buffer = new Uint8Array([4, 5, 6]).buffer;",
+        "    port.postMessage(buffer, [buffer]);",
+        "    port.postMessage({ kind: 'worker-detached', byteLength: buffer.byteLength });",
+        "  };",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const ready = next_message(worker);
+    worker.postMessage("connect", [channel.port2]);
+    assert_equals((await ready).data.kind, "ready", "worker should install the port callback");
+
+    const replies = next_messages(channel.port1, 2);
+    channel.port1.postMessage("send-buffer");
+
+    const events = await replies;
+    const bufferEvent = events[0];
+    assert_true(bufferEvent.data instanceof ArrayBuffer, "window should receive an ArrayBuffer");
+    assert_equals(bufferEvent.data.byteLength, 3, "window should receive the original byte length");
+    assert_equals(
+      Array.from(new Uint8Array(bufferEvent.data)).join(","),
+      "4,5,6",
+      "window should receive the worker bytes",
+    );
+    assert_equals(bufferEvent.ports.length, 0, "ArrayBuffer transfer should not populate event.ports");
+
+    const detached = events[1].data;
+    assert_equals(detached.kind, "worker-detached", "worker should report sender detachment");
+    assert_equals(detached.byteLength, 0, "worker sender ArrayBuffer should be detached");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}
+
+function assert_duplicate_arraybuffer_transfer_rejected() {
+  const channel = new MessageChannel();
+  const buffer = new ArrayBuffer(4);
+
+  try {
+    assert_throws_name(
+      "DataCloneError",
+      function () {
+        channel.port1.postMessage(buffer, [buffer, buffer]);
+      },
+      "duplicate ArrayBuffer in a transfer list should throw",
+    );
+    assert_equals(buffer.byteLength, 4, "duplicate transfer failure should not detach the buffer");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+  }
+}
+
+promise_test(async function () {
+  await assert_window_to_worker_arraybuffer_transfer();
+  await assert_worker_to_window_arraybuffer_transfer();
+  assert_duplicate_arraybuffer_transfer_rejected();
+}, "MessagePort.postMessage supports ArrayBuffer transfer with worker-owned ports");
+</script>

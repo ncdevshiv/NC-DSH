@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<body></body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const HTMLNS = "http://www.w3.org/1999/xhtml";
+  const SVGNS = "http://www.w3.org/2000/svg";
+
+  assert_equals(document.createElementNS(HTMLNS, "I").nodeName, "I");
+  assert_equals(document.createElementNS(HTMLNS, "i").nodeName, "I");
+  assert_equals(document.createElementNS(SVGNS, "svg").nodeName, "svg");
+  assert_equals(document.createElementNS(SVGNS, "SVG").nodeName, "SVG");
+  assert_equals(document.createElementNS(HTMLNS, "x:b").nodeName, "X:B");
+}, "Element nodeName matches tagName casing rules");
+
+test(function () {
+  assert_equals(document.createTextNode("foo").nodeName, "#text");
+}, "Text nodeName is #text");
+
+test(function () {
+  assert_equals(document.createComment("foo").nodeName, "#comment");
+}, "Comment nodeName is #comment");
+
+test(function () {
+  assert_equals(document.nodeName, "#document");
+}, "Document nodeName is #document");
+
+test(function () {
+  assert_equals(document.doctype.nodeName, "html");
+}, "DocumentType nodeName is the doctype name");
+
+test(function () {
+  assert_equals(document.createDocumentFragment().nodeName, "#document-fragment");
+}, "DocumentFragment nodeName is #document-fragment");
+</script>

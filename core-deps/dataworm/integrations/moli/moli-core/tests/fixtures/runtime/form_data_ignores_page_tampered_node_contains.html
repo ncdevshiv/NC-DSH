@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body data-tampered-node-contains-called="no">
+    <form id="f">
+      <fieldset disabled>
+        <legend>
+          <input id="in-legend" name="in-legend" value="exempt" />
+        </legend>
+        <input id="blocked" name="blocked" value="blocked" />
+      </fieldset>
+    </form>
+    <script>
+      Node.prototype.contains = function () {
+        document.body.setAttribute("data-tampered-node-contains-called", "yes");
+        throw new Error("page tampered Node.prototype.contains");
+      };
+
+      const fd = new FormData(document.getElementById("f"));
+      document.body.setAttribute("data-formdata-in-legend", String(fd.get("in-legend")));
+      document.body.setAttribute("data-formdata-blocked", String(fd.get("blocked")));
+      document.body.setAttribute(
+        "data-formdata-entries",
+        JSON.stringify(Array.from(fd.entries())),
+      );
+    </script>
+  </body>
+</html>

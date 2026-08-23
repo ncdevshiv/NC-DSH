@@ -1,0 +1,118 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+    }
+
+    function onMessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onError(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onMessage, { once: true });
+    worker.addEventListener("error", onError, { once: true });
+  });
+}
+
+test(function () {
+  const worker = new Worker(worker_url(""));
+  try {
+    let thrown = null;
+    try {
+      worker.postMessage();
+    } catch (error) {
+      thrown = error;
+    }
+
+    assert_true(thrown instanceof TypeError, "missing worker.postMessage argument should throw TypeError");
+    assert_true(
+      String(thrown.message).includes("1 argument required"),
+      "missing worker.postMessage argument should preserve the required-argument message",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Worker.postMessage requires one argument");
+
+test(function () {
+  const worker = new Worker(worker_url(""));
+  try {
+    let thrown = null;
+    try {
+      worker.postMessage(function nope() {});
+    } catch (error) {
+      thrown = error;
+    }
+
+    assert_equals(thrown && thrown.name, "DataCloneError", "uncloneable Worker payload should throw DataCloneError");
+  } finally {
+    worker.terminate();
+  }
+}, "Worker.postMessage rejects uncloneable payloads");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "try {",
+        "  postMessage();",
+        "  postMessage({ unexpected: true });",
+        "} catch (error) {",
+        "  postMessage({",
+        "    name: error && error.name,",
+        "    required: String(error && error.message).includes('1 argument required')",
+        "  });",
+        "}",
+        "close();",
+      ].join("\n"),
+    ),
+  );
+
+  try {
+    const event = await next_message(worker);
+    assert_equals(event.data.name, "TypeError", "worker-global postMessage() should throw TypeError");
+    assert_true(event.data.required, "worker-global postMessage() should keep the required-argument message");
+  } finally {
+    worker.terminate();
+  }
+}, "DedicatedWorkerGlobalScope.postMessage requires one argument");
+
+promise_test(async function () {
+  const worker = new Worker(
+    worker_url(
+      [
+        "try {",
+        "  postMessage(function nope() {});",
+        "  postMessage('unexpected');",
+        "} catch (error) {",
+        "  postMessage(error && error.name);",
+        "}",
+        "close();",
+      ].join("\n"),
+    ),
+  );
+
+  try {
+    const event = await next_message(worker);
+    assert_equals(event.data, "DataCloneError", "worker-global postMessage should reject uncloneable payloads");
+  } finally {
+    worker.terminate();
+  }
+}, "DedicatedWorkerGlobalScope.postMessage rejects uncloneable payloads");
+</script>

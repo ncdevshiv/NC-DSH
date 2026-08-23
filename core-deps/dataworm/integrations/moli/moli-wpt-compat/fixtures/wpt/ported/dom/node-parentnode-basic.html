@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<body></body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  assert_equals(document.parentNode, null);
+}, "Document parentNode is null");
+
+test(function () {
+  assert_equals(document.doctype.parentNode, document);
+}, "DocumentType parentNode is the document");
+
+test(function () {
+  assert_equals(document.documentElement.parentNode, document);
+}, "Root element parentNode is the document");
+
+test(function () {
+  const element = document.createElement("div");
+  assert_equals(element.parentNode, null);
+
+  document.body.appendChild(element);
+  assert_equals(element.parentNode, document.body);
+
+  element.remove();
+  assert_equals(element.parentNode, null);
+}, "Element parentNode updates after append and remove");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const element = document.createElement("span");
+  const text = document.createTextNode("text");
+
+  fragment.appendChild(element);
+  element.appendChild(text);
+
+  assert_equals(fragment.parentNode, null);
+  assert_equals(element.parentNode, fragment);
+  assert_equals(text.parentNode, element);
+}, "parentNode tracks DocumentFragment and nested subtree parents");
+</script>

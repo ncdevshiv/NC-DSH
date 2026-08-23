@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <body
+    data-update-bool=""
+    data-update-fast=""
+    data-update-slow=""
+    data-update-none=""
+    data-scripting-bool=""
+    data-scripting-enabled=""
+    data-scripting-initial-only=""
+    data-scripting-none=""
+    data-display-mode-bool=""
+    data-display-mode-browser=""
+    data-display-mode-standalone=""
+    data-dynamic-range-bool=""
+    data-dynamic-range-standard=""
+    data-dynamic-range-high=""
+    data-video-dynamic-range-bool=""
+    data-video-dynamic-range-standard=""
+    data-video-dynamic-range-high=""
+  >
+    <script>
+      const body = document.body;
+      const cases = [
+        ['data-update-bool', '(update)'],
+        ['data-update-fast', '(update: fast)'],
+        ['data-update-slow', '(update: slow)'],
+        ['data-update-none', '(update: none)'],
+        ['data-scripting-bool', '(scripting)'],
+        ['data-scripting-enabled', '(scripting: enabled)'],
+        ['data-scripting-initial-only', '(scripting: initial-only)'],
+        ['data-scripting-none', '(scripting: none)'],
+        ['data-display-mode-bool', '(display-mode)'],
+        ['data-display-mode-browser', '(display-mode: browser)'],
+        ['data-display-mode-standalone', '(display-mode: standalone)'],
+        ['data-dynamic-range-bool', '(dynamic-range)'],
+        ['data-dynamic-range-standard', '(dynamic-range: standard)'],
+        ['data-dynamic-range-high', '(dynamic-range: high)'],
+        ['data-video-dynamic-range-bool', '(video-dynamic-range)'],
+        ['data-video-dynamic-range-standard', '(video-dynamic-range: standard)'],
+        ['data-video-dynamic-range-high', '(video-dynamic-range: high)'],
+      ];
+      for (const [attr, query] of cases) {
+        body.setAttribute(attr, String(window.matchMedia(query).matches));
+      }
+    </script>
+  </body>
+</html>

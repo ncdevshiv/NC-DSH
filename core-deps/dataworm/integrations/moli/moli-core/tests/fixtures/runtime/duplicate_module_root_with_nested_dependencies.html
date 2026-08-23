@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <title>duplicate module root with nested dependencies</title>
+    <script>
+      window.duplicateNestedModuleLog = [];
+      window.addEventListener("error", (event) => {
+        window.duplicateNestedModuleLog.push(
+          event.message || String(event.error || "error"),
+        );
+      });
+      window.addEventListener("load", () => {
+        window.duplicateNestedModuleFinalLog =
+          window.duplicateNestedModuleLog.join(",");
+      });
+    </script>
+    <script type="module" src="/assets/duplicate_nested_this.mjs"></script>
+    <script type="module" src="/assets/duplicate_nested_this.mjs"></script>
+    <script type="module" src="/assets/duplicate_nested_this_nested.mjs"></script>
+    <script type="module" src="/assets/duplicate_nested_this.mjs"></script>
+    <script type="module" src="/assets/duplicate_nested_this_nested.mjs"></script>
+  </head>
+  <body>
+    <main>duplicate module root with nested dependencies</main>
+  </body>
+</html>

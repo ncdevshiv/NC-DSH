@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+  <body
+    data-create-prefix=""
+    data-create-unique=""
+    data-fetch-status=""
+    data-fetch-ok=""
+    data-fetch-url=""
+    data-fetch-type=""
+    data-fetch-text=""
+    data-xhr-status=""
+    data-xhr-url=""
+    data-xhr-text=""
+    data-revoke-safe=""
+  >
+    <script>
+      (async () => {
+        const body = document.body;
+        const blob = new Blob(["Hello from blob!"], { type: "text/plain" });
+        const url1 = URL.createObjectURL(blob);
+        const url2 = URL.createObjectURL(new Blob(["other"], { type: "text/plain" }));
+
+        body.setAttribute("data-create-prefix", String(url1.startsWith("blob:")));
+        body.setAttribute("data-create-unique", String(url1 !== url2));
+
+        const response = await fetch(url1);
+        body.setAttribute("data-fetch-status", String(response.status));
+        body.setAttribute("data-fetch-ok", String(response.ok));
+        body.setAttribute("data-fetch-url", response.url);
+        body.setAttribute("data-fetch-type", String(response.headers.get("Content-Type")));
+        body.setAttribute("data-fetch-text", await response.text());
+
+        const xhr = new XMLHttpRequest();
+        await new Promise((resolve) => {
+          xhr.onload = resolve;
+          xhr.open("GET", url1);
+          xhr.send();
+        });
+        body.setAttribute("data-xhr-status", String(xhr.status));
+        body.setAttribute("data-xhr-url", xhr.responseURL);
+        body.setAttribute("data-xhr-text", xhr.responseText);
+
+        URL.revokeObjectURL(url1);
+        URL.revokeObjectURL(url1);
+        URL.revokeObjectURL("http://example.com/notblob");
+        URL.revokeObjectURL("");
+        body.setAttribute("data-revoke-safe", "true");
+      })();
+    </script>
+  </body>
+</html>

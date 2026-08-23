@@ -1,0 +1,46 @@
+[build-system]
+requires = ["maturin>=1.4", "setuptools>=68"]
+build-backend = "maturin"
+
+[project]
+name = "dataworm"
+version = "0.1.1"
+description = "Self-aligning data discovery & linking graph: a worm that traverses a directory, builds a multi-dimensional graph, and realigns until it has full context. Heavy ops in Rust; single runner callable via JSON-RPC or HTTP."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "networkx>=3.0",
+]
+
+[project.optional-dependencies]
+semantic = ["sentence-transformers>=2.2"]
+lsh = ["datasketch>=1.6"]
+watch = ["watchdog>=3.0"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+dataworm = "dataworm.cli:main"
+dw = "dataworm.cli:main"
+
+[tool.maturin]
+# The Rust crate lives in rust/; the Python package in dataworm/.
+manifest-path = "rust/Cargo.toml"
+python-source = "."
+# Compile the cdylib as dataworm._rust (importable as `from dataworm._rust import ...`).
+module-name = "dataworm._rust"
+# The python feature enables the PyO3 extension-module build.
+features = ["python"]
+include = ["dataworm/**/*.py", "dataworm/webapp/dist/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Conservative starter set; tighten (I, B, UP, ...) once the existing tree is clean.
+select = ["E", "F"]
+

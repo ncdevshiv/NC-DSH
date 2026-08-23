@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <div
+      id="case-target"
+      data-test="value1"
+      data-extra="two"
+      data-empty=""
+      class="foo  bar"
+      lang="en-US"
+    >
+      Target
+    </div>
+    <div id="other" data-test="value2">Other</div>
+    <input id="checked-box" type="checkbox" checked />
+    <a id="empty-href" href="">Empty href</a>
+
+    <script>
+      function captureSyntaxError(fn) {
+        try {
+          fn();
+          return "no-error";
+        } catch (error) {
+          return `${error.name}:${error.code}`;
+        }
+      }
+
+      const target = document.getElementById("case-target");
+
+      window.selectorCornerUppercaseAttributeName =
+        document.querySelector('[DATA-TEST="value1"]').id;
+      window.selectorCornerWhitespaceAroundOperator =
+        document.querySelector('[ data-test = "value1" ]').id;
+      window.selectorCornerExactEmptyValue =
+        document.querySelector('[data-empty=""]').id;
+      window.selectorCornerBooleanExactEmptyValue =
+        document.querySelector('[checked=""]').id;
+      window.selectorCornerMultiAttributeCompound =
+        document.querySelector('[data-test="value1"][data-extra="two"]').id;
+      window.selectorCornerCompoundWithTagAndAttribute =
+        document.querySelector('div[data-test="value1"][data-empty=""]').id;
+      window.selectorCornerClassWordWhitespace =
+        document.querySelector('[class~="bar"]').id;
+      window.selectorCornerPrefixDash =
+        document.querySelector('[lang|="en"]').id;
+
+      window.selectorCornerStartsWithEmptyLength =
+        document.querySelectorAll('[href^=""]').length;
+      window.selectorCornerEndsWithEmptyLength =
+        document.querySelectorAll('[href$=""]').length;
+      window.selectorCornerContainsEmptyLength =
+        document.querySelectorAll('[href*=""]').length;
+      window.selectorCornerWordEmptyLength =
+        document.querySelectorAll('[class~=""]').length;
+      window.selectorCornerPrefixDashEmptyLength =
+        document.querySelectorAll('[lang|=""]').length;
+
+      window.selectorCornerInvalidMissingBracket =
+        captureSyntaxError(() => document.querySelector("[data-test"));
+      window.selectorCornerInvalidMissingValue =
+        captureSyntaxError(() => document.querySelector("[data-test=]"));
+      window.selectorCornerInvalidUnsupportedOperator =
+        captureSyntaxError(() => document.querySelector("[data-test!=value1]"));
+      window.selectorCornerDuplicateIdNoMatch =
+        document.querySelector("div#case-target#other") === null;
+      window.selectorCornerDuplicateIdAllLength =
+        document.querySelectorAll("div#case-target#other").length;
+      window.selectorCornerInvalidMatchesAttribute =
+        captureSyntaxError(() => target.matches("[data-test"));
+      window.selectorCornerMatchesDuplicateIdNoMatch =
+        target.matches("div#case-target#other");
+      window.selectorCornerMatchesDuplicateSameId =
+        target.matches("div#case-target#case-target");
+    </script>
+  </body>
+</html>

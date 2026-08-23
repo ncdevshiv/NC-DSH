@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<body>
+<script>
+window.importedStartedChildOrder = [];
+</script>
+<iframe id="child" srcdoc="&lt;script&gt;parent.importedStartedChildOrder.push('child-script')&lt;/script&gt;"></iframe>
+<script>
+window.addEventListener('load', () => {
+  const source = document.getElementById('child').contentDocument.querySelector('script');
+  document.body.appendChild(document.importNode(source, true));
+  window.importedStartedChildOrder.push('after-import');
+  window.importedStartedChildResult = window.importedStartedChildOrder.join(',');
+});
+</script>
+</body>
+</html>

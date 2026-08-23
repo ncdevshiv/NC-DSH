@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <body
+    data-ok=""
+    data-same=""
+    data-resolved-self=""
+    data-same-after-add=""
+    data-status-after-add=""
+  >
+    <script>
+      const body = document.body;
+      (async () => {
+        const ready = document.fonts.ready;
+        body.setAttribute('data-same', String(ready === document.fonts.ready));
+        body.setAttribute(
+          'data-resolved-self',
+          String((await ready) === document.fonts)
+        );
+        document.fonts.add(new FontFace('ReadyFace', 'local(Arial)'));
+        body.setAttribute(
+          'data-same-after-add',
+          String(document.fonts.ready === ready)
+        );
+        body.setAttribute('data-status-after-add', document.fonts.status);
+        body.setAttribute('data-ok', 'true');
+      })().catch(() => {
+        body.setAttribute('data-ok', 'false');
+      });
+    </script>
+  </body>
+</html>

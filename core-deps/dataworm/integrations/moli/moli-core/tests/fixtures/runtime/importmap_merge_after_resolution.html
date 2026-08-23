@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "fixture": "/assets/importmap-initial-target.mjs"
+        }
+      }
+    </script>
+    <script type="module">
+      import { greeting } from "fixture";
+      window.importMapMergeFirstGreeting = greeting;
+    </script>
+    <script type="importmap">
+      {
+        "imports": {
+          "fixture": "/assets/importmap-override-target.mjs",
+          "extra": "/assets/importmap-extra-target.mjs"
+        }
+      }
+    </script>
+    <script type="module">
+      import { greeting } from "fixture";
+      import { label } from "extra";
+
+      window.importMapMergeSecondGreeting = greeting;
+      window.importMapMergeExtraLabel = label;
+      window.importMapMergeAfterResolutionResult = `${window.importMapMergeFirstGreeting},${greeting},${label}`;
+    </script>
+  </body>
+</html>

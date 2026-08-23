@@ -1,0 +1,90 @@
+<!doctype html>
+<meta charset="utf-8">
+<div id="dropzone" style="width:200px;height:200px">drop</div>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const dropzone = document.getElementById("dropzone");
+let dropped = null;
+let resolveDrop = null;
+
+const dropPromise = new Promise(function (resolve) {
+  resolveDrop = resolve;
+});
+
+function read_entries(reader) {
+  return new Promise(function (resolve) {
+    reader.readEntries(resolve);
+  });
+}
+
+function entry_file(entry) {
+  return new Promise(function (resolve) {
+    entry.file(resolve);
+  });
+}
+
+dropzone.addEventListener("dragover", function (event) {
+  event.preventDefault();
+});
+
+dropzone.addEventListener("drop", function (event) {
+  event.preventDefault();
+  dropped = event.dataTransfer;
+  resolveDrop();
+});
+
+promise_test(async function () {
+  await dropPromise;
+
+  const root = dropped.items[0].webkitGetAsEntry();
+  assert_true(root instanceof FileSystemDirectoryEntry, "root dropped item is a directory entry");
+  assert_equals(root.name, "photos", "root directory name");
+  assert_equals(root.fullPath, "/photos", "root directory path");
+
+  const reader = root.createReader();
+  const entries = await read_entries(reader);
+  assert_equals(entries.length, 2, "first readEntries returns immediate directory children");
+
+  const byName = new Map(Array.from(entries, function (entry) {
+    return [entry.name, entry];
+  }));
+  const fileEntry = byName.get("note.txt");
+  const directoryEntry = byName.get("nested");
+
+  assert_true(fileEntry instanceof FileSystemFileEntry, "file child is a FileSystemFileEntry");
+  assert_true(fileEntry.isFile, "file child reports isFile");
+  assert_false(fileEntry.isDirectory, "file child reports not isDirectory");
+  assert_equals(fileEntry.fullPath, "/photos/note.txt", "file child fullPath includes parent directory");
+
+  const file = await entry_file(fileEntry);
+  assert_true(file instanceof File, "file child can materialize a File");
+  assert_equals(file.name, "note.txt", "materialized file name");
+  assert_equals(file.type, "text/plain", "materialized file type");
+  assert_equals(await file.text(), "hello from directory", "materialized file bytes");
+
+  assert_true(directoryEntry instanceof FileSystemDirectoryEntry, "directory child is a FileSystemDirectoryEntry");
+  assert_false(directoryEntry.isFile, "directory child reports not isFile");
+  assert_true(directoryEntry.isDirectory, "directory child reports isDirectory");
+  assert_equals(directoryEntry.fullPath, "/photos/nested", "directory child fullPath includes parent directory");
+
+  entries.length = 0;
+  const independentReaderEntries = await read_entries(root.createReader());
+  assert_equals(independentReaderEntries.length, 2, "a fresh reader is not affected by mutating a prior result array");
+
+  const nestedReader = directoryEntry.createReader();
+  const nestedEntries = await read_entries(nestedReader);
+  assert_equals(nestedEntries.length, 1, "nested manifest directory exposes its own child entries");
+  const nestedFileEntry = nestedEntries[0];
+  assert_true(nestedFileEntry instanceof FileSystemFileEntry, "nested file child is a FileSystemFileEntry");
+  assert_equals(nestedFileEntry.name, "deep.txt", "nested file child name");
+  assert_equals(nestedFileEntry.fullPath, "/photos/nested/deep.txt", "nested file child fullPath includes both parent directories");
+  const nestedFile = await entry_file(nestedFileEntry);
+  assert_equals(await nestedFile.text(), "deep child", "nested file child bytes");
+  assert_array_equals(await read_entries(nestedReader), [], "nested directory reader is also exhausted after first read");
+
+  const secondRead = await read_entries(reader);
+  assert_array_equals(secondRead, [], "directory reader is exhausted after the first readEntries call");
+}, "Dropped directory entries expose immediate child entries through readEntries");
+</script>

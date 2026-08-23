@@ -1,0 +1,12 @@
+[package]
+license.workspace = true
+name = "moli-message-port"
+version = "0.1.0"
+edition = "2024"
+description = "Renderer-neutral MessagePort registry for Moli"
+
+[dependencies]
+parking_lot = "0.12"
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+[package]
+license.workspace = true
+name = "moli-local-executor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.51.0", features = ["rt", "rt-multi-thread", "sync"] }
+
+[lints]
+workspace = true

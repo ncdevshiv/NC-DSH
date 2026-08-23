@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<body></body>
+<script>
+  const storageKey = "activation-cross-document-traverse-to";
+  sessionStorage.setItem(
+    `${storageKey}:dest-before`,
+    JSON.stringify({
+      activationEntry: navigation.activation?.entry?.url ?? "",
+      activationFrom: navigation.activation?.from?.url ?? "",
+      activationType: navigation.activation?.navigationType ?? "",
+      current: navigation.currentEntry?.url ?? "",
+      length: history.length,
+      canBack: navigation.canGoBack,
+      canForward: navigation.canGoForward,
+    })
+  );
+  setTimeout(() => {
+    const target = navigation.entries().find(
+      (entry) =>
+        entry.url ===
+        `${location.origin}/compat/navigation-activation-cross-document-traverse-to-destination-surface-source`
+    );
+    const order = ["before"];
+    let committedSettled = false;
+    let finishedSettled = false;
+    const result = navigation.traverseTo(target.key);
+    if (result && result.committed && result.finished) {
+      result.committed.then((entry) => {
+        committedSettled = true;
+        order.push(`committed:${entry?.url ?? ""}`);
+        sessionStorage.setItem(`${storageKey}:source-log`, order.join("|"));
+        sessionStorage.setItem(
+          `${storageKey}:source-committed-url`,
+          String(entry?.url ?? "")
+        );
+      });
+      result.finished.then((entry) => {
+        finishedSettled = true;
+        order.push(`finished:${entry?.url ?? ""}`);
+        sessionStorage.setItem(`${storageKey}:source-log`, order.join("|"));
+        sessionStorage.setItem(
+          `${storageKey}:source-finished-url`,
+          String(entry?.url ?? "")
+        );
+      });
+    }
+    order.push("after-call");
+    sessionStorage.setItem(
+      `${storageKey}:source-sync`,
+      `surface:${Boolean(result && result.committed && result.finished)}|sync:${committedSettled},${finishedSettled}`
+    );
+    sessionStorage.setItem(`${storageKey}:source-log`, order.join("|"));
+    sessionStorage.setItem(`${storageKey}:source-committed-url`, "null");
+    sessionStorage.setItem(`${storageKey}:source-finished-url`, "null");
+  }, 0);
+</script>

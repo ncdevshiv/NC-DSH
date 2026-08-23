@@ -1,0 +1,181 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
+
+function assert_throws_name(expectedName, callback) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName);
+    return;
+  }
+  throw new Error("Expected " + expectedName);
+}
+
+function assert_attr_ns(namespace, qualifiedName, expected) {
+  test(function () {
+    const attr = document.createAttributeNS(namespace, qualifiedName);
+
+    assert_true(attr instanceof Attr, "instanceof Attr");
+    assert_equals(attr.name, expected.name, "name");
+    assert_equals(attr.localName, expected.localName, "localName");
+    assert_equals(attr.nodeName, expected.name, "nodeName");
+    assert_equals(attr.prefix, expected.prefix, "prefix");
+    assert_equals(attr.namespaceURI, expected.namespaceURI, "namespaceURI");
+    assert_equals(attr.ownerElement, null, "ownerElement");
+    assert_equals(attr.nodeType, Node.ATTRIBUTE_NODE, "nodeType");
+    assert_equals(attr.value, "", "initial value");
+    assert_equals(attr.nodeValue, "", "initial nodeValue");
+    assert_equals(attr.textContent, "", "initial textContent");
+
+    attr.value = "value";
+    assert_equals(attr.nodeValue, "value", "nodeValue reflects value");
+    assert_equals(attr.textContent, "value", "textContent reflects value");
+
+    attr.nodeValue = "node";
+    assert_equals(attr.value, "node", "value reflects nodeValue");
+    assert_equals(attr.textContent, "node", "textContent reflects nodeValue");
+
+    attr.textContent = "text";
+    assert_equals(attr.value, "text", "value reflects textContent");
+    assert_equals(attr.nodeValue, "text", "nodeValue reflects textContent");
+  }, "createAttributeNS(" + JSON.stringify(namespace) + ", " + JSON.stringify(qualifiedName) + ")");
+}
+
+assert_attr_ns("https://example.test/ns", "p:name", {
+  name: "p:name",
+  localName: "name",
+  prefix: "p",
+  namespaceURI: "https://example.test/ns",
+});
+
+assert_attr_ns("https://example.test/ns", "DATA-ID", {
+  name: "DATA-ID",
+  localName: "DATA-ID",
+  prefix: null,
+  namespaceURI: "https://example.test/ns",
+});
+
+assert_attr_ns(null, "plain", {
+  name: "plain",
+  localName: "plain",
+  prefix: null,
+  namespaceURI: null,
+});
+
+assert_attr_ns(undefined, "undefined-ns", {
+  name: "undefined-ns",
+  localName: "undefined-ns",
+  prefix: null,
+  namespaceURI: null,
+});
+
+assert_attr_ns("", "empty-ns", {
+  name: "empty-ns",
+  localName: "empty-ns",
+  prefix: null,
+  namespaceURI: null,
+});
+
+assert_attr_ns("https://example.test/ns", "1bad", {
+  name: "1bad",
+  localName: "1bad",
+  prefix: null,
+  namespaceURI: "https://example.test/ns",
+});
+
+assert_attr_ns("https://example.test/ns", "@slotchange$lit$", {
+  name: "@slotchange$lit$",
+  localName: "@slotchange$lit$",
+  prefix: null,
+  namespaceURI: "https://example.test/ns",
+});
+
+assert_attr_ns("https://example.test/ns", "a:b:c", {
+  name: "a:b:c",
+  localName: "b:c",
+  prefix: "a",
+  namespaceURI: "https://example.test/ns",
+});
+
+test(function () {
+  ["", "bad name", "name/name", "name=", "name>"].forEach(function (name) {
+    assert_throws_name("InvalidCharacterError", function () {
+      document.createAttributeNS("https://example.test/ns", name);
+    });
+  });
+}, "createAttributeNS() rejects invalid qualified names");
+
+test(function () {
+  assert_throws_name("NamespaceError", function () {
+    document.createAttributeNS(null, "p:name");
+  });
+  assert_throws_name("NamespaceError", function () {
+    document.createAttributeNS("", "p:name");
+  });
+  assert_throws_name("NamespaceError", function () {
+    new DOMParser().parseFromString("<html></html>", "text/html").createAttributeNS(null, "p:name");
+  });
+}, "createAttributeNS() requires a namespace when qualifiedName has a prefix");
+
+test(function () {
+  assert_throws_name("NamespaceError", function () {
+    document.createAttributeNS("urn:not-xml", "xml:lang");
+  });
+
+  const attr = document.createAttributeNS(XML_NS, "a:lang");
+  assert_equals(attr.namespaceURI, XML_NS);
+  assert_equals(attr.prefix, "a");
+  assert_equals(attr.localName, "lang");
+  assert_equals(attr.name, "a:lang");
+}, "createAttributeNS() restricts the xml prefix to the XML namespace");
+
+test(function () {
+  assert_throws_name("NamespaceError", function () {
+    document.createAttributeNS("urn:not-xmlns", "xmlns:foo");
+  });
+  assert_throws_name("NamespaceError", function () {
+    document.createAttributeNS("urn:not-xmlns", "xmlns");
+  });
+  assert_throws_name("NamespaceError", function () {
+    document.createAttributeNS(XMLNS_NS, "a:xmlns");
+  });
+  assert_throws_name("NamespaceError", function () {
+    document.createAttributeNS(XMLNS_NS, "b:foo");
+  });
+
+  const prefixed = document.createAttributeNS(XMLNS_NS, "xmlns:a");
+  assert_equals(prefixed.namespaceURI, XMLNS_NS);
+  assert_equals(prefixed.prefix, "xmlns");
+  assert_equals(prefixed.localName, "a");
+  assert_equals(prefixed.name, "xmlns:a");
+
+  const root = document.createAttributeNS(XMLNS_NS, "xmlns");
+  assert_equals(root.namespaceURI, XMLNS_NS);
+  assert_equals(root.prefix, null);
+  assert_equals(root.localName, "xmlns");
+  assert_equals(root.name, "xmlns");
+}, "createAttributeNS() validates XMLNS namespace and prefix combinations");
+
+test(function () {
+  const parsedHtml = new DOMParser().parseFromString("<html></html>", "text/html");
+  const parsedXml = new DOMParser().parseFromString("<root/>", "application/xml");
+
+  const htmlAttr = parsedHtml.createAttributeNS("https://example.test/ns", "p:name");
+  assert_equals(htmlAttr.namespaceURI, "https://example.test/ns");
+  assert_equals(htmlAttr.prefix, "p");
+  assert_equals(htmlAttr.localName, "name");
+  assert_equals(htmlAttr.name, "p:name");
+
+  const xmlAttr = parsedXml.createAttributeNS(XML_NS, "xml:lang");
+  assert_equals(xmlAttr.namespaceURI, XML_NS);
+  assert_equals(xmlAttr.prefix, "xml");
+  assert_equals(xmlAttr.localName, "lang");
+  assert_equals(xmlAttr.name, "xml:lang");
+}, "DOMParser detached documents expose createAttributeNS()");
+</script>

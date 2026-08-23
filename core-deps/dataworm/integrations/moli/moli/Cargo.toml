@@ -1,0 +1,47 @@
+[package]
+name = "moli"
+version = "1.0.2"
+edition = "2024"
+license.workspace = true
+
+[[bin]]
+name = "moli"
+path = "src/main.rs"
+
+[features]
+default = ["jemalloc"]
+jemalloc = ["dep:tikv-jemalloc-sys", "dep:tikv-jemallocator"]
+
+[dependencies]
+anyhow = "1.0.100"
+axum = { version = "0.8.6", features = ["ws"] }
+cidr = "0.3.2"
+clap = { version = "4.5.39", features = ["derive", "env"] }
+moli-browser-profile = { path = "../moli-browser-profile" }
+moli-cookie-cache = { path = "../moli-cookie-cache" }
+moli-protocol = { path = "../moli-protocol" }
+moli-cookie-jar = { path = "../moli-cookie-jar" }
+moli-fetch = { path = "../moli-fetch" }
+moli-core = { path = "../moli-core" }
+moli-process-signal = { path = "../moli-process-signal" }
+moli-protocol-server = { path = "../moli-protocol-server" }
+moli-robots = { path = "../moli-robots" }
+parking_lot = "0.12"
+regex = "1.12.3"
+serde_json = "1.0.145"
+tokio = { version = "1.51.0", features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
+url = "2.5.7"
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+tikv-jemalloc-sys = { version = "0.7.1", optional = true, default-features = false }
+tikv-jemallocator = { version = "0.7.0", optional = true, default-features = false, features = ["override_allocator_on_supported_platforms"] }
+
+[dev-dependencies]
+libc = "0.2"
+moli-test-support = { path = "../moli-test-support" }
+strip-ansi-escapes = "0.2.1"
+
+[lints]
+workspace = true

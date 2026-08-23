@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function query_param(name) {
+  return new URL(location.href).searchParams.get(name);
+}
+
+const mode = query_param("mode");
+const storagePrefix = query_param("storagePrefix") ?? "";
+const testName = query_param("testName") ?? "post-load location navigation";
+
+function key(suffix) {
+  return storagePrefix + suffix;
+}
+
+test(function () {
+  const initialHref = sessionStorage.getItem(key("initialHref"));
+  const fromHref = sessionStorage.getItem(key("fromHref"));
+  const initialLength = Number(sessionStorage.getItem(key("initialLength")));
+  const expectedNavigationType = mode === "replace" ? "replace" : "push";
+  const navigationState = JSON.stringify(navigation.currentEntry?.getState?.() ?? null);
+
+  assert_true(initialHref !== null, "source stage should store the initial href");
+  assert_true(fromHref !== null, "source stage should store the pre-navigation href");
+  assert_equals(
+    sessionStorage.getItem(key("sourceLoaded")),
+    "true",
+    "source stage should reach load before scheduling post-load navigation",
+  );
+  assert_true(initialHref !== location.href, "post-load location navigation should commit a new destination URL");
+  assert_true(
+    location.pathname.indexOf("/ported/location/resources/location-post-load-destination.html") !== -1,
+    "destination should land on the shared post-load assertion page",
+  );
+  assert_equals(query_param("mode"), mode, "destination URL should preserve the mode marker");
+  assert_equals(
+    navigation.activation?.entry?.url ?? "",
+    location.href,
+    "activation entry URL should point at the destination document",
+  );
+  assert_equals(
+    navigation.activation?.from?.url ?? "",
+    fromHref,
+    "activation from URL should point at the source document that initiated navigation",
+  );
+  assert_equals(
+    navigation.activation?.navigationType ?? "",
+    expectedNavigationType,
+    "destination activation should report the committed navigation type",
+  );
+  assert_equals(history.state, null, "location navigation should not populate history.state by default");
+  assert_equals(navigationState, "null", "location navigation should not populate navigation.currentEntry state by default");
+  assert_true(document.location === window.location, "document.location should alias window.location");
+  assert_equals(typeof location.assign, "function", "location.assign should stay callable");
+  assert_equals(typeof location.replace, "function", "location.replace should stay callable");
+  assert_equals(typeof location.reload, "function", "location.reload should stay callable");
+
+  if (mode === "replace") {
+    assert_equals(
+      history.length,
+      initialLength,
+      "post-load location.replace() should reuse the current session history entry",
+    );
+  } else {
+    assert_equals(
+      history.length,
+      initialLength + 1,
+      "post-load non-replace location navigation should grow session history by one entry",
+    );
+  }
+
+  if (mode === "pathname") {
+    assert_true(
+      new URL(initialHref).pathname !== location.pathname,
+      "location.pathname should commit a new destination pathname",
+    );
+    assert_equals(
+      new URL(fromHref).search,
+      location.search,
+      "location.pathname navigation should preserve the current query string",
+    );
+  }
+}, testName);
+</script>

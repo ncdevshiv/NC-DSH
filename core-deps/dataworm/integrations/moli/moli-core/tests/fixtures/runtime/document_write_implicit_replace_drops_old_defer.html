@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.documentWriteImplicitOrder = ["inline"];
+      window.documentWriteImplicitReplaceRan = false;
+      window.documentWriteImplicitStaleDeferRan = false;
+      window.documentWriteImplicitResult = "initial";
+
+      const replacer = document.createElement("script");
+      replacer.src = "/assets/document_write_implicit_replace_async.js";
+      document.head.appendChild(replacer);
+    </script>
+    <script defer src="/assets/document_write_implicit_replace_stale_defer.js"></script>
+  </head>
+  <body>
+    <main id="old">old</main>
+  </body>
+</html>

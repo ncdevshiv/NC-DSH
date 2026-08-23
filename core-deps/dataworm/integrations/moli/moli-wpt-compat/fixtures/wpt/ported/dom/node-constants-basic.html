@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<body></body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const objects = [
+  [Node, "Node interface object"],
+  [Node.prototype, "Node prototype object"],
+  [document.createElement("foo"), "Element object"],
+  [document.createTextNode("bar"), "Text object"],
+];
+
+function test_constants(constants, label) {
+  objects.forEach(([object, description]) => {
+    test(function () {
+      constants.forEach(([name, value]) => {
+        assert_true(name in object, description + " should expose " + name);
+        assert_equals(object[name], value, description + " value for " + name);
+      });
+    }, "Constants for " + label + " on " + description);
+  });
+}
+
+test_constants([
+  ["ELEMENT_NODE", 1],
+  ["ATTRIBUTE_NODE", 2],
+  ["TEXT_NODE", 3],
+  ["CDATA_SECTION_NODE", 4],
+  ["ENTITY_REFERENCE_NODE", 5],
+  ["ENTITY_NODE", 6],
+  ["PROCESSING_INSTRUCTION_NODE", 7],
+  ["COMMENT_NODE", 8],
+  ["DOCUMENT_NODE", 9],
+  ["DOCUMENT_TYPE_NODE", 10],
+  ["DOCUMENT_FRAGMENT_NODE", 11],
+  ["NOTATION_NODE", 12],
+], "nodeType");
+
+test_constants([
+  ["DOCUMENT_POSITION_DISCONNECTED", 0x01],
+  ["DOCUMENT_POSITION_PRECEDING", 0x02],
+  ["DOCUMENT_POSITION_FOLLOWING", 0x04],
+  ["DOCUMENT_POSITION_CONTAINS", 0x08],
+  ["DOCUMENT_POSITION_CONTAINED_BY", 0x10],
+  ["DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC", 0x20],
+], "compareDocumentPosition");
+</script>

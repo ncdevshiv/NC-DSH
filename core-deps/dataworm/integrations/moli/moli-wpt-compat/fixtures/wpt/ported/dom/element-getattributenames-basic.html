@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const el = document.createElement("div");
+  el.setAttribute("foo", "bar");
+
+  assert_equals(el.getAttributeNames().length, 1);
+  assert_equals(el.getAttributeNames()[0], el.attributes[0].name);
+  assert_equals(el.getAttributeNames()[0], "foo");
+
+  el.removeAttribute("foo");
+  assert_equals(el.getAttributeNames().length, 0);
+}, "getAttributeNames reflects simple attribute insertion and removal");
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttribute("foo", "bar");
+  el.setAttributeNS("", "FOO", "bar");
+  el.setAttributeNS("dummy1", "foo", "bar");
+  el.setAttributeNS("dummy2", "dummy:foo", "bar");
+
+  assert_equals(el.getAttributeNames().length, 4);
+  assert_equals(el.getAttributeNames()[0], "foo");
+  assert_equals(el.getAttributeNames()[1], "FOO");
+  assert_equals(el.getAttributeNames()[2], "foo");
+  assert_equals(el.getAttributeNames()[3], "dummy:foo");
+
+  el.removeAttributeNS("", "FOO");
+  assert_equals(el.getAttributeNames().length, 3);
+  assert_equals(el.getAttributeNames()[0], "foo");
+  assert_equals(el.getAttributeNames()[1], "foo");
+  assert_equals(el.getAttributeNames()[2], "dummy:foo");
+}, "getAttributeNames preserves attribute order and qualified names");
+</script>

@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8">
+<body
+  data-initial=""
+  data-after-push-call=""
+  data-after-push-timeout=""
+  data-after-back-timeout=""
+  data-after-forward-timeout=""
+  data-after-traverse-timeout=""
+></body>
+<script>
+  function snapshot(label) {
+    const activation = navigation.activation;
+    const parts = [
+      "href=" + location.href,
+      "activationEntry=" + String(activation?.entry?.url ?? ""),
+      "activationFrom=" + String(activation?.from?.url ?? ""),
+      "activationType=" + String(activation?.navigationType ?? ""),
+      "current=" + navigation.currentEntry.url,
+      "transitionIsNull=" + String(navigation.transition === null),
+    ];
+    document.body.setAttribute("data-" + label, parts.join("|"));
+  }
+
+  snapshot("initial");
+  navigation.navigate("#one", { history: "push", state: { step: 1 } });
+  snapshot("after-push-call");
+  setTimeout(() => {
+    snapshot("after-push-timeout");
+    window.addEventListener(
+      "hashchange",
+      function onBack() {
+        if (location.hash !== "") {
+          return;
+        }
+        window.removeEventListener("hashchange", onBack);
+        setTimeout(() => {
+          snapshot("after-back-timeout");
+          window.addEventListener(
+            "hashchange",
+            function onForward() {
+              if (location.hash !== "#one") {
+                return;
+              }
+              window.removeEventListener("hashchange", onForward);
+              setTimeout(() => {
+                snapshot("after-forward-timeout");
+                const target = navigation.entries().find(
+                  (entry) => new URL(entry.url).hash === ""
+                );
+                navigation.traverseTo(target.key);
+                setTimeout(() => snapshot("after-traverse-timeout"), 50);
+              }, 0);
+            },
+            { once: false }
+          );
+          history.forward();
+        }, 0);
+      },
+      { once: false }
+    );
+    history.back();
+  }, 0);
+</script>

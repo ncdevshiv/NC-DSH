@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <body>
+    <script type="module">
+      globalThis.audioWorkletWasmDone = false;
+      globalThis.audioWorkletWasmError = "";
+      globalThis.audioWorkletWasmResult = "";
+
+      try {
+        const audioContext = new AudioContext();
+        await audioContext.audioWorklet.addModule("/assets/audio-worklet-source-phase.js");
+        const audioNode = new AudioWorkletNode(audioContext, "audio-processor");
+        audioNode.port.onmessage = event => {
+          const result = event.data;
+          globalThis.audioWorkletWasmDone = true;
+          globalThis.audioWorkletWasmResult = [
+            result.value,
+            result.staticCheck,
+            result.dynamicCheck,
+            result.exports
+          ].join("|");
+          document.documentElement.setAttribute(
+            "data-audio-worklet-wasm",
+            globalThis.audioWorkletWasmResult
+          );
+        };
+        audioNode.port.postMessage("");
+        audioNode.connect(audioContext.destination);
+      } catch (error) {
+        globalThis.audioWorkletWasmDone = true;
+        globalThis.audioWorkletWasmError =
+          error && error.constructor
+            ? `${error.constructor.name}:${error.message}`
+            : String(error);
+        document.documentElement.setAttribute(
+          "data-audio-worklet-error",
+          globalThis.audioWorkletWasmError
+        );
+      }
+    </script>
+  </body>
+</html>

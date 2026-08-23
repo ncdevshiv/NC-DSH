@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+test(() => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const first = host.appendChild(document.createElement("pre"));
+  first.id = "first";
+  const second = host.appendChild(document.createElement("pre"));
+  second.setAttribute("name", "second");
+
+  const list = host.getElementsByTagName("pre");
+  assert_equals(Object.getPrototypeOf(list), HTMLCollection.prototype);
+  assert_equals(list.length, 2);
+  assert_equals(list.item, HTMLCollection.prototype.item);
+  assert_equals(list.namedItem, HTMLCollection.prototype.namedItem);
+  assert_equals(typeof list[Symbol.iterator], "function");
+  assert_false("keys" in list);
+  assert_false("values" in list);
+  assert_false("entries" in list);
+  assert_false("forEach" in list);
+  assert_false(Object.prototype.hasOwnProperty.call(list, "length"));
+  assert_false(Object.prototype.hasOwnProperty.call(list, "item"));
+  assert_false(Object.prototype.hasOwnProperty.call(list, "namedItem"));
+
+  const names = Object.getOwnPropertyNames(list);
+  assert_false(names.includes("length"));
+  assert_false(names.includes("item"));
+  assert_false(names.includes("namedItem"));
+  assert_true(names.includes("first"));
+  assert_true(names.includes("second"));
+  assert_equals(list.namedItem("first"), first);
+  assert_equals(list.namedItem("item"), null);
+
+  list.item = "shadowed";
+  assert_equals(list.item, "shadowed");
+  assert_equals(HTMLCollection.prototype.item.call(list, 0), first);
+  assert_equals(HTMLCollection.prototype.namedItem.call(list, "second"), second);
+
+  host.remove();
+}, "live HTMLCollection length and methods resolve through the prototype chain");
+
+test(() => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const first = host.appendChild(document.createElement("pre"));
+  const second = host.appendChild(document.createElement("pre"));
+  const list = host.getElementsByTagName("pre");
+
+  list[0] = "shadowed";
+  assert_equals(list[0], first);
+  assert_true(Object.prototype.hasOwnProperty.call(list, "0"));
+
+  list[5] = "foopy";
+  assert_equals(list[5], undefined);
+  assert_equals(list.item(5), null);
+  assert_false(Object.prototype.hasOwnProperty.call(list, "5"));
+
+  assert_throws_js(TypeError, function () {
+    "use strict";
+    list[1] = "strict";
+  });
+  assert_equals(list[1], second);
+
+  assert_throws_js(TypeError, function () {
+    "use strict";
+    list[6] = "strict";
+  });
+  assert_equals(list[6], undefined);
+  assert_false(Object.prototype.hasOwnProperty.call(list, "6"));
+
+  host.remove();
+}, "live HTMLCollection indexed properties are read-only");
+</script>

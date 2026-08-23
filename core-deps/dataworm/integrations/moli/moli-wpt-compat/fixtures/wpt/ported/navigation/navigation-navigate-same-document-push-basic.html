@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+globalThis.__lmNavigationNavigateSameDocumentConfig = {
+  mode: "push",
+  targetHash: "#dest-push",
+  step: 7,
+  expectedLength: 2,
+  expectedCanBack: true,
+  expectedCanForward: false,
+  testName:
+    "top-level same-document navigation.navigate(..., { history: 'push' }) updates currentEntry, session history, and event ordering",
+};
+</script>
+<script src="resources/navigation-navigate-same-document-history-and-events.js"></script>

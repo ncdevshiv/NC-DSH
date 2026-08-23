@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.runtimeOwnedAsyncModuleOrder = [];
+      window.runtimeOwnedAsyncModuleOrder.push("ready:" + document.readyState);
+
+      const script = document.createElement("script");
+      script.type = "module";
+      script.src = "/assets/runtime_owned_default_async_module_side_effect.mjs";
+      document.head.appendChild(script);
+      window.runtimeOwnedAsyncModuleOrder.push("after-append:async=" + script.async);
+
+      document.addEventListener("DOMContentLoaded", () => {
+        window.runtimeOwnedAsyncModuleOrder.push("dcl:" + document.readyState);
+        window.runtimeOwnedAsyncModuleDclOrder =
+          window.runtimeOwnedAsyncModuleOrder.join(",");
+      });
+
+      window.addEventListener("load", () => {
+        window.runtimeOwnedAsyncModuleOrder.push("window-load:" + document.readyState);
+        window.runtimeOwnedAsyncModuleFinalOrder =
+          window.runtimeOwnedAsyncModuleOrder.join(",");
+      });
+    </script>
+  </head>
+  <body>
+    <main id="after">after</main>
+  </body>
+</html>

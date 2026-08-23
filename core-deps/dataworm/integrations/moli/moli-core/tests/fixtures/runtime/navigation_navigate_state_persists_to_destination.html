@@ -1,0 +1,11 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      const currentIndex = navigation.currentEntry?.index ?? -1;
+      navigation.navigate("/compat/navigation-navigate-state-destination", {
+        state: { currentIndex, navTestInProgress: true },
+      });
+    </script>
+  </body>
+</html>

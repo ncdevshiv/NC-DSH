@@ -1,0 +1,121 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const activation = navigation.activation;
+  const transition = navigation.transition;
+  const currentEntry = navigation.currentEntry;
+  const navigationPrototype = Object.getPrototypeOf(navigation);
+  const currentEntryDescriptor = Object.getOwnPropertyDescriptor(
+    navigationPrototype,
+    "currentEntry",
+  );
+  const activationDescriptor = Object.getOwnPropertyDescriptor(
+    navigationPrototype,
+    "activation",
+  );
+  const transitionDescriptor = Object.getOwnPropertyDescriptor(
+    navigationPrototype,
+    "transition",
+  );
+
+  navigation.activation = { hacked: true };
+  navigation.transition = { hacked: true };
+  navigation.currentEntry = { hacked: true };
+
+  assert_equals(typeof activation, "object", "navigation.activation should be exposed as an object");
+  assert_true(
+    activation !== null,
+    "navigation.activation should not be null on the initial document",
+  );
+  assert_equals(typeof transition, "object", "navigation.transition should have object typeof");
+  assert_equals(transition, null, "navigation.transition should be null outside a live navigation");
+  assert_equals(
+    navigation.activation,
+    activation,
+    "assigning navigation.activation should be ignored",
+  );
+  assert_equals(
+    navigation.transition,
+    transition,
+    "assigning navigation.transition should be ignored",
+  );
+  assert_equals(
+    navigation.currentEntry,
+    currentEntry,
+    "assigning navigation.currentEntry should be ignored",
+  );
+  assert_equals(
+    typeof currentEntryDescriptor?.get,
+    "function",
+    "currentEntry should be exposed via a prototype getter",
+  );
+  assert_equals(
+    currentEntryDescriptor?.set,
+    undefined,
+    "currentEntry should remain readonly",
+  );
+  assert_true(
+    Boolean(currentEntryDescriptor?.enumerable),
+    "currentEntry should remain enumerable on the prototype",
+  );
+  assert_true(
+    Boolean(currentEntryDescriptor?.configurable),
+    "currentEntry should remain configurable on the prototype",
+  );
+  assert_equals(
+    typeof activationDescriptor?.get,
+    "function",
+    "activation should be exposed via a prototype getter",
+  );
+  assert_equals(
+    activationDescriptor?.set,
+    undefined,
+    "activation should remain readonly",
+  );
+  assert_true(
+    Boolean(activationDescriptor?.enumerable),
+    "activation should remain enumerable on the prototype",
+  );
+  assert_true(
+    Boolean(activationDescriptor?.configurable),
+    "activation should remain configurable on the prototype",
+  );
+  assert_equals(
+    typeof transitionDescriptor?.get,
+    "function",
+    "transition should be exposed via a prototype getter",
+  );
+  assert_equals(
+    transitionDescriptor?.set,
+    undefined,
+    "transition should remain readonly",
+  );
+  assert_true(
+    Boolean(transitionDescriptor?.enumerable),
+    "transition should remain enumerable on the prototype",
+  );
+  assert_true(
+    Boolean(transitionDescriptor?.configurable),
+    "transition should remain configurable on the prototype",
+  );
+  assert_equals(
+    activation.entry?.url,
+    location.href,
+    "initial activation entry URL should point at the current document",
+  );
+  assert_equals(
+    activation.from,
+    null,
+    "initial activation should not expose a previous entry",
+  );
+  assert_equals(
+    activation.navigationType,
+    "push",
+    "initial activation should report the initial document load as a push",
+  );
+}, "navigation.activation exposes the initial document surface and remains readonly");
+</script>

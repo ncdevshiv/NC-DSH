@@ -1,0 +1,212 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/runtime/fixture-server-config.js"></script>
+<script>
+function alternate_url(path) {
+  return location.protocol + "//" + location.hostname + ":" + __lmFixtureServerConfig.alternatePort + path;
+}
+
+async function assert_rejects_name(expectedName, promise, description) {
+  try {
+    await promise;
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected rejection");
+}
+
+function fetch_with_preflight(path, method = "POST") {
+  return fetch(alternate_url(path), {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Preflight-Test": "fetch",
+    },
+    body: "{\"source\":\"fetch\"}",
+  });
+}
+
+function unique_token(prefix) {
+  return prefix + "-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+}
+
+function xhr_with_preflight(path, method = "POST") {
+  return new Promise(function (resolve) {
+    const events = [];
+    const xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function () {
+      events.push("readystatechange:" + xhr.readyState);
+    };
+    xhr.onload = function () {
+      events.push("load");
+    };
+    xhr.onerror = function () {
+      events.push("error");
+    };
+    xhr.onloadend = function () {
+      events.push("loadend");
+      resolve({
+        events,
+        readyState: xhr.readyState,
+        status: xhr.status,
+        responseText: xhr.responseText,
+        responseURL: xhr.responseURL,
+        contentType: xhr.getResponseHeader("Content-Type"),
+        allHeaders: xhr.getAllResponseHeaders(),
+      });
+    };
+    xhr.open(method, alternate_url(path));
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.setRequestHeader("X-Preflight-Test", "xhr");
+    xhr.send("{\"source\":\"xhr\"}");
+  });
+}
+
+promise_test(async function () {
+  const response = await fetch_with_preflight("/wpt/runtime/cors/preflight/allow");
+  assert_equals(response.type, "cors");
+  const payload = JSON.parse(await response.text());
+  assert_equals(payload.method, "POST");
+  assert_equals(payload.body, "{\"source\":\"fetch\"}");
+  assert_equals(payload.x_preflight_test, "fetch");
+  assert_equals(payload.content_type, "application/json");
+}, "fetch sends the actual request after an allowed CORS preflight");
+
+promise_test(async function () {
+  await assert_rejects_name(
+    "TypeError",
+    fetch_with_preflight("/wpt/runtime/cors/preflight/deny-method", "PUT"),
+    "fetch should reject when the preflight response does not allow the method",
+  );
+}, "fetch rejects when CORS preflight denies the request method");
+
+promise_test(async function () {
+  await assert_rejects_name(
+    "TypeError",
+    fetch_with_preflight("/wpt/runtime/cors/preflight/deny-header"),
+    "fetch should reject when the preflight response does not allow a request header",
+  );
+}, "fetch rejects when CORS preflight denies a request header");
+
+promise_test(async function () {
+  await assert_rejects_name(
+    "TypeError",
+    fetch_with_preflight("/wpt/runtime/cors/preflight/redirect-to-allow"),
+    "fetch should reject when the preflight response redirects",
+  );
+}, "fetch rejects when CORS preflight redirects");
+
+promise_test(async function () {
+  const token = unique_token("fetch-redirect-preflight");
+  const response = await fetch_with_preflight(
+    "/wpt/runtime/cors/preflight/redirect-to-preflight-required?token=" +
+      encodeURIComponent(token),
+  );
+  assert_equals(response.type, "cors");
+  assert_true(response.redirected, "fetch response should expose redirect state");
+  assert_true(
+    response.url.includes("/wpt/runtime/cors/preflight/preflight-required-final"),
+  );
+  const payload = JSON.parse(await response.text());
+  assert_equals(payload.response, "cors-preflight-required-final");
+  assert_equals(payload.method, "POST");
+  assert_equals(payload.x_preflight_test, "fetch");
+  assert_true(payload.preflighted, "final URL should receive a redirected preflight");
+}, "fetch preflights the final URL before following an unsafe CORS actual-request redirect");
+
+promise_test(async function () {
+  const result = await xhr_with_preflight("/wpt/runtime/cors/preflight/allow");
+  assert_array_equals(result.events, [
+    "readystatechange:1",
+    "readystatechange:2",
+    "readystatechange:3",
+    "readystatechange:4",
+    "load",
+    "loadend",
+  ]);
+  assert_equals(result.status, 200);
+  assert_true(result.responseURL.endsWith("/wpt/runtime/cors/preflight/allow"));
+  const payload = JSON.parse(result.responseText);
+  assert_equals(payload.method, "POST");
+  assert_equals(payload.body, "{\"source\":\"xhr\"}");
+  assert_equals(payload.x_preflight_test, "xhr");
+  assert_equals(payload.content_type, "application/json");
+}, "XMLHttpRequest sends the actual request after an allowed CORS preflight");
+
+promise_test(async function () {
+  const result = await xhr_with_preflight("/wpt/runtime/cors/preflight/deny-method", "PUT");
+  assert_array_equals(result.events, [
+    "readystatechange:1",
+    "readystatechange:4",
+    "error",
+    "loadend",
+  ]);
+  assert_equals(result.readyState, 4);
+  assert_equals(result.status, 0);
+  assert_equals(result.responseText, "");
+  assert_equals(result.responseURL, "");
+  assert_equals(result.contentType, null);
+  assert_equals(result.allHeaders, "");
+}, "XMLHttpRequest rejects when CORS preflight denies the request method");
+
+promise_test(async function () {
+  const result = await xhr_with_preflight("/wpt/runtime/cors/preflight/deny-header");
+  assert_array_equals(result.events, [
+    "readystatechange:1",
+    "readystatechange:4",
+    "error",
+    "loadend",
+  ]);
+  assert_equals(result.readyState, 4);
+  assert_equals(result.status, 0);
+  assert_equals(result.responseText, "");
+  assert_equals(result.responseURL, "");
+  assert_equals(result.contentType, null);
+  assert_equals(result.allHeaders, "");
+}, "XMLHttpRequest rejects when CORS preflight denies a request header");
+
+promise_test(async function () {
+  const result = await xhr_with_preflight("/wpt/runtime/cors/preflight/redirect-to-allow");
+  assert_array_equals(result.events, [
+    "readystatechange:1",
+    "readystatechange:4",
+    "error",
+    "loadend",
+  ]);
+  assert_equals(result.readyState, 4);
+  assert_equals(result.status, 0);
+  assert_equals(result.responseText, "");
+  assert_equals(result.responseURL, "");
+  assert_equals(result.contentType, null);
+  assert_equals(result.allHeaders, "");
+}, "XMLHttpRequest rejects when CORS preflight redirects");
+
+promise_test(async function () {
+  const token = unique_token("xhr-redirect-preflight");
+  const result = await xhr_with_preflight(
+    "/wpt/runtime/cors/preflight/redirect-to-preflight-required?token=" +
+      encodeURIComponent(token),
+  );
+  assert_array_equals(result.events, [
+    "readystatechange:1",
+    "readystatechange:2",
+    "readystatechange:3",
+    "readystatechange:4",
+    "load",
+    "loadend",
+  ]);
+  assert_equals(result.status, 200);
+  assert_true(
+    result.responseURL.includes("/wpt/runtime/cors/preflight/preflight-required-final"),
+  );
+  const payload = JSON.parse(result.responseText);
+  assert_equals(payload.response, "cors-preflight-required-final");
+  assert_equals(payload.method, "POST");
+  assert_equals(payload.x_preflight_test, "xhr");
+  assert_true(payload.preflighted, "final URL should receive a redirected preflight");
+}, "XMLHttpRequest preflights the final URL before following an unsafe CORS actual-request redirect");
+</script>

@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.dynamicPendingStarLinkOrder = [];
+      window.addEventListener("error", () => {
+        window.dynamicPendingStarLinkOrder.push("error");
+      });
+
+      const broken = document.createElement("script");
+      broken.type = "module";
+      broken.text = 'import "/assets/module_pending_star_body_cycle_a.mjs";';
+      document.body.appendChild(broken);
+
+      const later = document.createElement("script");
+      later.type = "module";
+      later.text =
+        'window.dynamicPendingStarLinkOrder.push("later-module"); window.dynamicPendingStarLinkBodyRan = window.pendingStarDeferredLinkBodyRan === true; window.dynamicPendingStarLinkContinuation = true; window.dynamicPendingStarLinkOrderResult = window.dynamicPendingStarLinkOrder.join(",");';
+      document.body.appendChild(later);
+    </script>
+  </body>
+</html>

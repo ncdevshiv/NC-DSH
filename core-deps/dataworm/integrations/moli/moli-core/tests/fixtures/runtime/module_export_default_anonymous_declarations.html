@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.moduleDefaultAnonymousOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleDefaultAnonymousOrder.push("dcl");
+        window.moduleDefaultAnonymousDclOrder =
+          window.moduleDefaultAnonymousOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import anonymousFn from "/assets/module-default-anonymous-function-export.mjs";
+      import AnonymousBox from "/assets/module-default-anonymous-class-export.mjs";
+
+      window.moduleDefaultAnonymousResult = `${anonymousFn()}:${new AnonymousBox().value}`;
+      window.moduleDefaultAnonymousFunctionName = anonymousFn.name;
+      window.moduleDefaultAnonymousClassName = AnonymousBox.name;
+      window.moduleDefaultAnonymousOrder.push("module");
+    </script>
+  </head>
+  <body></body>
+</html>

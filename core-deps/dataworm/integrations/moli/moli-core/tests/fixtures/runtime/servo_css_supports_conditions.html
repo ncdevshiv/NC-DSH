@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <body
+    data-pair=""
+    data-not-custom-prop=""
+    data-and-future=""
+    data-future-escaped=""
+    data-double-parens=""
+  >
+    <script>
+      document.body.setAttribute(
+        'data-pair',
+        String(CSS.supports('(margin: 1px)')),
+      );
+      document.body.setAttribute(
+        'data-not-custom-prop',
+        String(CSS.supports('not (--be: to be)')),
+      );
+      document.body.setAttribute(
+        'data-and-future',
+        String(CSS.supports('(color: blue) and future-extension(4)')),
+      );
+      document.body.setAttribute(
+        'data-future-escaped',
+        String(CSS.supports('future-\\31 extension(4)')),
+      );
+      document.body.setAttribute(
+        'data-double-parens',
+        String(CSS.supports('((test))')),
+      );
+    </script>
+  </body>
+</html>

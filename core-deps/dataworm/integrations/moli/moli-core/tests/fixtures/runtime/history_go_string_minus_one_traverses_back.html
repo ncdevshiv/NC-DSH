@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <body
+    data-sync-state=""
+    data-popstate-step=""
+    data-popstate-history-state=""
+    data-timeout-state=""
+  >
+    <script>
+      history.pushState({ step: 1 }, "", "#one");
+      history.pushState({ step: 2 }, "", "#two");
+
+      window.addEventListener("popstate", (event) => {
+        document.body.setAttribute(
+          "data-popstate-step",
+          String(event.state?.step ?? "null")
+        );
+        document.body.setAttribute(
+          "data-popstate-history-state",
+          String(history.state?.step ?? "null")
+        );
+      });
+
+      history.go(" -1 ");
+      document.body.setAttribute(
+        "data-sync-state",
+        String(history.state?.step ?? "null")
+      );
+
+      setTimeout(() => {
+        document.body.setAttribute(
+          "data-timeout-state",
+          String(history.state?.step ?? "null")
+        );
+      }, 0);
+    </script>
+  </body>
+</html>

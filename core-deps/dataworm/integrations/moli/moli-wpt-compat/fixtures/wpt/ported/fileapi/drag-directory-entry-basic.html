@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<div id="dropzone" style="width:200px;height:200px">drop</div>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const dropzone = document.getElementById("dropzone");
+let dropped = null;
+let resolveDrop = null;
+
+const dropPromise = new Promise(function (resolve) {
+  resolveDrop = resolve;
+});
+
+dropzone.addEventListener("dragover", function (event) {
+  event.preventDefault();
+});
+
+dropzone.addEventListener("drop", function (event) {
+  event.preventDefault();
+  dropped = event.dataTransfer;
+  resolveDrop();
+});
+
+promise_test(async function () {
+  await dropPromise;
+
+  assert_equals(dropped.items.length, 1, "directory payload should expose one item");
+  assert_array_equals(Array.from(dropped.types), ["Files"], "directory payload should expose Files type");
+  assert_equals(dropped.files.length, 0, "directory payload should not expose a File object");
+
+  const item = dropped.items[0];
+  assert_equals(item.kind, "file", "directory item still uses file kind");
+  assert_equals(item.type, "", "directory item has no MIME type");
+  assert_equals(item.getAsFile(), null, "directory item does not expose getAsFile");
+
+  const entry = item.webkitGetAsEntry();
+  assert_true(entry instanceof FileSystemEntry, "directory entry inherits FileSystemEntry");
+  assert_true(entry instanceof FileSystemDirectoryEntry, "directory item returns a directory entry");
+  assert_false(entry instanceof FileSystemFileEntry, "directory entry is not a file entry");
+  assert_false(entry.isFile, "directory entry reports not isFile");
+  assert_true(entry.isDirectory, "directory entry reports isDirectory");
+  assert_equals(entry.name, "photos", "directory entry name");
+  assert_equals(entry.fullPath, "/photos", "directory entry fullPath");
+  assert_equals(entry, item.webkitGetAsEntry(), "webkitGetAsEntry returns a stable entry wrapper");
+
+  const reader = entry.createReader();
+  assert_equals(typeof reader.readEntries, "function", "directory reader exposes readEntries");
+  const entries = await new Promise(function (resolve) {
+    reader.readEntries(resolve);
+  });
+  assert_array_equals(entries, [], "empty manifest directory has no child entries");
+}, "Input.dispatchDragEvent exposes dropped directories through webkitGetAsEntry");
+</script>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<body
+  data-missing-name=""
+  data-missing-required=""
+  data-invalid-name=""
+  data-invalid-value=""
+  data-invalid-enum=""
+  data-invalid-location=""
+  data-symbol-name=""
+  data-symbol-location=""
+  data-invalid-url-shape=""
+  data-invalid-url-location=""
+  data-invalid-url-committed=""
+  data-invalid-url-finished=""
+  data-auto-shape=""
+  data-auto-location=""
+></body>
+<script>
+const initialHref = location.href;
+
+try {
+  navigation.navigate();
+} catch (error) {
+  document.body.setAttribute("data-missing-name", String(error?.name ?? ""));
+  document.body.setAttribute(
+    "data-missing-required",
+    String(String(error?.message ?? "").includes("1 argument required"))
+  );
+}
+
+try {
+  navigation.navigate("#bad-history", { history: "banana" });
+} catch (error) {
+  const message = String(error?.message ?? "");
+  document.body.setAttribute("data-invalid-name", String(error?.name ?? ""));
+  document.body.setAttribute(
+    "data-invalid-value",
+    String(message.includes("banana"))
+  );
+  document.body.setAttribute(
+    "data-invalid-enum",
+    String(message.includes("NavigationHistoryBehavior"))
+  );
+  document.body.setAttribute(
+    "data-invalid-location",
+    String(location.href === initialHref)
+  );
+}
+
+try {
+  navigation.navigate(Symbol("target"));
+} catch (error) {
+  document.body.setAttribute("data-symbol-name", String(error?.name ?? ""));
+  document.body.setAttribute(
+    "data-symbol-location",
+    String(location.href === initialHref)
+  );
+}
+
+const invalidUrlResult = navigation.navigate("http://[");
+document.body.setAttribute(
+  "data-invalid-url-shape",
+  String(
+    !!invalidUrlResult &&
+      typeof invalidUrlResult.committed?.then === "function" &&
+      typeof invalidUrlResult.finished?.then === "function"
+  )
+);
+document.body.setAttribute(
+  "data-invalid-url-location",
+  String(location.href === initialHref)
+);
+invalidUrlResult.committed.then(
+  () => document.body.setAttribute("data-invalid-url-committed", "fulfilled"),
+  (error) =>
+    document.body.setAttribute(
+      "data-invalid-url-committed",
+      String(error?.name ?? "")
+    )
+);
+invalidUrlResult.finished.then(
+  () => document.body.setAttribute("data-invalid-url-finished", "fulfilled"),
+  (error) =>
+    document.body.setAttribute(
+      "data-invalid-url-finished",
+      String(error?.name ?? "")
+    )
+);
+
+const autoResult = navigation.navigate("#auto", { history: "auto" });
+document.body.setAttribute(
+  "data-auto-shape",
+  String(
+    !!autoResult &&
+      typeof autoResult.committed?.then === "function" &&
+      typeof autoResult.finished?.then === "function"
+  )
+);
+document.body.setAttribute("data-auto-location", location.hash);
+</script>
+</html>

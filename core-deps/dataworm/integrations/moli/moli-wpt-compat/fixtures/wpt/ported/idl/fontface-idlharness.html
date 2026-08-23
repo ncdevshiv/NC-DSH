@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+enum FontFaceLoadStatus { "unloaded", "loading", "loaded", "error" };
+enum FontFaceSetLoadStatus { "loading", "loaded" };
+
+interface FontFace {
+  constructor(CSSOMString family, FontFaceSource source, optional FontFaceDescriptors descriptors = {});
+  attribute CSSOMString family;
+  readonly attribute FontFaceSource source;
+  attribute CSSOMString style;
+  attribute CSSOMString weight;
+  attribute CSSOMString stretch;
+  attribute CSSOMString variant;
+  attribute CSSOMString featureSettings;
+  attribute CSSOMString display;
+  readonly attribute FontFaceLoadStatus status;
+  Promise<FontFace> load();
+  readonly attribute Promise<FontFace> loaded;
+};
+
+interface FontFaceSet {
+  readonly attribute FontFaceSetLoadStatus status;
+  readonly attribute Promise<FontFaceSet> ready;
+  readonly attribute unsigned long size;
+  FontFaceSet add(FontFace font);
+  boolean has(FontFace font);
+  boolean delete(FontFace font);
+  undefined clear();
+  boolean check(CSSOMString font, optional CSSOMString text = " ");
+  Promise<sequence<FontFace>> load(CSSOMString font, optional CSSOMString text = " ");
+  object keys();
+  object values();
+  object entries();
+  undefined forEach(any callback, optional any thisArg);
+};
+
+typedef DOMString CSSOMString;
+typedef DOMString FontFaceSource;
+dictionary FontFaceDescriptors {
+  CSSOMString style = "normal";
+  CSSOMString weight = "normal";
+  CSSOMString stretch = "normal";
+  CSSOMString variant = "normal";
+  CSSOMString featureSettings = "normal";
+  CSSOMString display = "auto";
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    FontFace: ["new FontFace('FixtureFace', 'url(fixture.woff2)')"],
+    FontFaceSet: ["document.fonts"]
+  });
+});
+
+promise_test(async function () {
+  const face = new FontFace("FixtureFace", "url(fixture.woff2)", {
+    style: "italic",
+    weight: "700",
+    stretch: "condensed",
+    variant: "small-caps",
+    featureSettings: '"kern"',
+    display: "swap"
+  });
+  const fonts = document.fonts;
+
+  assert_equals(Object.prototype.toString.call(face), "[object FontFace]");
+  assert_equals(Object.prototype.toString.call(fonts), "[object FontFaceSet]");
+  assert_false(Object.prototype.hasOwnProperty.call(face, "family"));
+  assert_false(Object.prototype.hasOwnProperty.call(face, "source"));
+  assert_false(Object.prototype.hasOwnProperty.call(face, "status"));
+  assert_false(Object.prototype.hasOwnProperty.call(face, "loaded"));
+  assert_false(Object.prototype.hasOwnProperty.call(fonts, "status"));
+  assert_false(Object.prototype.hasOwnProperty.call(fonts, "ready"));
+  assert_false(Object.prototype.hasOwnProperty.call(fonts, "size"));
+  assert_equals(face.loaded, face.loaded);
+  assert_equals(fonts.ready, fonts.ready);
+  assert_equals(face.family, "FixtureFace");
+  assert_equals(face.source, "url(fixture.woff2)");
+  assert_equals(face.status, "loaded");
+  assert_equals(await face.load(), face);
+  assert_equals(await face.loaded, face);
+
+  fonts.clear();
+  assert_equals(fonts.add(face), fonts);
+  assert_true(fonts.has(face));
+  assert_array_equals(await fonts.load("16px FixtureFace"), [face]);
+  assert_equals(await fonts.ready, fonts);
+  assert_true(fonts.check("16px FixtureFace"));
+  assert_array_equals(Array.from(fonts.values()), [face]);
+}, "FontFace idlharness sample covers FontFaceSet setlike and load surfaces");
+</script>

@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_reference_identity(node1, node2) {
+  assert_true(node1.isSameNode(node1), "self-comparison");
+  assert_false(node1.isSameNode(node2), "same properties");
+  assert_false(node1.isSameNode(null), "with null other node");
+}
+
+test(function () {
+  const doctype1 = document.implementation.createDocumentType("qualifiedName", "publicId", "systemId");
+  const doctype2 = document.implementation.createDocumentType("qualifiedName", "publicId", "systemId");
+
+  assert_reference_identity(doctype1, doctype2);
+}, "DocumentType nodes are compared by reference");
+
+test(function () {
+  const element1 = document.createElementNS("namespace", "prefix:localName");
+  const element2 = document.createElementNS("namespace", "prefix:localName");
+
+  assert_reference_identity(element1, element2);
+}, "Namespaced elements are compared by reference");
+
+test(function () {
+  const element1 = document.createElement("element");
+  element1.setAttributeNS("namespace", "prefix:localName", "value");
+
+  const element2 = document.createElement("element");
+  element2.setAttributeNS("namespace", "prefix:localName", "value");
+
+  assert_reference_identity(element1, element2);
+}, "Elements with matching namespaced attributes are compared by reference");
+
+test(function () {
+  const pi1 = document.createProcessingInstruction("target", "data");
+  const pi2 = document.createProcessingInstruction("target", "data");
+
+  assert_reference_identity(pi1, pi2);
+}, "ProcessingInstruction nodes are compared by reference");
+
+test(function () {
+  const text1 = document.createTextNode("data");
+  const text2 = document.createTextNode("data");
+
+  assert_reference_identity(text1, text2);
+}, "Text nodes are compared by reference");
+
+test(function () {
+  const comment1 = document.createComment("data");
+  const comment2 = document.createComment("data");
+
+  assert_reference_identity(comment1, comment2);
+}, "Comment nodes are compared by reference");
+
+test(function () {
+  const fragment1 = document.createDocumentFragment();
+  const fragment2 = document.createDocumentFragment();
+
+  assert_reference_identity(fragment1, fragment2);
+}, "DocumentFragment nodes are compared by reference");
+
+test(function () {
+  const document1 = document.implementation.createDocument("", "");
+  const document2 = document.implementation.createDocument("", "");
+
+  assert_reference_identity(document1, document2);
+}, "Document nodes are compared by reference");
+</script>

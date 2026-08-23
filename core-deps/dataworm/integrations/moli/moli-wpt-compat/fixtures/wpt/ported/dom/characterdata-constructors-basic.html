@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_character_data(node, iface, nodeType, nodeName, expected) {
+  assert_true(node instanceof iface, "specific interface");
+  assert_true(node instanceof CharacterData, "CharacterData interface");
+  assert_true(node instanceof Node, "Node interface");
+  assert_equals(node.ownerDocument, document, "ownerDocument");
+  assert_equals(node.data, expected, "data");
+  assert_equals(node.nodeValue, expected, "nodeValue");
+  assert_equals(node.textContent, expected, "textContent");
+  assert_equals(node.length, expected.length, "length");
+  assert_equals(node.nodeType, nodeType, "nodeType");
+  assert_equals(node.nodeName, nodeName, "nodeName");
+  assert_equals(node.hasChildNodes(), false, "hasChildNodes");
+  assert_equals(node.firstChild, null, "firstChild");
+  assert_equals(node.lastChild, null, "lastChild");
+}
+
+function test_constructor(ctorName, iface, nodeType, nodeName) {
+  test(function() {
+    assert_character_data(new window[ctorName](), iface, nodeType, nodeName, "");
+  }, "new " + ctorName + "() with no arguments");
+
+  [
+    [undefined, ""],
+    [null, "null"],
+    [42, "42"],
+    ["", ""],
+    ["-", "-"],
+    ["-->", "-->"],
+    ["\u0000test", "\u0000test"],
+    ["&amp;", "&amp;"]
+  ].forEach(function(entry) {
+    const value = entry[0];
+    const expected = entry[1];
+    test(function() {
+      assert_character_data(new window[ctorName](value), iface, nodeType, nodeName, expected);
+    }, "new " + ctorName + "(" + JSON.stringify(value) + ")");
+  });
+
+  test(function() {
+    const called = [];
+    const node = new window[ctorName]({
+      toString: function() {
+        called.push("first");
+        return "text";
+      }
+    }, {
+      toString: function() {
+        called.push("second");
+        assert_unreached("second argument should not be converted");
+      }
+    });
+    assert_character_data(node, iface, nodeType, nodeName, "text");
+    assert_array_equals(called, ["first"]);
+  }, "new " + ctorName + "() converts only the first argument");
+}
+
+test_constructor("Text", Text, Node.TEXT_NODE, "#text");
+test_constructor("Comment", Comment, Node.COMMENT_NODE, "#comment");
+</script>

@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+  <body
+    data-for-each-families=""
+    data-for-each-arg-pair=""
+    data-for-each-self=""
+    data-for-each-this=""
+    data-keys-families=""
+    data-values-families=""
+    data-entries-pair=""
+    data-iterator-families=""
+  >
+    <script>
+      const body = document.body;
+      const faces = [
+        new FontFace('Font1', 'url(1.woff)'),
+        new FontFace('Font2', 'url(2.woff)'),
+        new FontFace('Font3', 'url(3.woff)'),
+      ];
+      faces.forEach((face) => document.fonts.add(face));
+
+      const forEachFamilies = [];
+      let argPair = true;
+      let selfOk = true;
+      let thisOk = true;
+      const thisArg = { tag: 'thisArg' };
+      document.fonts.forEach(function(value, key, set) {
+        forEachFamilies.push(value.family);
+        argPair &&= value === key;
+        selfOk &&= set === document.fonts;
+        thisOk &&= this === thisArg;
+      }, thisArg);
+
+      body.setAttribute('data-for-each-families', forEachFamilies.join(','));
+      body.setAttribute('data-for-each-arg-pair', String(argPair));
+      body.setAttribute('data-for-each-self', String(selfOk));
+      body.setAttribute('data-for-each-this', String(thisOk));
+      body.setAttribute(
+        'data-keys-families',
+        Array.from(document.fonts.keys()).map((face) => face.family).join(',')
+      );
+      body.setAttribute(
+        'data-values-families',
+        Array.from(document.fonts.values()).map((face) => face.family).join(',')
+      );
+      body.setAttribute(
+        'data-entries-pair',
+        String(Array.from(document.fonts.entries()).every(([a, b]) => a === b))
+      );
+      body.setAttribute(
+        'data-iterator-families',
+        Array.from(document.fonts).map((face) => face.family).join(',')
+      );
+    </script>
+  </body>
+</html>

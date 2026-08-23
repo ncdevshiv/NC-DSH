@@ -1,0 +1,144 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+function wait_request(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+promise_test(async () => {
+  const prefix = "idb-factory-name-" + Math.random();
+  const objectName = prefix + "-object";
+  const throwingName = {
+    toString() {
+      throw new RangeError("name conversion");
+    },
+  };
+  const stringifiedName = {
+    toString() {
+      return objectName;
+    },
+  };
+
+  assert_throws_name("TypeError", () => indexedDB.open(), "open name is required");
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.deleteDatabase(),
+    "deleteDatabase name is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(Symbol("db")),
+    "open rejects Symbol name"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.deleteDatabase(Symbol("db")),
+    "deleteDatabase rejects Symbol name"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => indexedDB.open(throwingName),
+    "open propagates name stringification errors"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => indexedDB.deleteDatabase(throwingName),
+    "deleteDatabase propagates name stringification errors"
+  );
+
+  const db = await wait_request(indexedDB.open(stringifiedName, 1));
+  assert_equals(db.name, objectName, "object name stringifies through DOMString");
+  db.close();
+  await wait_request(indexedDB.deleteDatabase(objectName));
+
+  const undefinedDb = await wait_request(indexedDB.open(undefined));
+  assert_equals(
+    undefinedDb.name,
+    "undefined",
+    "present undefined converts to a DOMString database name"
+  );
+  undefinedDb.close();
+  await wait_request(indexedDB.deleteDatabase(undefined));
+}, "IDBFactory database name follows WebIDL DOMString conversion");
+
+promise_test(async () => {
+  const dbname = "idb-factory-version-" + Math.random();
+  const throwingVersion = {
+    valueOf() {
+      throw new RangeError("version conversion");
+    },
+  };
+
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(dbname, 0),
+    "version 0 is rejected after WebIDL conversion"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(dbname, null),
+    "null version converts to 0 and is rejected"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(dbname, NaN),
+    "NaN version is rejected by EnforceRange"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(dbname, Infinity),
+    "Infinity version is rejected by EnforceRange"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(dbname, -1),
+    "negative version is rejected by EnforceRange"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(dbname, "stringversion"),
+    "non-numeric string version is rejected by EnforceRange"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.open(dbname, Symbol("version")),
+    "Symbol version is rejected"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => indexedDB.open(dbname, throwingVersion),
+    "version conversion errors propagate"
+  );
+
+  const db = await wait_request(indexedDB.open(dbname, 1.9));
+  assert_equals(db.version, 1, "fractional version truncates under EnforceRange");
+  db.close();
+
+  const upgraded = await wait_request(indexedDB.open(dbname, "2.9"));
+  assert_equals(upgraded.version, 2, "numeric string version converts and truncates");
+  upgraded.close();
+  await wait_request(indexedDB.deleteDatabase(dbname));
+}, "IDBFactory.open() version follows WebIDL EnforceRange unsigned long long conversion");
+</script>

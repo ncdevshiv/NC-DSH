@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.documentWriteInvalidImportMapOrder = [];
+      window.documentWriteInvalidImportMapErrors = 0;
+      window.addEventListener("error", () => {
+        window.documentWriteInvalidImportMapOrder.push("window-error");
+        window.documentWriteInvalidImportMapOrderResult =
+          window.documentWriteInvalidImportMapOrder.join(",");
+      });
+      document.write(
+        '<script type="importmap" onerror="window.documentWriteInvalidImportMapOrder.push(\'error\'); window.documentWriteInvalidImportMapErrors += 1; window.documentWriteInvalidImportMapOrderResult = window.documentWriteInvalidImportMapOrder.join(\',\');">{\"imports\":{\"fixture\":\"/fixtures/esm/fixture.mjs\",}}<\/script>' +
+          '<script type="module">window.documentWriteInvalidImportMapOrder.push("later-module"); window.documentWriteInvalidImportMapContinuation = true; window.documentWriteInvalidImportMapOrderResult = window.documentWriteInvalidImportMapOrder.join(",");<\/script>'
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,157 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (caught) {
+    error = caught;
+    assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+}
+
+test(function () {
+  const parser = new DOMParser();
+  assert_equals(typeof parser.parseFromString, "function");
+
+  const doc = parser.parseFromString("<div>Hello World</div>", "text/html");
+  const div = doc.querySelector("div");
+
+  assert_equals(typeof doc, "object");
+  assert_false(doc === document);
+  assert_equals(div.tagName, "DIV");
+  assert_equals(div.textContent, "Hello World");
+}, "DOMParser parses simple HTML into a detached document");
+
+test(function () {
+  const parser = new DOMParser();
+  for (const mime of ["text/html", "text/xml", "application/xml", "application/xhtml+xml", "image/svg+xml"]) {
+    assert_not_equals(parser.parseFromString("<root></root>", mime), null, "supported MIME " + mime);
+  }
+
+  assert_throws_name("TypeError", () => parser.parseFromString("<root></root>"), "missing MIME type should throw");
+  assert_throws_name("TypeError", () => parser.parseFromString("<root></root>", "text/xsl"), "unsupported MIME type should throw");
+  assert_throws_name("TypeError", () => parser.parseFromString(Symbol("source"), "text/html"), "source Symbol should throw");
+  assert_throws_name("TypeError", () => parser.parseFromString("<root></root>", Symbol("type")), "type Symbol should throw");
+  assert_throws_name("Error", () => {
+    parser.parseFromString({
+      toString() { throw new Error("source conversion failed"); }
+    }, "text/html");
+  }, "source conversion errors should propagate");
+}, "DOMParser.parseFromString uses WebIDL required DOMString and SupportedType conversion");
+
+test(function () {
+  const doc = new DOMParser().parseFromString(
+    '<section id="root" class="card"><p><span>Nested</span></p></section>',
+    "text/html"
+  );
+  const section = doc.querySelector("section");
+  const paragraph = doc.querySelector("p");
+  const span = doc.querySelector("span");
+
+  assert_equals(section.id, "root");
+  assert_equals(section.className, "card");
+  assert_equals(paragraph.parentNode, section);
+  assert_equals(span.parentNode, paragraph);
+  assert_equals(section.textContent, "Nested");
+}, "DOMParser preserves attributes and nested HTML structure");
+
+test(function () {
+  const doc = new DOMParser().parseFromString('<div id="parsed">Parsed</div>', "text/html");
+  const parsed = doc.getElementById("parsed");
+
+  assert_equals(parsed.textContent, "Parsed");
+  assert_equals(document.getElementById("parsed"), null);
+}, "DOMParser detached documents do not affect the active document");
+
+test(function () {
+  const doc = new DOMParser().parseFromString(
+    "<html><body><p id='first'></p><p id='second'></p></body></html>",
+    "text/html"
+  );
+  const collection = doc.getElementsByTagName("p");
+  const first = doc.getElementById("first");
+  const second = doc.getElementById("second");
+
+  assert_true(collection instanceof HTMLCollection);
+  assert_equals(collection.item(0), first);
+  assert_equals(collection.item(1), second);
+  assert_equals(collection.item(2), null);
+  assert_equals(collection.item(-1), null, "wrapped negative index should return null when out of range");
+  assert_throws_name("TypeError", () => collection.item(), "item() should require its index argument");
+  assert_equals(collection.item(undefined), first, "explicit undefined should convert to zero");
+  assert_equals(collection.item(null), first, "null should convert to zero");
+  assert_equals(collection.item("1.9"), second, "string decimals should truncate through unsigned long conversion");
+  assert_equals(collection.item(NaN), first, "NaN should convert to zero");
+  assert_equals(collection.item(Infinity), first, "Infinity should convert to zero");
+  assert_equals(collection.item(-4294967295), second, "negative values should wrap through unsigned long conversion");
+  assert_equals(collection.item(4294967297), second, "large values should wrap through unsigned long conversion");
+  assert_equals(
+    collection.item({
+      valueOf() { return {}; },
+      toString() { return "1"; },
+    }),
+    second,
+    "item() should fall back to object toString conversion"
+  );
+  assert_throws_name("Error", () => {
+    collection.item({ valueOf() { throw new Error("item conversion failed"); } });
+  }, "item() should propagate object conversion exceptions");
+  assert_throws_name("TypeError", () => collection.item(Symbol("index")), "item() should reject Symbol conversion");
+  assert_throws_name("TypeError", () => collection.item(1n), "item() should reject BigInt conversion");
+}, "DOMParser detached HTMLCollection item() uses WebIDL unsigned long conversion");
+
+test(function () {
+  const doc = new DOMParser().parseFromString(
+    "<html><body><section id='host'><p class='a'></p><p class='a b'></p><span class='b'></span></section></body></html>",
+    "text/html"
+  );
+  const host = doc.getElementById("host");
+  const first = host.childNodes[0];
+  const second = host.childNodes[1];
+  const span = host.childNodes[2];
+
+  assert_array_equals(Array.from(host.getElementsByTagName("P")), [first, second]);
+  assert_array_equals(Array.from(host.getElementsByTagName("*")), [first, second, span]);
+  assert_array_equals(Array.from(host.getElementsByClassName("a b")), [second]);
+}, "DOMParser detached Element collection methods search descendants in document order");
+
+test(function () {
+  const xml = document.implementation.createDocument(null, "root");
+  const root = xml.documentElement;
+  const plain = root.appendChild(xml.createElement("item"));
+  const a = root.appendChild(xml.createElementNS("urn:a", "a:item"));
+  const nested = a.appendChild(xml.createElementNS("urn:a", "a:leaf"));
+  const b = root.appendChild(xml.createElementNS("urn:b", "b:item"));
+  const capital = root.appendChild(xml.createElementNS("urn:a", "a:Item"));
+
+  assert_true(xml.getElementsByTagNameNS("*", "item") instanceof HTMLCollection);
+  assert_array_equals(Array.from(xml.getElementsByTagNameNS("*", "item")), [plain, a, b]);
+  assert_array_equals(Array.from(xml.getElementsByTagNameNS("urn:a", "item")), [a]);
+  assert_array_equals(Array.from(xml.getElementsByTagNameNS("urn:a", "Item")), [capital]);
+  assert_array_equals(Array.from(xml.getElementsByTagNameNS("urn:a", "*")), [a, nested, capital]);
+  assert_array_equals(Array.from(xml.getElementsByTagNameNS("", "item")), [plain]);
+  assert_array_equals(Array.from(xml.getElementsByTagNameNS(null, "item")), [plain]);
+  assert_array_equals(Array.from(root.getElementsByTagNameNS("urn:a", "item")), [a]);
+}, "DOMParser detached getElementsByTagNameNS matches namespace and XML localName exactly");
+
+test(function () {
+  const serializer = new XMLSerializer();
+  const container = document.createElement("div");
+  const span = document.createElement("span");
+  container.id = "serialize-test";
+  span.textContent = "Body";
+  container.appendChild(span);
+
+  assert_equals(typeof serializer.serializeToString, "function");
+  assert_equals(
+    serializer.serializeToString(container),
+    '<div xmlns="http://www.w3.org/1999/xhtml" id="serialize-test"><span>Body</span></div>'
+  );
+}, "XMLSerializer serializes simple element subtrees");
+</script>

@@ -1,0 +1,151 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body
+  data-anchor=""
+  data-form-submit=""
+  data-formtarget=""
+  data-anchor-after-load=""
+  data-form-submit-after-load=""
+  data-formtarget-after-load=""
+>
+  <iframe id="frame1" name="f1"></iframe>
+  <a id="anchor-target" target="f1" href="resources/a-page.html"></a>
+  <script>
+    document.getElementById("anchor-target").click();
+    document.body.setAttribute(
+      "data-anchor",
+      document.getElementById("frame1").contentDocument?.body?.textContent?.trim() ?? "null",
+    );
+  </script>
+
+  <script>
+    {
+      const frame = document.createElement("iframe");
+      frame.name = "frame2";
+      window.__targetFrame = frame;
+      document.documentElement.appendChild(frame);
+
+      const form = document.createElement("form");
+      form.target = "frame2";
+      form.action = "resources/a-page.html";
+      form.submit();
+
+      document.body.setAttribute(
+        "data-form-submit",
+        frame.contentDocument?.body?.textContent?.trim() ?? "null",
+      );
+    }
+  </script>
+
+  <iframe id="frame3" name="frame3"></iframe>
+  <form target="_top" action="resources/a-page.html">
+    <input id="submitter" type="submit" formtarget="frame3">
+  </form>
+  <script>
+    document.getElementById("submitter").click();
+    document.body.setAttribute(
+      "data-formtarget",
+      document.getElementById("frame3").contentDocument?.body?.textContent?.trim() ?? "null",
+    );
+  </script>
+
+  <script>
+    function wait(ms) {
+      return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+      });
+    }
+
+    function wait_for_value(read, expected, description) {
+      return Promise.race([
+        new Promise(function (resolve, reject) {
+          const deadline = Date.now() + 1000;
+          function poll() {
+            const value = read();
+            if (value === expected) {
+              resolve(value);
+              return;
+            }
+            if (Date.now() >= deadline) {
+              reject(new Error("timed out waiting for " + description + ": got " + value));
+              return;
+            }
+            setTimeout(poll, 10);
+          }
+          poll();
+        }),
+        wait(1100).then(function () {
+          throw new Error("timed out waiting for " + description);
+        }),
+      ]);
+    }
+
+    window.addEventListener("load", function () {
+      document.body.setAttribute(
+        "data-anchor-after-load",
+        document.getElementById("frame1").contentDocument?.body?.textContent?.trim() ?? "null",
+      );
+      document.body.setAttribute(
+        "data-form-submit-after-load",
+        window.__targetFrame?.contentDocument?.body?.textContent?.trim() ?? "null",
+      );
+      document.body.setAttribute(
+        "data-formtarget-after-load",
+        document.getElementById("frame3").contentDocument?.body?.textContent?.trim() ?? "null",
+      );
+    });
+
+    test(function () {
+      assert_equals(document.body.getAttribute("data-anchor"), "", "anchor target should start empty");
+      assert_equals(
+        document.body.getAttribute("data-form-submit"),
+        "",
+        "form.submit target should start empty",
+      );
+      assert_equals(
+        document.body.getAttribute("data-formtarget"),
+        "",
+        "formtarget click target should start empty",
+      );
+    }, "Named child browsing context target navigation is asynchronous before load");
+
+    promise_test(async function () {
+      await wait_for_value(
+        function () {
+          return document.body.getAttribute("data-anchor-after-load");
+        },
+        "a-page",
+        "anchor target load",
+      );
+      await wait_for_value(
+        function () {
+          return document.body.getAttribute("data-form-submit-after-load");
+        },
+        "a-page",
+        "form submit target load",
+      );
+      await wait_for_value(
+        function () {
+          return document.body.getAttribute("data-formtarget-after-load");
+        },
+        "a-page",
+        "formtarget load",
+      );
+
+      assert_equals(document.body.getAttribute("data-anchor-after-load"), "a-page", "anchor target");
+      assert_equals(
+        document.body.getAttribute("data-form-submit-after-load"),
+        "a-page",
+        "form.submit target",
+      );
+      assert_equals(
+        document.body.getAttribute("data-formtarget-after-load"),
+        "a-page",
+        "formtarget target",
+      );
+    }, "Anchor, form.submit(), and formtarget all resolve through the live child browsing context store");
+  </script>
+</body>

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  AI_SDK_GATEWAY_BASE_URL: ${{ secrets.AI_SDK_GATEWAY_BASE_URL }}
+  AI_SDK_GATEWAY_API_KEY: ${{ secrets.AI_SDK_GATEWAY_API_KEY }}
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  check-clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo check --workspace
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace
+
+  bench-smoke:
+    runs-on: ubuntu-latest
+    needs: [fmt, check-clippy, test]
+    # Smoke-checks that the criterion benches compile and execute. The bench
+    # binaries are harness=false, so cargo test only builds them (--no-run);
+    # each binary is then run in criterion's --test mode: every benchmark
+    # executes exactly once with NO timing assertions — a slow runner can
+    # never fail this job.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p ai-stream -p ai-runtime --benches --no-run
+      - run: cargo bench -p ai-stream --bench sse_bench -- --test
+      - run: cargo bench -p ai-runtime --bench runtime_bench -- --test
+
+  live-gateway:
+    runs-on: ubuntu-latest
+    needs: [fmt, check-clippy, test]
+    # Runs the real gateway suite only when the credentials are present.
+    # NOTE: a job-level `if` can access neither `secrets` nor `env` (only
+    # github/inputs/needs/vars), so the credential gate lives on every
+    # step, where `env` IS available. Without secrets this job is a
+    # no-op that still reports green.
+    env:
+      AI_SDK_PRIMARY_MODEL: deepseek-v4-flash
+      AI_SDK_VISION_MODEL: mimo-v2.5
+    steps:
+      - uses: actions/checkout@v4
+        if: env.AI_SDK_GATEWAY_API_KEY != ''
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.AI_SDK_GATEWAY_API_KEY != ''
+      - run: cargo test -p ai-providers --test live_gateway -- --ignored --test-threads=2
+        if: env.AI_SDK_GATEWAY_API_KEY != ''

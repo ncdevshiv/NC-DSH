@@ -1,0 +1,371 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const MESSAGE_TIMEOUT_MS = 30000;
+
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(target, label, predicate) {
+  if (typeof target.start === "function") {
+    target.start();
+  }
+
+  return new Promise(function (resolve, reject) {
+    const timeout = setTimeout(function () {
+      cleanup();
+      reject(new Error((label || "message") + " timed out"));
+    }, MESSAGE_TIMEOUT_MS);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      target.removeEventListener("message", onmessage);
+      target.removeEventListener("messageerror", onmessageerror);
+      target.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      if (predicate && !predicate(event.data)) {
+        return;
+      }
+      cleanup();
+      resolve(event);
+    }
+
+    function onmessageerror(event) {
+      cleanup();
+      reject(event.error || new Error((label || "message") + " messageerror"));
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(event.error || new Error(event.message || ((label || "message") + " error")));
+    }
+
+    target.addEventListener("message", onmessage);
+    target.addEventListener("messageerror", onmessageerror);
+    target.addEventListener("error", onerror);
+  });
+}
+
+function next_messages(port, count, label) {
+  port.start();
+
+  return new Promise(function (resolve, reject) {
+    const events = [];
+    const timeout = setTimeout(function () {
+      cleanup();
+      reject(new Error((label || "messages") + " timed out after " + events.length + " of " + count));
+    }, MESSAGE_TIMEOUT_MS);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      port.removeEventListener("message", onmessage);
+      port.removeEventListener("messageerror", onmessageerror);
+    }
+
+    function onmessage(event) {
+      events.push(event);
+      if (events.length === count) {
+        cleanup();
+        resolve(events);
+      }
+    }
+
+    function onmessageerror(event) {
+      cleanup();
+      reject(event.error || new Error((label || "messages") + " messageerror"));
+    }
+
+    port.addEventListener("message", onmessage);
+    port.addEventListener("messageerror", onmessageerror);
+  });
+}
+
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+async function assert_port_arraybuffer_transfer_into_worker() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (messageEvent) {",
+        "    if (!messageEvent.data || messageEvent.data.kind !== 'buffer') {",
+        "      return;",
+        "    }",
+        "    const buffer = messageEvent.data.buffer;",
+        "    port.postMessage({",
+        "      kind: 'received-buffer',",
+        "      isArrayBuffer: buffer instanceof ArrayBuffer,",
+        "      byteLength: buffer.byteLength,",
+        "      bytes: Array.from(new Uint8Array(buffer)).join(','),",
+        "      portsLength: messageEvent.ports.length,",
+        "    });",
+        "  };",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const ready = next_message(worker, "worker port install ready");
+    worker.postMessage("connect", [channel.port2]);
+    assert_equals((await ready).data.kind, "ready", "worker should install the port callback");
+
+    const received = next_message(channel.port1, "worker ArrayBuffer transfer reply");
+    const buffer = new Uint8Array([11, 12, 13]).buffer;
+    channel.port1.postMessage({ kind: "buffer", buffer: buffer }, { transfer: [buffer] });
+
+    assert_equals(buffer.byteLength, 0, "options.transfer should detach the sender ArrayBuffer");
+
+    const reply = (await received).data;
+    assert_equals(reply.kind, "received-buffer", "worker should reply after receiving the buffer");
+    assert_true(reply.isArrayBuffer, "worker should receive an ArrayBuffer");
+    assert_equals(reply.byteLength, 3, "worker should receive the original byte length");
+    assert_equals(reply.bytes, "11,12,13", "worker should receive the transferred bytes");
+    assert_equals(reply.portsLength, 0, "ArrayBuffer transfer should not populate event.ports");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}
+
+async function assert_port_transfer_nested_port_into_worker() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const control = event.ports[0];",
+        "  control.onmessage = function (messageEvent) {",
+        "    if (!messageEvent.data || messageEvent.data.kind !== 'forward-port') {",
+        "      return;",
+        "    }",
+        "    const forwarded = messageEvent.data.port;",
+        "    control.postMessage({",
+        "      kind: 'forward-ready',",
+        "      portsLength: messageEvent.ports.length,",
+        "      sameWrapper: forwarded === messageEvent.ports[0],",
+        "      isMessagePort: forwarded instanceof MessagePort,",
+        "    });",
+        "    forwarded.onmessage = function (innerEvent) {",
+        "      forwarded.postMessage('forwarded:' + innerEvent.data);",
+        "    };",
+        "  };",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const control = new MessageChannel();
+  const inner = new MessageChannel();
+
+  try {
+    const ready = next_message(worker, "worker control port install ready");
+    worker.postMessage("connect", [control.port2]);
+    assert_equals((await ready).data.kind, "ready", "worker should install the control port");
+
+    const forwardReady = next_message(control.port1, "forwarded port ready");
+    const reply = next_message(inner.port1, "forwarded port round-trip");
+    control.port1.postMessage(
+      { kind: "forward-port", port: inner.port2 },
+      { transfer: [inner.port2] },
+    );
+
+    const readyData = (await forwardReady).data;
+    assert_equals(readyData.kind, "forward-ready", "worker should acknowledge the forwarded port");
+    assert_equals(readyData.portsLength, 1, "MessagePort event should expose the forwarded port");
+    assert_true(readyData.sameWrapper, "forwarded payload port and event.ports should share a wrapper");
+    assert_true(readyData.isMessagePort, "forwarded payload port should preserve its interface");
+
+    inner.port1.postMessage("ping");
+    assert_equals((await reply).data, "forwarded:ping", "options.transfer forwarded port should round-trip");
+  } finally {
+    control.port1.close();
+    control.port2.close();
+    inner.port1.close();
+    inner.port2.close();
+    worker.terminate();
+  }
+}
+
+async function assert_port_arraybuffer_transfer_from_worker() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (messageEvent) {",
+        "    if (messageEvent.data !== 'send-buffer') {",
+        "      return;",
+        "    }",
+        "    const buffer = new Uint8Array([21, 22, 23]).buffer;",
+        "    port.postMessage(buffer, { transfer: [buffer] });",
+        "    port.postMessage({ kind: 'worker-detached', byteLength: buffer.byteLength });",
+        "  };",
+        "  postMessage({ kind: 'ready' });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const ready = next_message(worker, "worker sender port install ready");
+    worker.postMessage("connect", [channel.port2]);
+    assert_equals((await ready).data.kind, "ready", "worker should install the port callback");
+
+    const replies = next_messages(channel.port1, 2, "worker-to-window ArrayBuffer replies");
+    channel.port1.postMessage("send-buffer");
+
+    const events = await replies;
+    const bufferEvent = events[0];
+    assert_true(bufferEvent.data instanceof ArrayBuffer, "window should receive an ArrayBuffer");
+    assert_equals(bufferEvent.data.byteLength, 3, "window should receive the original byte length");
+    assert_equals(
+      Array.from(new Uint8Array(bufferEvent.data)).join(","),
+      "21,22,23",
+      "window should receive the worker bytes",
+    );
+    assert_equals(bufferEvent.ports.length, 0, "ArrayBuffer transfer should not populate event.ports");
+
+    const detached = events[1].data;
+    assert_equals(detached.kind, "worker-detached", "worker should report sender detachment");
+    assert_equals(detached.byteLength, 0, "worker sender ArrayBuffer should be detached");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}
+
+async function assert_worker_owned_port_transfer_validation() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  const duplicateBuffer = new Uint8Array([31, 32]).buffer;",
+        "  let duplicateName = null;",
+        "  try {",
+        "    port.postMessage(duplicateBuffer, { transfer: [duplicateBuffer, duplicateBuffer] });",
+        "  } catch (error) {",
+        "    duplicateName = error && error.name;",
+        "  }",
+        "  const typedArray = new Uint8Array([41]);",
+        "  let invalidName = null;",
+        "  try {",
+        "    port.postMessage('invalid', { transfer: [typedArray] });",
+        "  } catch (error) {",
+        "    invalidName = error && error.name;",
+        "  }",
+        "  postMessage({",
+        "    kind: 'validation',",
+        "    duplicateName,",
+        "    duplicateByteLength: duplicateBuffer.byteLength,",
+        "    invalidName,",
+        "    typedArrayByteLength: typedArray.byteLength,",
+        "  });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const report = next_message(worker, "worker transfer validation report");
+    worker.postMessage("connect", [channel.port2]);
+
+    const data = (await report).data;
+    assert_equals(data.kind, "validation", "worker should report validation results");
+    assert_equals(data.duplicateName, "DataCloneError", "duplicate worker-side ArrayBuffer transfer should throw");
+    assert_equals(data.duplicateByteLength, 2, "failed duplicate worker-side transfer should not detach the ArrayBuffer");
+    assert_equals(data.invalidName, "DataCloneError", "worker-side non-transferable options.transfer entry should throw");
+    assert_equals(data.typedArrayByteLength, 1, "failed worker-side options.transfer validation should not mutate the typed array view");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}
+
+function assert_duplicate_arraybuffer_transfer_rejected() {
+  const channel = new MessageChannel();
+  const buffer = new ArrayBuffer(4);
+
+  try {
+    assert_throws_name(
+      "DataCloneError",
+      function () {
+        channel.port1.postMessage(buffer, { transfer: [buffer, buffer] });
+      },
+      "duplicate ArrayBuffer in options.transfer should throw",
+    );
+    assert_equals(buffer.byteLength, 4, "duplicate options.transfer failure should not detach the buffer");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+  }
+}
+
+async function assert_duplicate_messageport_transfer_rejected() {
+  const channel = new MessageChannel();
+  const probe = new MessageChannel();
+
+  try {
+    assert_throws_name(
+      "DataCloneError",
+      function () {
+        channel.port1.postMessage("duplicate", { transfer: [probe.port1, probe.port1] });
+      },
+      "duplicate MessagePort in options.transfer should throw",
+    );
+
+    const delivered = next_message(probe.port2, "duplicate transfer non-detached probe");
+    probe.port1.postMessage("still-live");
+    assert_equals((await delivered).data, "still-live", "failed duplicate transfer should not detach the port");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    probe.port1.close();
+    probe.port2.close();
+  }
+}
+
+promise_test(async function () {
+  assert_duplicate_arraybuffer_transfer_rejected();
+  await assert_port_arraybuffer_transfer_into_worker();
+  await assert_port_transfer_nested_port_into_worker();
+  await assert_port_arraybuffer_transfer_from_worker();
+  await assert_worker_owned_port_transfer_validation();
+  await assert_duplicate_messageport_transfer_rejected();
+}, "MessagePort.postMessage options.transfer smoke coverage runs deterministically");
+</script>

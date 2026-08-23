@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <body
+    data-window-same="pending"
+    data-document-same="pending"
+    data-location-href="pending"
+    data-window-document-url="pending"
+    data-content-document-url="pending"
+    data-navigation-entry-url="pending"
+    data-child-body="pending"
+  >
+    <iframe id="child" src="/compat/window-child-browsing-context-redirect-child-start"></iframe>
+    <script>
+      const iframe = document.getElementById('child');
+      const childWindow = iframe.contentWindow;
+      iframe.addEventListener('load', () => {
+        const contentDocument = iframe.contentDocument;
+        const windowDocument = iframe.contentWindow?.document;
+        document.body.dataset.windowSame = String(childWindow === iframe.contentWindow);
+        document.body.dataset.documentSame = String(windowDocument === contentDocument);
+        document.body.dataset.locationHref = iframe.contentWindow?.location?.href ?? 'null';
+        document.body.dataset.windowDocumentUrl = windowDocument?.URL ?? 'null';
+        document.body.dataset.contentDocumentUrl = contentDocument?.URL ?? 'null';
+        document.body.dataset.navigationEntryUrl =
+          iframe.contentWindow?.navigation?.currentEntry?.url ?? 'null';
+        document.body.dataset.childBody =
+          contentDocument?.body?.getAttribute('data-child') ?? 'null';
+      });
+    </script>
+  </body>
+</html>

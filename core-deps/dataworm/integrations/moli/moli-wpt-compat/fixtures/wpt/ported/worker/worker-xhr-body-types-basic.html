@@ -1,0 +1,306 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const MULTIPART_CONTENT_TYPE_PREFIX = "multipart/form-data; boundary=";
+
+function asciiHex(value) {
+  let output = "";
+  for (let i = 0; i < value.length; i++) {
+    output += value.charCodeAt(i).toString(16).padStart(2, "0");
+  }
+  return output;
+}
+
+function utf8Hex(value) {
+  let output = "";
+  for (const byte of new TextEncoder().encode(value)) {
+    output += byte.toString(16).padStart(2, "0");
+  }
+  return output;
+}
+
+function bytesHex(bytes) {
+  let output = "";
+  for (const byte of bytes) {
+    output += byte.toString(16).padStart(2, "0");
+  }
+  return output;
+}
+
+function countOccurrences(value, needle) {
+  let count = 0;
+  let index = 0;
+  while (true) {
+    index = value.indexOf(needle, index);
+    if (index === -1) {
+      return count;
+    }
+    count += 1;
+    index += needle.length;
+  }
+}
+
+function multipartBoundary(response) {
+  assert_true(
+    response.content_type.startsWith(
+      MULTIPART_CONTENT_TYPE_PREFIX + "----MoliFormDataBoundary",
+    ),
+    "worker XHR FormData should install a multipart Content-Type with a generated boundary",
+  );
+  return response.content_type.slice(MULTIPART_CONTENT_TYPE_PREFIX.length);
+}
+
+function assertBoundaryOnlyDelimitsMultipartBody(body, boundary, partCount) {
+  assert_equals(
+    countOccurrences(body, boundary),
+    partCount + 1,
+    "the selected multipart boundary should only appear in part delimiters",
+  );
+  assert_equals(
+    countOccurrences(body, `--${boundary}`),
+    partCount + 1,
+    "the selected multipart boundary delimiters should match the part count",
+  );
+  assert_true(
+    body.endsWith(`--${boundary}--\r\n`),
+    "the multipart body should end with the selected closing boundary",
+  );
+}
+
+function next_worker_result(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+    }
+
+    function onMessage(event) {
+      cleanup();
+      resolve(event.data);
+    }
+
+    function onError(event) {
+      cleanup();
+      reject(event.error || new Error(event.message || "worker error"));
+    }
+
+    worker.addEventListener("message", onMessage);
+    worker.addEventListener("error", onError);
+  });
+}
+
+async function run_worker_body_case(kind) {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-xhr-body-types-worker.js",
+    location.href,
+  ).href;
+  const worker = new Worker(workerUrl);
+
+  try {
+    worker.postMessage({ kind });
+    const result = await next_worker_result(worker);
+    assert_false(!!result.error, result.error || "worker should not report an error");
+    assert_equals(result.kind, kind, "worker should echo the body kind");
+    assert_equals(result.status, 200, "worker XHR status");
+    return result.response;
+  } finally {
+    worker.terminate();
+  }
+}
+
+promise_test(async function () {
+  const response = await run_worker_body_case("string");
+
+  assert_equals(response.body, "plain-body", "String body should be sent unchanged");
+  assert_equals(
+    response.content_type,
+    "text/plain;charset=UTF-8",
+    "String bodies should install the default text/plain Content-Type",
+  );
+}, "Dedicated worker XMLHttpRequest serializes string request bodies");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("params");
+
+  assert_equals(
+    response.body,
+    "alpha=one&space=two+words",
+    "URLSearchParams body should be form-url-encoded",
+  );
+  assert_equals(
+    response.content_type,
+    "application/x-www-form-urlencoded;charset=UTF-8",
+    "URLSearchParams should install the default Content-Type",
+  );
+}, "Dedicated worker XMLHttpRequest serializes URLSearchParams request bodies");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("explicit-params");
+
+  assert_equals(response.body, "alpha=one", "URLSearchParams body should still serialize");
+  assert_equals(
+    response.content_type,
+    "text/plain;charset=utf-8",
+    "explicit Content-Type should not be overwritten",
+  );
+}, "Dedicated worker XMLHttpRequest preserves an explicit Content-Type for URLSearchParams bodies");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("blob");
+
+  assert_equals(response.body, "blob-body", "Blob bytes should be sent as the body");
+  assert_equals(
+    response.content_type,
+    "text/plain;charset=utf-8",
+    "Blob type should become the default Content-Type",
+  );
+}, "Dedicated worker XMLHttpRequest serializes Blob request bodies");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("buffer");
+
+  assert_equals(response.body, "ABC", "BufferSource bytes should be sent as the body");
+  assert_equals(response.content_type, null, "BufferSource should not install a Content-Type");
+}, "Dedicated worker XMLHttpRequest serializes BufferSource request bodies");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("explicit-buffer");
+
+  assert_equals(response.body, "ABC", "BufferSource bytes should still be sent as the body");
+  assert_equals(
+    response.content_type,
+    "application/custom-worker-bytes",
+    "BufferSource bodies should preserve an explicit Content-Type",
+  );
+}, "Dedicated worker XMLHttpRequest preserves an explicit Content-Type for BufferSource bodies");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("formdata-string");
+  const boundary = multipartBoundary(response);
+
+  assert_equals(
+    response.body,
+    `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="alpha"\r\n\r\n' +
+      "one\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="line%0Aname"\r\n\r\n' +
+      "line\nvalue\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="quote%22name"\r\n\r\n' +
+      'quote"value\r\n' +
+      `--${boundary}--\r\n`,
+    "worker XHR FormData string fields should serialize in insertion order",
+  );
+}, "Dedicated worker XMLHttpRequest serializes FormData string fields as multipart/form-data");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("formdata-file-empty-mime");
+  const boundary = multipartBoundary(response);
+
+  assert_equals(
+    response.body,
+    `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="before"\r\n\r\n' +
+      "text\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="blob"; filename="blob"\r\n' +
+      "Content-Type: text/plain\r\n\r\n" +
+      "blob-body\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="file%22name"; filename="report%22name.txt"\r\n' +
+      "Content-Type: text/custom\r\n\r\n" +
+      "file-body\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="empty-blob"; filename="blob"\r\n' +
+      "Content-Type: application/octet-stream\r\n\r\n" +
+      "empty-blob-body\r\n" +
+      `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="empty-file"; filename="empty.bin"\r\n' +
+      "Content-Type: application/octet-stream\r\n\r\n" +
+      "empty-file-body\r\n" +
+      `--${boundary}--\r\n`,
+    "worker XHR FormData Blob/File parts should preserve metadata and empty MIME fallback",
+  );
+}, "Dedicated worker XMLHttpRequest serializes FormData Blob and File parts");
+
+promise_test(async function () {
+  const binaryBytes = [0x00, 0xff, 0x41, 0x80, 0x0a, 0x0d];
+  const response = await run_worker_body_case("formdata-binary");
+  const boundary = multipartBoundary(response);
+  const expectedHex =
+    asciiHex(`--${boundary}\r\n`) +
+    asciiHex('Content-Disposition: form-data; name="prefix"\r\n\r\n') +
+    asciiHex("text\r\n") +
+    asciiHex(`--${boundary}\r\n`) +
+    asciiHex('Content-Disposition: form-data; name="binary"; filename="blob"\r\n') +
+    asciiHex("Content-Type: application/octet-stream\r\n\r\n") +
+    bytesHex(binaryBytes) +
+    asciiHex("\r\n") +
+    asciiHex(`--${boundary}--\r\n`);
+
+  assert_equals(
+    response.body_hex,
+    expectedHex,
+    "worker XHR FormData Blob parts should preserve non-UTF-8 bytes",
+  );
+}, "Dedicated worker XMLHttpRequest preserves non-UTF-8 bytes in FormData multipart Blob parts");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("formdata-unicode");
+  const boundary = multipartBoundary(response);
+  const expectedHex =
+    asciiHex(`--${boundary}\r\n`) +
+    asciiHex('Content-Disposition: form-data; name="carriage%0Dname"\r\n\r\n') +
+    asciiHex("carriage\rvalue\r\n") +
+    asciiHex(`--${boundary}\r\n`) +
+    utf8Hex('Content-Disposition: form-data; name="cafe-é"\r\n\r\n') +
+    utf8Hex("值-😀\r\n") +
+    asciiHex(`--${boundary}\r\n`) +
+    utf8Hex('Content-Disposition: form-data; name="unicode-file"; filename="resume-é-😀.txt"\r\n') +
+    asciiHex("Content-Type: text/unicode\r\n\r\n") +
+    asciiHex("unicode-file-body\r\n") +
+    asciiHex(`--${boundary}--\r\n`);
+
+  assert_equals(
+    response.body_hex,
+    expectedHex,
+    "worker XHR FormData multipart names, values, and filenames should escape CR and preserve UTF-8 bytes",
+  );
+}, "Dedicated worker XMLHttpRequest escapes CR and preserves Unicode in FormData multipart metadata");
+
+promise_test(async function () {
+  const probes = [
+    "----MoliFormDataBoundary0000000000000000",
+    "----MoliFormDataBoundary0123456789abcdef",
+    "----MoliFormDataBoundaryffffffffffffffff",
+  ];
+  const response = await run_worker_body_case("formdata-boundary-collision");
+  const boundary = multipartBoundary(response);
+
+  assertBoundaryOnlyDelimitsMultipartBody(response.body, boundary, 3);
+  for (const probe of probes) {
+    assert_true(
+      response.body.includes(probe),
+      "boundary-like field data should be preserved in the multipart body",
+    );
+  }
+}, "Dedicated worker XMLHttpRequest avoids choosing a FormData boundary that appears in multipart parts");
+
+promise_test(async function () {
+  const response = await run_worker_body_case("explicit-formdata");
+
+  assert_equals(
+    response.content_type,
+    "text/custom-worker-formdata",
+    "worker XHR FormData body should preserve an explicit Content-Type",
+  );
+  assert_true(
+    response.body.startsWith("------MoliFormDataBoundary"),
+    "worker XHR FormData body should still use the generated multipart boundary",
+  );
+}, "Dedicated worker XMLHttpRequest preserves an explicit Content-Type for FormData bodies");
+</script>

@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function textInput(value, pattern) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.pattern = pattern;
+  document.body.appendChild(input);
+  return input;
+}
+
+test(function () {
+  const matching = textInput("abc123", "(?=.*[0-9])[A-Za-z0-9]+");
+  assert_false(matching.validity.patternMismatch, "lookahead pattern should match when the digit condition is satisfied");
+  assert_true(matching.validity.valid, "matching lookahead pattern should keep the control valid");
+
+  const failing = textInput("abcdef", "(?=.*[0-9])[A-Za-z0-9]+");
+  assert_true(failing.validity.patternMismatch, "lookahead pattern should mismatch when the digit condition fails");
+  assert_false(failing.checkValidity(), "lookahead mismatch should participate in checkValidity");
+}, "patternMismatch uses JavaScript RegExp semantics for lookahead patterns");
+
+test(function () {
+  const input = textInput("abcx", "abc");
+  assert_true(input.validity.patternMismatch, "pattern must match the entire value, not a prefix substring");
+}, "patternMismatch requires the pattern to match the entire value");
+
+test(function () {
+  const input = textInput("anything", "[");
+  assert_false(input.validity.patternMismatch, "invalid JavaScript pattern syntax should be ignored");
+  assert_true(input.validity.valid, "invalid JavaScript pattern syntax should not invalidate the control");
+}, "invalid pattern syntax remains ignored");
+</script>

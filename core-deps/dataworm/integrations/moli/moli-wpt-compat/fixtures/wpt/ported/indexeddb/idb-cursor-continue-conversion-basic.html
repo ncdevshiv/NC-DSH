@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+function wait_request(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function run_cursor_continue_sequence(db, storeName, indexName) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName);
+    const request = tx.objectStore(storeName).index(indexName).openCursor();
+    let phase = 0;
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      try {
+        const cursor = request.result;
+        if (phase === 0) {
+          assert_equals(cursor.key, "a", "index cursor starts at first index key");
+          assert_equals(cursor.primaryKey, 1, "index cursor starts at first primary key");
+          assert_throws_name(
+            "TypeError",
+            () => cursor.continuePrimaryKey(),
+            "continuePrimaryKey requires key"
+          );
+          assert_throws_name(
+            "TypeError",
+            () => cursor.continuePrimaryKey("a"),
+            "continuePrimaryKey requires primary key"
+          );
+          assert_throws_name(
+            "DataError",
+            () => cursor.continuePrimaryKey(undefined, 2),
+            "present undefined key reaches IndexedDB key validation"
+          );
+          cursor.continuePrimaryKey("a", 2);
+          phase = 1;
+          return;
+        }
+        if (phase === 1) {
+          assert_equals(cursor.key, "a", "continuePrimaryKey keeps matching index key");
+          assert_equals(cursor.primaryKey, 2, "continuePrimaryKey advances by primary key");
+          cursor.continue(undefined);
+          phase = 2;
+          return;
+        }
+        if (phase === 2) {
+          assert_equals(cursor.key, "b", "continue(undefined) behaves like continue()");
+          assert_equals(cursor.primaryKey, 3, "continue(undefined) advances to the next record");
+          cursor.continue();
+          phase = 3;
+          return;
+        }
+        assert_equals(cursor, null, "continue() without key exhausts after the final record");
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    };
+  });
+}
+
+promise_test(async () => {
+  const dbname = "idb-cursor-continue-conversion-" + Math.random();
+  const storeName = "store";
+  const indexName = "byGroup";
+  const request = indexedDB.open(dbname, 1);
+  request.onupgradeneeded = () => {
+    const store = request.result.createObjectStore(storeName);
+    store.createIndex(indexName, "group");
+    store.add({ group: "a" }, 1);
+    store.add({ group: "a" }, 2);
+    store.add({ group: "b" }, 3);
+  };
+
+  const db = await wait_request(request);
+  await run_cursor_continue_sequence(db, storeName, indexName);
+  db.close();
+  await wait_request(indexedDB.deleteDatabase(dbname));
+}, "IDBCursor continue methods follow WebIDL raw any argument boundaries");
+</script>

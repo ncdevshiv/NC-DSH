@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<body
+  onload="window.bodyLoadAttributeRan = true"
+  data-event-handler=""
+  data-body-onload-reflection=""
+>
+<button id="target" onclick="window.attrHandlerInvoked = event.type">target</button>
+<script>
+const target = document.getElementById("target");
+const attrHandlerType = typeof target.onclick;
+target.onclick(new Event("click"));
+const attrInvoked = window.attrHandlerInvoked;
+const propHandler = function(event) {
+  window.propHandlerInvoked = `${this.id}:${event.type}`;
+  return "ok";
+};
+target.onclick = propHandler;
+const propSame = target.onclick === propHandler;
+const propReturn = target.onclick(new Event("custom"));
+const propInvoked = window.propHandlerInvoked;
+target.onclick = null;
+document.body.setAttribute(
+  "data-event-handler",
+  `${attrHandlerType}:${attrInvoked}:${propSame}:${propReturn}:${propInvoked}:${target.onclick === null}`
+);
+
+const bodyAttrType = typeof document.body.onload;
+const reflectsWindow = document.body.onload === window.onload;
+const bodyHandler = function() {};
+document.body.onload = bodyHandler;
+const propertyReflects = document.body.onload === bodyHandler && window.onload === bodyHandler;
+document.body.onload = {};
+const cleared = document.body.onload === null && window.onload === null;
+document.body.setAttribute(
+  "data-body-onload-reflection",
+  `${bodyAttrType}:${reflectsWindow}:${propertyReflects}:${cleared}`
+);
+</script>
+</body>
+</html>

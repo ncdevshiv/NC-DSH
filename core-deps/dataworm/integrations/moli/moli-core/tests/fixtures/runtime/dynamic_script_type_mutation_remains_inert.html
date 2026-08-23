@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.dynamicTypeMutationRuns = 0;
+      const script = document.createElement("script");
+      script.type = "application/json";
+      script.text = "window.dynamicTypeMutationRuns++;";
+      document.head.appendChild(script);
+      window.dynamicTypeMutationBefore = window.dynamicTypeMutationRuns;
+      script.type = "text/javascript";
+    </script>
+  </head>
+  <body>
+    <script>
+      testing.eventually(() => {
+        testing.expectEqual(0, window.dynamicTypeMutationBefore);
+        testing.expectEqual(0, window.dynamicTypeMutationRuns);
+      });
+    </script>
+  </body>
+</html>

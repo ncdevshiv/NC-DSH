@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleLongTlaOrder = [];
+      window.moduleLongTlaStart = Date.now();
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleLongTlaOrder.push("dcl");
+        window.moduleLongTlaOrderResult = window.moduleLongTlaOrder.join(",");
+        window.moduleLongTlaElapsed = Date.now() - window.moduleLongTlaStart;
+        window.moduleLongTlaDclSawAwait = window.moduleLongTlaAfterAwait === true;
+        window.moduleLongTlaWaitedPastLegacyCap =
+          window.moduleLongTlaElapsed >= 110;
+      });
+    </script>
+    <script type="module">
+      window.moduleLongTlaOrder.push("module-start");
+      await new Promise((resolve) =>
+        setTimeout(() => {
+          window.moduleLongTlaOrder.push("await-resolved");
+          resolve();
+        }, 120)
+      );
+      window.moduleLongTlaAfterAwait = true;
+      window.moduleLongTlaOrder.push("module-end");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const canvas = new OffscreenCanvas(100, 200);
+
+  assert_true(canvas instanceof OffscreenCanvas);
+  assert_equals(canvas.width, 100);
+  assert_equals(canvas.height, 200);
+
+  canvas.width = 300;
+  canvas.height = 400;
+  assert_equals(canvas.width, 300);
+  assert_equals(canvas.height, 400);
+}, "OffscreenCanvas exposes mutable width and height");
+
+test(function () {
+  const canvas = new OffscreenCanvas(64, 64);
+  const context = canvas.getContext("2d");
+
+  assert_true(context instanceof OffscreenCanvasRenderingContext2D);
+  context.fillRect(0, 0, 10, 10);
+}, "OffscreenCanvas.getContext('2d') returns an offscreen 2D context");
+
+test(function () {
+  const canvas = new OffscreenCanvas(100, 50);
+  const imageData = canvas.getContext("2d").getImageData(0, 0, 10, 20);
+
+  assert_true(imageData instanceof ImageData);
+  assert_equals(imageData.width, 10);
+  assert_equals(imageData.height, 20);
+  assert_equals(imageData.data.length, 10 * 20 * 4);
+  assert_equals(imageData.data[0], 0);
+  assert_equals(imageData.data[1], 0);
+  assert_equals(imageData.data[2], 0);
+  assert_equals(imageData.data[3], 0);
+}, "OffscreenCanvasRenderingContext2D.getImageData() returns transparent pixels");
+
+promise_test(async function () {
+  const canvas = new OffscreenCanvas(64, 64);
+  const blob = await canvas.convertToBlob();
+
+  assert_true(blob instanceof Blob);
+  assert_equals(blob.size, 0);
+}, "OffscreenCanvas.convertToBlob() resolves with a Blob");
+</script>

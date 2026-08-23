@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  assert_true(window.crypto === crypto);
+  assert_true(crypto instanceof Crypto);
+  assert_equals(Object.prototype.toString.call(crypto), "[object Crypto]");
+  assert_true(crypto.subtle instanceof SubtleCrypto);
+  assert_equals(Object.prototype.toString.call(crypto.subtle), "[object SubtleCrypto]");
+}, "Crypto and SubtleCrypto are exposed on the window");
+
+test(function () {
+  const bytes = new Uint8Array(32);
+  const returned = crypto.getRandomValues(bytes);
+  assert_equals(returned, bytes);
+  assert_true(Array.from(bytes).some((value) => value !== 0));
+
+  const words = new Uint32Array(8);
+  assert_equals(crypto.getRandomValues(words), words);
+  assert_true(Array.from(words).some((value) => value !== 0));
+}, "crypto.getRandomValues fills integer typed arrays in place");
+
+test(function () {
+  const uuid = crypto.randomUUID();
+  const uuid2 = crypto.randomUUID();
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  assert_equals(typeof uuid, "string");
+  assert_equals(uuid.length, 36);
+  assert_true(uuidPattern.test(uuid));
+  assert_false(uuid === uuid2);
+}, "crypto.randomUUID returns version 4 UUID strings");
+
+promise_test(async function () {
+  const digest = await crypto.subtle.digest("sha-256", new TextEncoder().encode("over 9000"));
+  const hex = Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+
+  assert_true(digest instanceof ArrayBuffer);
+  assert_equals(hex, "1bc375bb92459685194dda18a4b835f4e2972ec1bde6d9ab3db53fcc584a6580");
+}, "SubtleCrypto.digest computes SHA-256");
+</script>

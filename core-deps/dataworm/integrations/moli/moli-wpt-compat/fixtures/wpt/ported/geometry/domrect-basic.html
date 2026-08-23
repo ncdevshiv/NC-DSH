@@ -1,0 +1,109 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (caught) {
+    error = caught;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+test(function () {
+  const rect = new DOMRect();
+
+  assert_true(rect instanceof DOMRect);
+  assert_equals(rect.x, 0);
+  assert_equals(rect.y, 0);
+  assert_equals(rect.width, 0);
+  assert_equals(rect.height, 0);
+  assert_equals(rect.top, 0);
+  assert_equals(rect.right, 0);
+  assert_equals(rect.bottom, 0);
+  assert_equals(rect.left, 0);
+}, "DOMRect default constructor creates a zero rectangle");
+
+test(function () {
+  const rect = new DOMRect(1, 2, 3, 4);
+
+  assert_equals(rect.x, 1);
+  assert_equals(rect.y, 2);
+  assert_equals(rect.width, 3);
+  assert_equals(rect.height, 4);
+  assert_equals(rect.top, 2);
+  assert_equals(rect.right, 4);
+  assert_equals(rect.bottom, 6);
+  assert_equals(rect.left, 1);
+}, "DOMRect constructor exposes x, y, width, height, and derived edges");
+
+test(function () {
+  const rect = new DOMRect(10, 20, -5, -7);
+
+  assert_equals(rect.left, 5);
+  assert_equals(rect.right, 10);
+  assert_equals(rect.top, 13);
+  assert_equals(rect.bottom, 20);
+}, "DOMRect derived edges account for negative width and height");
+
+test(function () {
+  const rect = new DOMRect(1, 2, 3, 4);
+
+  rect.x = 10;
+  rect.y = 20;
+  rect.width = 30;
+  rect.height = 40;
+
+  assert_equals(rect.x, 10);
+  assert_equals(rect.y, 20);
+  assert_equals(rect.width, 30);
+  assert_equals(rect.height, 40);
+  assert_equals(rect.left, 10);
+  assert_equals(rect.top, 20);
+  assert_equals(rect.right, 40);
+  assert_equals(rect.bottom, 60);
+}, "DOMRect mutable attributes update derived edges");
+
+test(function () {
+  const rect = new DOMRect("1.5", null, undefined, true);
+
+  assert_equals(rect.x, 1.5);
+  assert_equals(rect.y, 0);
+  assert_equals(rect.width, 0);
+  assert_equals(rect.height, 1);
+}, "DOMRect constructor applies unrestricted double conversion and defaults");
+
+test(function () {
+  const rect = new DOMRect(NaN, Infinity, -Infinity, "2");
+
+  assert_true(Number.isNaN(rect.x));
+  assert_equals(rect.y, Infinity);
+  assert_equals(rect.width, -Infinity);
+  assert_equals(rect.height, 2);
+}, "DOMRect constructor preserves unrestricted double non-finite values");
+
+test(function () {
+  assert_throws_name("TypeError", function () {
+    new DOMRect(Symbol());
+  }, "DOMRect constructor should reject Symbol numeric conversion");
+}, "DOMRect constructor propagates numeric conversion TypeError");
+
+test(function () {
+  const rect = new DOMRect(1, 2, 3, 4);
+
+  assert_throws_name("TypeError", function () {
+    rect.x = Symbol("x");
+  }, "DOMRect x setter should reject Symbol numeric conversion");
+  assert_equals(rect.x, 1);
+
+  assert_throws_name("Error", function () {
+    rect.width = { valueOf() { throw new Error("width conversion"); } };
+  }, "DOMRect width setter should propagate ToNumber errors");
+  assert_equals(rect.width, 3);
+}, "DOMRect mutable attributes propagate unrestricted double conversion failures");
+</script>

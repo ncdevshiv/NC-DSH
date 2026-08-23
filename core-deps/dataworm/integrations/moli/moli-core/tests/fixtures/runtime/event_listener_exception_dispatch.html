@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<body
+  data-listener-order=""
+  data-handler-order=""
+  data-stop-immediate-order=""
+  data-dispatch-continued="false"
+  data-dispatch-error=""
+>
+<button id="target">target</button>
+<script>
+  const body = document.body;
+  const target = document.getElementById("target");
+
+  const listenerOrder = [];
+  target.addEventListener("alpha", () => {
+    listenerOrder.push("first");
+    throw new Error("alpha listener boom");
+  });
+  target.addEventListener("alpha", () => {
+    listenerOrder.push("second");
+  });
+
+  const handlerOrder = [];
+  target.onclick = () => {
+    handlerOrder.push("handler");
+    throw new Error("onclick boom");
+  };
+  target.addEventListener("click", () => {
+    handlerOrder.push("listener");
+  });
+
+  const stopImmediateOrder = [];
+  target.addEventListener("beta", (event) => {
+    stopImmediateOrder.push("first");
+    event.stopImmediatePropagation();
+    throw new Error("beta stop immediate boom");
+  });
+  target.addEventListener("beta", () => {
+    stopImmediateOrder.push("second");
+  });
+
+  try {
+    target.dispatchEvent(new Event("alpha"));
+    target.dispatchEvent(new Event("click", { bubbles: true }));
+    target.dispatchEvent(new Event("beta"));
+    body.setAttribute("data-dispatch-continued", "true");
+  } catch (error) {
+    body.setAttribute("data-dispatch-error", String(error && error.message || error));
+  }
+
+  body.setAttribute("data-listener-order", listenerOrder.join("|"));
+  body.setAttribute("data-handler-order", handlerOrder.join("|"));
+  body.setAttribute("data-stop-immediate-order", stopImmediateOrder.join("|"));
+</script>
+</body>
+</html>

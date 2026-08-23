@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", on_message);
+      worker.removeEventListener("error", on_error);
+    }
+    function on_message(event) {
+      cleanup();
+      resolve(event);
+    }
+    function on_error(event) {
+      cleanup();
+      reject(new Error("Worker error: " + event.message));
+    }
+    worker.addEventListener("message", on_message);
+    worker.addEventListener("error", on_error);
+  });
+}
+
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-json-dynamic-import-main.js",
+    location.href,
+  ).href;
+  const worker = new Worker(workerUrl, { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.error, undefined, "JSON dynamic import worker should not fail");
+    assert_equals(message.data.awaitedName, "http-json", "await import() should expose parsed HTTP JSON");
+    assert_equals(message.data.awaitedNested, 7, "await import() should preserve nested HTTP JSON values");
+    assert_equals(message.data.awaitedItems, "alpha|beta", "await import() should preserve HTTP JSON arrays");
+    assert_equals(message.data.promisedName, "http-json", "bare import() should resolve to the JSON namespace");
+    assert_equals(message.data.dataName, "dynamic-data-json", "data: JSON dynamic import should parse JSON");
+    assert_equals(message.data.promisedNamespaceObjectSame, true, "bare import() should resolve to the same JSON module namespace object");
+    assert_equals(message.data.repeatedNamespaceObjectSame, true, "repeated dynamic imports should reuse the JSON namespace object");
+    assert_equals(message.data.sameNamespaceDefault, true, "repeated dynamic imports should reuse the JSON namespace");
+    assert_equals(message.data.importScriptsType, "function", "module workers should expose WorkerGlobalScope.importScripts");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers dynamically import JSON modules with import attributes");
+</script>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<body
+  data-headers-count=""
+  data-headers-caught=""
+  data-headers-error=""
+  data-usp-count=""
+  data-usp-caught=""
+  data-usp-error=""
+  data-formdata-count=""
+  data-formdata-caught=""
+  data-formdata-error=""
+  data-fontfaceset-count=""
+  data-fontfaceset-caught=""
+  data-fontfaceset-error=""
+  data-collection-count=""
+  data-collection-caught=""
+  data-collection-error=""
+  data-classlist-count=""
+  data-classlist-caught=""
+  data-classlist-error=""
+>
+<span id="class-target" class="one two"></span>
+<span class="item"></span>
+<span class="item"></span>
+<script>
+  const body = document.body;
+
+  function capture(prefix, run) {
+    let count = 0;
+    let caught = false;
+    let error = "";
+    try {
+      run(() => {
+        count += 1;
+        throw new Error(`${prefix} boom`);
+      });
+    } catch (exception) {
+      caught = true;
+      error = String(exception && exception.message || exception);
+    }
+    body.setAttribute(`data-${prefix}-count`, String(count));
+    body.setAttribute(`data-${prefix}-caught`, String(caught));
+    body.setAttribute(`data-${prefix}-error`, error);
+  }
+
+  capture("headers", (callback) => {
+    new Headers([["x-a", "1"], ["x-b", "2"]]).forEach(callback);
+  });
+
+  capture("usp", (callback) => {
+    new URLSearchParams("a=1&b=2").forEach(callback);
+  });
+
+  capture("formdata", (callback) => {
+    const data = new FormData();
+    data.append("a", "1");
+    data.append("b", "2");
+    data.forEach(callback);
+  });
+
+  capture("fontfaceset", (callback) => {
+    document.fonts.add(new FontFace("ThrowOne", "local(Arial)"));
+    document.fonts.add(new FontFace("ThrowTwo", "local(Arial)"));
+    document.fonts.forEach(callback);
+  });
+
+  capture("collection", (callback) => {
+    document.querySelectorAll(".item").forEach(callback);
+  });
+
+  capture("classlist", (callback) => {
+    document.getElementById("class-target").classList.forEach(callback);
+  });
+</script>
+</body>
+</html>

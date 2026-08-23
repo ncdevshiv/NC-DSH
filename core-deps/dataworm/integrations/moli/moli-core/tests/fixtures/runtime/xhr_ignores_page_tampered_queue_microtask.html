@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body
+    data-tampered-queue-microtask-called="no"
+    data-xhr-delivered="no"
+    data-xhr-status=""
+  >
+    <script>
+      window.queueMicrotask = () => {
+        document.body.setAttribute("data-tampered-queue-microtask-called", "yes");
+        throw new Error("host must not call page queueMicrotask");
+      };
+
+      const xhr = new XMLHttpRequest();
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState !== 4) {
+          return;
+        }
+        document.body.setAttribute("data-xhr-delivered", "yes");
+        document.body.setAttribute("data-xhr-status", String(xhr.status));
+      };
+      xhr.open("GET", "/net/xhr");
+      xhr.send();
+    </script>
+  </body>
+</html>

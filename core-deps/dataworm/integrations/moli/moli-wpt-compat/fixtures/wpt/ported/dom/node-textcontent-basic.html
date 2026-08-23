@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_textcontent_setter(parentFactory, label) {
+  test(function () {
+    const parent = parentFactory();
+
+    parent.textContent = null;
+    assert_equals(parent.textContent, "");
+    assert_equals(parent.firstChild, null);
+
+    parent.textContent = undefined;
+    assert_equals(parent.textContent, "");
+    assert_equals(parent.firstChild, null);
+
+    parent.textContent = "";
+    assert_equals(parent.textContent, "");
+    assert_equals(parent.firstChild, null);
+  }, label + ".textContent null/undefined/empty clears children");
+
+  test(function () {
+    const parent = parentFactory();
+    const child = document.createElement("span");
+    child.appendChild(document.createComment("keep"));
+    child.appendChild(document.createTextNode("nested"));
+    parent.appendChild(child);
+
+    parent.textContent = "<b>literal</b>";
+    assert_equals(parent.textContent, "<b>literal</b>");
+    assert_equals(parent.childNodes.length, 1);
+    assert_true(parent.firstChild instanceof Text);
+    assert_equals(parent.firstChild.data, "<b>literal</b>");
+    assert_equals(child.childNodes.length, 2);
+    assert_equals(child.parentNode, null);
+  }, label + ".textContent replaces children with one literal Text node");
+
+  test(function () {
+    const parent = parentFactory();
+    const text = parent.appendChild(document.createTextNode("old"));
+
+    parent.textContent = 42;
+    assert_equals(parent.textContent, "42");
+    assert_equals(text.parentNode, null);
+    assert_equals(parent.childNodes.length, 1);
+    assert_true(parent.firstChild instanceof Text);
+  }, label + ".textContent stringifies non-null values");
+}
+
+test(function () {
+  const element = document.createElement("div");
+  element.appendChild(document.createComment(" hidden "));
+  element.appendChild(document.createTextNode("\tDEF\t"));
+  element.appendChild(document.createProcessingInstruction("x", " ghi "));
+  assert_equals(element.textContent, "\tDEF\t");
+
+  const nested = document.createElement("section");
+  nested.appendChild(element);
+  assert_equals(nested.textContent, "\tDEF\t");
+}, "Element.textContent returns descendant Text data but not comments or processing instructions");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const child = document.createElement("div");
+  child.appendChild(document.createComment(" hidden "));
+  child.appendChild(document.createTextNode("visible"));
+  child.appendChild(document.createProcessingInstruction("x", " pi "));
+  fragment.appendChild(child);
+  assert_equals(fragment.textContent, "visible");
+}, "DocumentFragment.textContent returns descendant Text data but not comments or processing instructions");
+
+test(function () {
+  const text = document.createTextNode("abc");
+  const comment = document.createComment("comment");
+  const pi = document.createProcessingInstruction("target", "data");
+
+  assert_equals(text.textContent, "abc");
+  assert_equals(comment.textContent, "comment");
+  assert_equals(pi.textContent, "data");
+
+  text.textContent = "def";
+  comment.textContent = "changed";
+  pi.textContent = "other";
+  assert_equals(text.data, "def");
+  assert_equals(comment.data, "changed");
+  assert_equals(pi.data, "other");
+  assert_equals(pi.target, "target");
+}, "CharacterData textContent gets and sets node data");
+
+test(function () {
+  const root = document.documentElement;
+  assert_equals(document.textContent, null);
+  document.textContent = "ignored";
+  assert_equals(document.textContent, null);
+  assert_equals(document.documentElement, root);
+}, "Document.textContent is null and setting it is a no-op");
+
+assert_textcontent_setter(() => document.createElement("div"), "Element");
+assert_textcontent_setter(() => document.createDocumentFragment(), "DocumentFragment");
+</script>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  <body data-message="pending" data-worker-pathname="pending">
+    <script>
+      window.addEventListener('message', (event) => {
+        document.body.dataset.message = String(event.data.message ?? 'missing');
+        document.body.dataset.workerPathname = String(event.data.pathname ?? 'missing');
+      });
+
+      const iframe = document.createElement('iframe');
+      iframe.src = '/compat/window-child-browsing-context-worker-relay/child.html';
+      document.body.appendChild(iframe);
+    </script>
+  </body>
+</html>

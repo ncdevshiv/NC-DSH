@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      document.body.setAttribute('data-history-length', String(history.length));
+      document.body.setAttribute(
+        'data-current-index',
+        String(navigation.currentEntry?.index ?? -1)
+      );
+      document.body.setAttribute(
+        'data-current-url',
+        navigation.currentEntry?.url ?? 'null'
+      );
+    </script>
+  </body>
+</html>

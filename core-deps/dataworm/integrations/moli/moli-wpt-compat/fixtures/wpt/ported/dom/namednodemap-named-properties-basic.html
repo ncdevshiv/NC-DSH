@@ -1,0 +1,74 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const element = document.createElement("div");
+  element.setAttribute("x", "first");
+
+  assert_equals(element.attributes.length, 1);
+  assert_equals(element.attributes.x.value, "first");
+}, "NamedNodeMap exposes ordinary attributes as named fields");
+
+test(function () {
+  const element = document.createElement("div");
+  const map = element.attributes;
+
+  const attr1 = document.createAttribute("attr1");
+  map.setNamedItem(attr1);
+  assert_equals(map.attr1, attr1);
+  assert_equals(map.length, 1);
+
+  const attr2 = document.createAttribute("attr2");
+  map.setNamedItem(attr2);
+  assert_equals(map.attr2, attr2);
+  assert_equals(map.length, 2);
+
+  const removed1 = map.removeNamedItem("attr1");
+  assert_equals(removed1, attr1);
+  assert_equals(removed1.ownerElement, null);
+  assert_equals(map.length, 1);
+
+  const removed2 = map.removeNamedItem("attr2");
+  assert_equals(removed2, attr2);
+  assert_equals(removed2.ownerElement, null);
+  assert_equals(map.length, 0);
+}, "setNamedItem and removeNamedItem update named fields and map length");
+
+test(function () {
+  const element = document.createElement("div");
+  const map = element.attributes;
+
+  const fooAttribute = document.createAttribute("foo");
+  map.setNamedItem(fooAttribute);
+
+  const itemAttribute = document.createAttribute("item");
+  map.setNamedItem(itemAttribute);
+
+  assert_equals(map.foo, fooAttribute);
+  assert_equals(map.item, NamedNodeMap.prototype.item);
+  assert_equals(typeof map.item, "function");
+
+  map.removeNamedItem("item");
+  assert_equals(map.item, NamedNodeMap.prototype.item);
+  assert_equals(typeof map.item, "function");
+}, "NamedNodeMap named fields do not overwrite own methods");
+
+test(function () {
+  const element = document.createElement("div");
+
+  element.setAttributeNS("urn:test", "setNamedItem", "first");
+  assert_equals(element.attributes.length, 1);
+  assert_equals(typeof element.attributes.setNamedItem, "function");
+
+  element.setAttributeNS("urn:test", "toString", "second");
+  assert_equals(element.attributes.length, 2);
+  assert_equals(typeof element.attributes.toString, "function");
+
+  element.setAttributeNS("urn:test", "length", "third");
+  assert_equals(element.attributes.length, 3);
+  assert_equals(typeof element.attributes.length, "number");
+}, "NamedNodeMap named fields do not overwrite methods, inherited properties, or length");
+</script>

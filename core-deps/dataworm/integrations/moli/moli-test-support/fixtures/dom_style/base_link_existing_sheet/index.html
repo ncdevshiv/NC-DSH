@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <base id="probe-base" href="/old/">
+    <script>
+      (() => {
+        const snapshot = () => {
+          const link = document.getElementById("probe-link");
+          let sheetHref = null;
+          try {
+            sheetHref = link.sheet ? link.sheet.href : null;
+          } catch (error) {
+            sheetHref = `${error.name}: ${error.message}`;
+          }
+          return {
+            linkHref: link.href,
+            sheetHref,
+            color: getComputedStyle(document.documentElement).color,
+            inlineBackground: getComputedStyle(
+              document.getElementById("probe-inline-target"),
+            ).backgroundImage,
+          };
+        };
+
+        const publish = async report => {
+          const payload = encodeURIComponent(JSON.stringify(report));
+          document.documentElement.dataset.probe = payload;
+          try {
+            await fetch(`/report?payload=${payload}`, { cache: "no-store" });
+          } finally {
+            document.documentElement.dataset.probeDone = "true";
+          }
+        };
+
+        window.runBaseLinkProbe = async () => {
+          const sheet = document.getElementById("probe-link").sheet;
+          const before = snapshot();
+          document.getElementById("probe-base").href = "/new/";
+          const unrelated = document.createElement("style");
+          unrelated.textContent = ".probe-unrelated { color: red; }";
+          document.head.appendChild(unrelated);
+          await new Promise(resolve => setTimeout(resolve, 0));
+          await publish({
+            status: "ok",
+            before,
+            after: snapshot(),
+            sameSheet: document.getElementById("probe-link").sheet === sheet,
+          });
+        };
+
+        window.failBaseLinkProbe = async () => {
+          await publish({ status: "stylesheet-error" });
+        };
+      })();
+    </script>
+  </head>
+  <body>
+    <main>Document base / existing linked stylesheet differential fixture</main>
+    <style>
+      #probe-inline-target { background-image: url(img.png); }
+    </style>
+    <div id="probe-inline-target"></div>
+    <script>
+      const probeLink = document.createElement("link");
+      probeLink.id = "probe-link";
+      probeLink.rel = "stylesheet";
+      probeLink.href = "style.css";
+      probeLink.addEventListener("load", runBaseLinkProbe);
+      probeLink.addEventListener("error", failBaseLinkProbe);
+      document.head.appendChild(probeLink);
+    </script>
+  </body>
+</html>

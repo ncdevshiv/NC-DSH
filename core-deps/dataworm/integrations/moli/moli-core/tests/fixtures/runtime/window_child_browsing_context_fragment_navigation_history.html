@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe
+      id="child"
+      src="/compat/window-child-browsing-context-target-name-a?attr=1"
+    ></iframe>
+    <script>
+      const iframe = document.getElementById('child');
+      const topHrefBefore = window.location.href;
+      const topHistoryBefore = window.history.length;
+      let phase = 0;
+
+      iframe.addEventListener('load', () => {
+        const childWindow = iframe.contentWindow;
+
+        if (phase === 0) {
+          phase = 1;
+          document.body.setAttribute(
+            'data-child-location-initial',
+            childWindow.location.href
+          );
+          document.body.setAttribute(
+            'data-child-history-length-initial',
+            String(childWindow.history.length)
+          );
+          childWindow.history.pushState(null, '', '#frag');
+          document.body.setAttribute(
+            'data-child-location-after-push',
+            childWindow.location.href
+          );
+          document.body.setAttribute(
+            'data-child-history-length-after-push',
+            String(childWindow.history.length)
+          );
+          document.body.setAttribute(
+            'data-child-current-entry-after-push',
+            childWindow.navigation.currentEntry?.url ?? 'null'
+          );
+          iframe.src = '/compat/window-child-browsing-context-target-name-a?attr=1';
+          return;
+        }
+
+        if (phase !== 1) {
+          return;
+        }
+
+        phase = 2;
+        document.body.setAttribute(
+          'data-child-history-length',
+          String(childWindow.history.length)
+        );
+        document.body.setAttribute(
+          'data-child-location-after-attribute-navigation',
+          childWindow.location.href
+        );
+        document.body.setAttribute(
+          'data-child-document-location-after-attribute-navigation',
+          childWindow.document?.location?.href ?? 'null'
+        );
+        document.body.setAttribute(
+          'data-child-current-entry-after-attribute-navigation',
+          childWindow.navigation?.currentEntry?.url ?? 'null'
+        );
+        document.body.setAttribute(
+          'data-top-location-unchanged',
+          String(window.location.href === topHrefBefore)
+        );
+        document.body.setAttribute(
+          'data-top-history-unchanged',
+          String(window.history.length === topHistoryBefore)
+        );
+      });
+    </script>
+  </body>
+</html>

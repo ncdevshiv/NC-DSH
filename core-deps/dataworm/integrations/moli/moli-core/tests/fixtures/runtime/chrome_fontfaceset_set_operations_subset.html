@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      @font-face { font-family: Font1; src: local(Arial); }
+      @font-face { font-family: Font2; src: local(Arial); }
+      @font-face { font-family: Font3; src: local(Arial); }
+    </style>
+  </head>
+  <body
+    data-size=""
+    data-for-each-order=""
+    data-for-each-this=""
+    data-keys-order=""
+    data-values-order=""
+    data-entries-pairs=""
+    data-has-font1=""
+    data-manual-add-size=""
+    data-manual-has=""
+    data-manual-dedup-size=""
+    data-manual-delete-size=""
+    data-manual-delete-has=""
+    data-clear-size=""
+  >
+    <script>
+      const body = document.body;
+      const thisArg = { marker: 'x' };
+      const families = [];
+      let thisOk = true;
+
+      body.setAttribute('data-size', String(document.fonts.size));
+      document.fonts.forEach(function(face, faceAgain, set) {
+        families.push(face.family);
+        thisOk = thisOk && face === faceAgain && set === document.fonts && this === thisArg;
+      }, thisArg);
+      body.setAttribute('data-for-each-order', families.join(','));
+      body.setAttribute('data-for-each-this', String(thisOk));
+      body.setAttribute(
+        'data-keys-order',
+        Array.from(document.fonts.keys()).map((face) => face.family).join(',')
+      );
+      body.setAttribute(
+        'data-values-order',
+        Array.from(document.fonts.values()).map((face) => face.family).join(',')
+      );
+      body.setAttribute(
+        'data-entries-pairs',
+        String(Array.from(document.fonts.entries()).every((entry) => entry[0] === entry[1]))
+      );
+
+      const firstFace = Array.from(document.fonts.values())[0];
+      body.setAttribute('data-has-font1', String(document.fonts.has(firstFace)));
+
+      const manualFace = new FontFace('ManualFace', 'local(Arial)');
+      document.fonts.add(manualFace);
+      body.setAttribute('data-manual-add-size', String(document.fonts.size));
+      body.setAttribute('data-manual-has', String(document.fonts.has(manualFace)));
+      document.fonts.add(manualFace);
+      body.setAttribute('data-manual-dedup-size', String(document.fonts.size));
+      document.fonts.delete(manualFace);
+      body.setAttribute('data-manual-delete-size', String(document.fonts.size));
+      body.setAttribute('data-manual-delete-has', String(document.fonts.has(manualFace)));
+      document.fonts.add(manualFace);
+      document.fonts.clear();
+      body.setAttribute('data-clear-size', String(document.fonts.size));
+    </script>
+  </body>
+</html>

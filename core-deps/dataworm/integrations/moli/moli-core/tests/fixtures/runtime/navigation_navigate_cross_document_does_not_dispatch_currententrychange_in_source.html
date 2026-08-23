@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      sessionStorage.removeItem("navlog");
+      const log = [];
+
+      navigation.addEventListener("currententrychange", (event) => {
+        log.push(
+          "listener:" +
+            String(event.navigationType) +
+            ":" +
+            (event.from?.url ?? "null")
+        );
+        sessionStorage.setItem("navlog", log.join("|"));
+      });
+
+      navigation.oncurrententrychange = (event) => {
+        log.push(
+          "prop:" +
+            String(event.navigationType) +
+            ":" +
+            (event.from?.url ?? "null")
+        );
+        sessionStorage.setItem("navlog", log.join("|"));
+      };
+
+      sessionStorage.setItem("navlog", "before");
+      navigation.navigate(
+        "/compat/navigation-navigate-cross-document-does-not-dispatch-currententrychange-destination"
+      );
+      sessionStorage.setItem(
+        "navlog",
+        (sessionStorage.getItem("navlog") || "") + "|after-call"
+      );
+    </script>
+  </body>
+</html>

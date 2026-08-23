@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function load_xhr(url) {
+  return new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      resolve(xhr);
+    };
+    xhr.open("GET", url);
+    xhr.send();
+  });
+}
+
+promise_test(async function () {
+  await load_xhr("/wpt/runtime/cookies/path-scope/set");
+  const matching = await load_xhr("/wpt/runtime/cookies/path-scope/check");
+  const nonMatching = await load_xhr("/wpt/runtime/cookies/path-scope-extra/check");
+
+  assert_equals(matching.responseText, "path-cookie=seen", "matching path should receive the scoped cookie");
+  assert_equals(nonMatching.responseText, "path-cookie=missing", "non-matching path should not receive the scoped cookie");
+}, "XMLHttpRequest only sends path-scoped cookies to matching request paths");
+
+promise_test(async function () {
+  await load_xhr("/wpt/runtime/cookies/invalid-domain/set");
+  const xhr = await load_xhr("/wpt/runtime/cookies/invalid-domain/check");
+
+  assert_equals(xhr.responseText, "invalid-domain=missing", "invalid Domain cookies should be rejected before later XHRs");
+}, "XMLHttpRequest ignores invalid-domain cookies");
+
+promise_test(async function () {
+  await load_xhr("/wpt/runtime/cookies/replace/red");
+  await load_xhr("/wpt/runtime/cookies/replace/blue");
+  const xhr = await load_xhr("/wpt/runtime/cookies/replace/check");
+
+  assert_equals(xhr.responseText, "replace-cookie=blue", "later Set-Cookie should replace earlier cookie values");
+}, "XMLHttpRequest observes replacement when the server overwrites a cookie");
+</script>

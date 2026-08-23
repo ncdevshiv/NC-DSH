@@ -1,0 +1,74 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_doctype(doctype, ownerDocument, name, publicId, systemId) {
+  assert_true(doctype instanceof DocumentType);
+  assert_equals(doctype.name, name, "name");
+  assert_equals(doctype.nodeName, name, "nodeName");
+  assert_equals(doctype.publicId, publicId, "publicId");
+  assert_equals(doctype.systemId, systemId, "systemId");
+  assert_equals(doctype.ownerDocument, ownerDocument, "ownerDocument");
+  assert_equals(doctype.parentNode, null, "parentNode");
+  assert_equals(doctype.nodeValue, null, "nodeValue");
+}
+
+function assert_throws_name(expectedName, callback) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName);
+    return;
+  }
+  throw new Error("Expected " + expectedName);
+}
+
+test(function () {
+  const doctype = document.implementation.createDocumentType(
+    "html",
+    "-//Moli//DTD Test//EN",
+    "https://example.test/test.dtd",
+  );
+
+  assert_doctype(
+    doctype,
+    document,
+    "html",
+    "-//Moli//DTD Test//EN",
+    "https://example.test/test.dtd",
+  );
+}, "createDocumentType() creates a DocumentType owned by the current document");
+
+test(function () {
+  const detached = document.implementation.createHTMLDocument("detached");
+  const doctype = detached.implementation.createDocumentType("test:root", "public", "system");
+
+  assert_doctype(doctype, detached, "test:root", "public", "system");
+}, "createDocumentType() from a detached document implementation uses that document as owner");
+
+test(function () {
+  [
+    "has space",
+    "name>",
+  ].forEach(function (qualifiedName) {
+    assert_throws_name("InvalidCharacterError", function () {
+      document.implementation.createDocumentType(qualifiedName, "", "");
+    });
+  });
+
+  [
+    "",
+    "1bad",
+    "name<",
+    "a:b:c",
+    "a:",
+    ":foo",
+    "@foo",
+  ].forEach(function (qualifiedName) {
+    const doctype = document.implementation.createDocumentType(qualifiedName, "", "");
+    assert_equals(doctype.name, qualifiedName);
+  });
+}, "createDocumentType() validates name with DOM DocumentType compatibility rules");
+</script>

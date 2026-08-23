@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const ECHO_BODY_HEX_URL = "/wpt/runtime/xhr/echo-body-hex";
+
+function sendBody(body) {
+  return new Promise(function (resolve) {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      resolve({ status: xhr.status, response: xhr.response });
+    };
+    xhr.open("POST", ECHO_BODY_HEX_URL);
+    xhr.responseType = "json";
+    xhr.send(body);
+  });
+}
+
+function bytesHex(bytes) {
+  let output = "";
+  for (const byte of bytes) {
+    output += byte.toString(16).padStart(2, "0");
+  }
+  return output;
+}
+
+promise_test(async function () {
+  const bytes = [0x00, 0xff, 0x41, 0x80, 0x0a, 0x0d];
+  const result = await sendBody(
+    new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" }),
+  );
+
+  assert_equals(result.status, 200, "Blob binary request status");
+  assert_equals(
+    result.response.body_hex,
+    bytesHex(bytes),
+    "Blob request bodies should preserve non-UTF-8 bytes",
+  );
+  assert_equals(
+    result.response.content_type,
+    "application/octet-stream",
+    "Blob type should still become the default Content-Type",
+  );
+}, "XMLHttpRequest preserves non-UTF-8 bytes in Blob request bodies");
+
+promise_test(async function () {
+  const bytes = [0x00, 0xff, 0x41, 0x80];
+  const result = await sendBody(new Uint8Array(bytes));
+
+  assert_equals(result.status, 200, "Uint8Array binary request status");
+  assert_equals(
+    result.response.body_hex,
+    bytesHex(bytes),
+    "TypedArray request bodies should preserve non-UTF-8 bytes",
+  );
+  assert_equals(
+    result.response.content_type,
+    null,
+    "BufferSource bodies should not install a default Content-Type",
+  );
+}, "XMLHttpRequest preserves non-UTF-8 bytes in TypedArray request bodies");
+
+promise_test(async function () {
+  const buffer = new Uint8Array([0xee, 0x00, 0xff, 0x80, 0xdd]).buffer;
+  const view = new DataView(buffer, 1, 3);
+  const result = await sendBody(view);
+
+  assert_equals(result.status, 200, "DataView binary request status");
+  assert_equals(
+    result.response.body_hex,
+    bytesHex([0x00, 0xff, 0x80]),
+    "ArrayBufferView request bodies should only send the selected byte range",
+  );
+}, "XMLHttpRequest preserves the byte range of ArrayBufferView request bodies");
+
+promise_test(async function () {
+  const bytes = [0x00, 0xff, 0x41, 0x80];
+  const result = await sendBody(new Uint8Array(bytes).buffer);
+
+  assert_equals(result.status, 200, "ArrayBuffer binary request status");
+  assert_equals(
+    result.response.body_hex,
+    bytesHex(bytes),
+    "ArrayBuffer request bodies should preserve all bytes",
+  );
+}, "XMLHttpRequest preserves non-UTF-8 bytes in ArrayBuffer request bodies");
+</script>

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<body
+  data-message="pending"
+  data-source-ok="false"
+>
+<script>
+  const iframe = document.createElement('iframe');
+  iframe.src = 'about:blank';
+  document.body.appendChild(iframe);
+  const child = iframe.contentWindow;
+  if (child) {
+    child.addEventListener('message', (event) => {
+      document.body.dataset.message = String(event.data);
+      document.body.dataset.sourceOk = String(event.source === window);
+    });
+    child.postMessage('ping', '*');
+  } else {
+    document.body.dataset.message = 'no-child-window';
+  }
+</script>

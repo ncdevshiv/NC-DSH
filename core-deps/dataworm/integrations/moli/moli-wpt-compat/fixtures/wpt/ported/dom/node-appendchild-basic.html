@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function ids(parent) {
+  return Array.from(parent.childNodes).map((node) => node.id || "#" + node.nodeValue);
+}
+
+test(function () {
+  const parent = document.createElement("div");
+  const first = document.createElement("p");
+  const second = document.createElement("span");
+  first.id = "first";
+  second.id = "second";
+
+  assert_equals(parent.appendChild(first), first);
+  assert_array_equals(ids(parent), ["first"]);
+  assert_equals(first.parentNode, parent);
+  assert_equals(first.previousSibling, null);
+  assert_equals(first.nextSibling, null);
+
+  assert_equals(parent.appendChild(second), second);
+  assert_array_equals(ids(parent), ["first", "second"]);
+  assert_equals(second.parentNode, parent);
+  assert_equals(first.nextSibling, second);
+  assert_equals(second.previousSibling, first);
+}, "appendChild() appends a child and returns it");
+
+test(function () {
+  const firstParent = document.createElement("div");
+  const secondParent = document.createElement("div");
+  const child = document.createElement("p");
+  const sibling = document.createElement("span");
+  child.id = "child";
+  sibling.id = "sibling";
+
+  firstParent.append(child, sibling);
+  assert_array_equals(ids(firstParent), ["child", "sibling"]);
+
+  assert_equals(secondParent.appendChild(child), child);
+  assert_array_equals(ids(firstParent), ["sibling"]);
+  assert_array_equals(ids(secondParent), ["child"]);
+  assert_equals(child.parentNode, secondParent);
+  assert_equals(sibling.parentNode, firstParent);
+}, "appendChild() moves an existing child from its old parent");
+
+test(function () {
+  const parent = document.createElement("div");
+  const children = parent.childNodes;
+  const child = document.createElement("p");
+  child.id = "child";
+
+  assert_equals(children.length, 0);
+  parent.appendChild(child);
+  assert_equals(children.length, 1);
+  assert_equals(children[0], child);
+}, "appendChild() updates an existing live childNodes collection");
+
+test(function () {
+  const parent = document.createElement("div");
+  const before = document.createElement("before");
+  const fragment = document.createDocumentFragment();
+  const first = document.createElement("p");
+  const second = document.createTextNode("text");
+  before.id = "before";
+  first.id = "first";
+
+  parent.appendChild(before);
+  fragment.append(first, second);
+
+  assert_equals(parent.appendChild(fragment), fragment);
+  assert_array_equals(ids(parent), ["before", "first", "#text"]);
+  assert_array_equals(Array.from(fragment.childNodes), []);
+  assert_equals(first.parentNode, parent);
+  assert_equals(second.parentNode, parent);
+}, "appendChild() appends DocumentFragment children and empties the fragment");
+</script>

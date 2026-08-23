@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<body>
+  <script>
+    const basic = window.matchMedia('(min-width: 600px)');
+    const portrait = window.matchMedia('(orientation: portrait)');
+    window.matchMediaBasicType = typeof basic;
+    window.matchMediaBasicMedia = basic.media;
+    window.matchMediaBasicMatches = basic.matches;
+    window.matchMediaEventTargetShape =
+      typeof portrait.addEventListener === 'function' &&
+      typeof portrait.removeEventListener === 'function' &&
+      typeof portrait.dispatchEvent === 'function' &&
+      typeof portrait.addListener === 'function' &&
+      typeof portrait.removeListener === 'function';
+
+    let addEventCount = 0;
+    let legacyCount = 0;
+    let onchangeCount = 0;
+    const eventListener = (event) => {
+      addEventCount += event.type === 'change' ? 1 : 0;
+      event.preventDefault();
+    };
+    const legacyListener = () => {
+      legacyCount += 1;
+    };
+    portrait.onchange = () => {
+      onchangeCount += 1;
+    };
+    portrait.addEventListener('change', eventListener);
+    portrait.addListener(legacyListener);
+    const firstDispatch = portrait.dispatchEvent(new Event('change', {cancelable: true}));
+    portrait.removeEventListener('change', eventListener);
+    portrait.removeListener(legacyListener);
+    const secondDispatch = portrait.dispatchEvent(new Event('change'));
+
+    window.matchMediaChangeEventCount = addEventCount;
+    window.matchMediaLegacyListenerCount = legacyCount;
+    window.matchMediaOnchangeCount = onchangeCount;
+    window.matchMediaCancelableDispatchReturn = firstDispatch;
+    window.matchMediaSecondDispatchReturn = secondDispatch;
+  </script>
+</body>
+</html>

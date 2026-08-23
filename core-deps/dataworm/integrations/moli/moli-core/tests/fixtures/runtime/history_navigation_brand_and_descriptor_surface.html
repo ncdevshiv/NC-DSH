@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+  <body
+    data-history-tag=""
+    data-navigation-tag=""
+    data-history-instanceof=""
+    data-navigation-instanceof=""
+    data-history-length-own=""
+    data-history-state-own=""
+    data-history-scroll-own=""
+    data-history-back-own=""
+    data-history-length-proto=""
+    data-history-state-proto=""
+    data-history-scroll-proto=""
+    data-history-back-proto=""
+    data-navigation-current-own=""
+    data-navigation-activation-own=""
+    data-navigation-transition-own=""
+    data-navigation-navigate-own=""
+    data-navigation-cangoback-own=""
+    data-navigation-cangoforward-own=""
+    data-navigation-current-proto=""
+    data-navigation-activation-proto=""
+    data-navigation-transition-proto=""
+    data-navigation-navigate-proto=""
+    data-navigation-cangoback-proto=""
+    data-navigation-cangoforward-proto=""
+  >
+    <script>
+      function descShape(obj, key) {
+        const d = Object.getOwnPropertyDescriptor(obj, key);
+        if (!d) return "missing";
+        return [
+          typeof d.get,
+          typeof d.set,
+          "value" in d ? typeof d.value : "none",
+          "writable" in d ? String(d.writable) : "none",
+          String(d.enumerable),
+          String(d.configurable),
+        ].join("|");
+      }
+
+      const historyProto = Object.getPrototypeOf(history);
+      const navigationProto = Object.getPrototypeOf(navigation);
+
+      document.body.setAttribute(
+        "data-history-tag",
+        Object.prototype.toString.call(history)
+      );
+      document.body.setAttribute(
+        "data-navigation-tag",
+        Object.prototype.toString.call(navigation)
+      );
+      document.body.setAttribute(
+        "data-history-instanceof",
+        String(typeof History === "function" && history instanceof History)
+      );
+      document.body.setAttribute(
+        "data-navigation-instanceof",
+        String(
+          typeof Navigation === "function" && navigation instanceof Navigation
+        )
+      );
+      document.body.setAttribute(
+        "data-history-length-own",
+        descShape(history, "length")
+      );
+      document.body.setAttribute(
+        "data-history-state-own",
+        descShape(history, "state")
+      );
+      document.body.setAttribute(
+        "data-history-scroll-own",
+        descShape(history, "scrollRestoration")
+      );
+      document.body.setAttribute(
+        "data-history-back-own",
+        descShape(history, "back")
+      );
+      document.body.setAttribute(
+        "data-history-length-proto",
+        descShape(historyProto, "length")
+      );
+      document.body.setAttribute(
+        "data-history-state-proto",
+        descShape(historyProto, "state")
+      );
+      document.body.setAttribute(
+        "data-history-scroll-proto",
+        descShape(historyProto, "scrollRestoration")
+      );
+      document.body.setAttribute(
+        "data-history-back-proto",
+        descShape(historyProto, "back")
+      );
+      document.body.setAttribute(
+        "data-navigation-current-own",
+        descShape(navigation, "currentEntry")
+      );
+      document.body.setAttribute(
+        "data-navigation-activation-own",
+        descShape(navigation, "activation")
+      );
+      document.body.setAttribute(
+        "data-navigation-transition-own",
+        descShape(navigation, "transition")
+      );
+      document.body.setAttribute(
+        "data-navigation-navigate-own",
+        descShape(navigation, "navigate")
+      );
+      document.body.setAttribute(
+        "data-navigation-cangoback-own",
+        descShape(navigation, "canGoBack")
+      );
+      document.body.setAttribute(
+        "data-navigation-cangoforward-own",
+        descShape(navigation, "canGoForward")
+      );
+      document.body.setAttribute(
+        "data-navigation-current-proto",
+        descShape(navigationProto, "currentEntry")
+      );
+      document.body.setAttribute(
+        "data-navigation-activation-proto",
+        descShape(navigationProto, "activation")
+      );
+      document.body.setAttribute(
+        "data-navigation-transition-proto",
+        descShape(navigationProto, "transition")
+      );
+      document.body.setAttribute(
+        "data-navigation-navigate-proto",
+        descShape(navigationProto, "navigate")
+      );
+      document.body.setAttribute(
+        "data-navigation-cangoback-proto",
+        descShape(navigationProto, "canGoBack")
+      );
+      document.body.setAttribute(
+        "data-navigation-cangoforward-proto",
+        descShape(navigationProto, "canGoForward")
+      );
+    </script>
+  </body>
+</html>

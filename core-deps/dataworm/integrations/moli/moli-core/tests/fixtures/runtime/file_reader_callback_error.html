@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="after">after</main>
+    <script>
+      const reader = new FileReader();
+      reader.onload = () => {
+        throw new Error("file reader boom");
+      };
+      reader.readAsText(new Blob(["hello"], { type: "text/plain" }));
+    </script>
+  </body>
+</html>

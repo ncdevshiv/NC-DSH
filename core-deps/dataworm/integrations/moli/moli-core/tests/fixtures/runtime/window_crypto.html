@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<body
+  data-window-crypto=""
+  data-crypto-instance=""
+  data-crypto-tag=""
+  data-subtle-instance=""
+  data-subtle-tag=""
+  data-get-random-values-returns-same=""
+  data-get-random-values-mutates=""
+  data-uuid-valid=""
+  data-uuid-distinct=""
+  data-quota-error=""
+  data-crypto-key-instance=""
+  data-exported-length=""
+  data-sign-buffer=""
+  data-verified=""
+  data-x25519-private=""
+  data-x25519-public=""
+  data-derived-length=""
+  data-digest-sha256=""
+  data-crypto-done=""
+  data-crypto-error=""
+></body>
+<script>
+  const body = document.body;
+  body.setAttribute(
+    'data-window-crypto',
+    String(window.crypto === crypto && crypto === globalThis.crypto),
+  );
+  body.setAttribute('data-crypto-instance', String(crypto instanceof Crypto));
+  body.setAttribute('data-crypto-tag', Object.prototype.toString.call(crypto));
+  body.setAttribute(
+    'data-subtle-instance',
+    String(crypto.subtle === crypto.subtle && crypto.subtle instanceof SubtleCrypto),
+  );
+  body.setAttribute('data-subtle-tag', Object.prototype.toString.call(crypto.subtle));
+
+  const ints = new Uint8Array(32);
+  const same = crypto.getRandomValues(ints);
+  body.setAttribute('data-get-random-values-returns-same', String(same === ints));
+  body.setAttribute(
+    'data-get-random-values-mutates',
+    String(Array.from(ints).some((value) => value !== 0)),
+  );
+
+  const uuidA = crypto.randomUUID();
+  const uuidB = crypto.randomUUID();
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  body.setAttribute('data-uuid-valid', String(uuidPattern.test(uuidA)));
+  body.setAttribute('data-uuid-distinct', String(uuidA !== uuidB));
+
+  let quota = false;
+  try {
+    crypto.getRandomValues(new BigUint64Array(8193));
+  } catch (error) {
+    quota = String(error).includes('QuotaExceededError');
+  }
+  body.setAttribute('data-quota-error', String(quota));
+
+  const hex = (buffer) =>
+    Array.from(new Uint8Array(buffer))
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('');
+
+  (async () => {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.generateKey(
+      {
+        name: 'HMAC',
+        hash: {name: 'SHA-512'},
+      },
+      true,
+      ['sign', 'verify'],
+    );
+    body.setAttribute('data-crypto-key-instance', String(key instanceof CryptoKey));
+    const raw = await crypto.subtle.exportKey('raw', key);
+    body.setAttribute('data-exported-length', String(raw.byteLength));
+    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode('Hello, world!'));
+    body.setAttribute('data-sign-buffer', String(signature instanceof ArrayBuffer));
+    const verified = await crypto.subtle.verify(
+      {name: 'HMAC'},
+      key,
+      signature,
+      encoder.encode('Hello, world!'),
+    );
+    body.setAttribute('data-verified', String(verified));
+
+    const pair = await crypto.subtle.generateKey({name: 'X25519'}, true, ['deriveBits']);
+    body.setAttribute('data-x25519-private', String(pair.privateKey instanceof CryptoKey));
+    body.setAttribute('data-x25519-public', String(pair.publicKey instanceof CryptoKey));
+    const shared = await crypto.subtle.deriveBits(
+      {
+        name: 'X25519',
+        public: pair.publicKey,
+      },
+      pair.privateKey,
+      128,
+    );
+    body.setAttribute('data-derived-length', String(shared.byteLength));
+
+    const digest = await crypto.subtle.digest('sha-256', encoder.encode('over 9000'));
+    body.setAttribute(
+      'data-digest-sha256',
+      hex(digest),
+    );
+    body.setAttribute('data-crypto-done', 'true');
+  })().catch((error) => {
+    body.setAttribute('data-crypto-error', String(error && (error.stack || error)));
+  });
+</script>
+</html>

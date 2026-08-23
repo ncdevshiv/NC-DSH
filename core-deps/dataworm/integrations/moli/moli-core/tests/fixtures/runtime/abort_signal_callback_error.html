@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="after">after</main>
+    <script>
+      const controller = new AbortController();
+      controller.signal.addEventListener("abort", () => {
+        throw new Error("abort signal boom");
+      });
+      controller.abort();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,184 @@
+{
+  "schema": "moli.agent-episode.manifest.v1",
+  "fixture_version": "agent-episode-fixture-v1",
+  "episodes": [
+    {
+      "id": "observe-static",
+      "start_path": "/agent/observe-static",
+      "steps": [
+        {
+          "operation": "observe",
+          "expect": {
+            "url_path": "/agent/observe-static",
+            "text_contains": ["Agent static observation ready", "Search"],
+            "min_controls": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "fill-reactive-form",
+      "start_path": "/agent/fill-reactive-form",
+      "steps": [
+        {
+          "operation": "fill",
+          "selector": "[data-lex-id=lex-0]",
+          "value": "moli"
+        },
+        {
+          "operation": "observe",
+          "expect": {
+            "url_path": "/agent/fill-reactive-form",
+            "text_contains": ["value:moli;events:input,change"],
+            "min_controls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "click-same-document",
+      "start_path": "/agent/click-same-document",
+      "steps": [
+        {
+          "operation": "click",
+          "selector": "[data-lex-id=lex-0]"
+        },
+        {
+          "operation": "observe",
+          "expect": {
+            "url_path": "/agent/click-same-document",
+            "text_contains": ["events:pointerdown,mousedown,pointerup,mouseup,click"],
+            "min_controls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "click-cross-document",
+      "start_path": "/agent/click-cross-document",
+      "steps": [
+        {
+          "operation": "click",
+          "selector": "[data-lex-id=lex-0]",
+          "expect_navigation_path": "/agent/cross-document-result"
+        },
+        {
+          "operation": "observe",
+          "expect": {
+            "url_path": "/agent/cross-document-result",
+            "text_contains": ["Cross document result cross-document-result"],
+            "min_controls": 1,
+            "old_marker_type": "undefined",
+            "new_marker": "cross-document-result"
+          }
+        }
+      ]
+    },
+    {
+      "id": "dynamic-controls",
+      "start_path": "/agent/dynamic-controls",
+      "steps": [
+        {
+          "operation": "click",
+          "selector": "[data-lex-id=lex-0]"
+        },
+        {
+          "operation": "fill",
+          "selector": "[data-lex-id=lex-0]",
+          "value": "dynamic-moli"
+        },
+        {
+          "operation": "observe",
+          "expect": {
+            "url_path": "/agent/dynamic-controls",
+            "text_contains": ["phase:replaced;value:dynamic-moli"],
+            "min_controls": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "failed-navigation",
+      "start_path": "/agent/failed-navigation",
+      "steps": [
+        {
+          "operation": "navigate",
+          "path": "/agent/reset-before-response?episode=failed-navigation",
+          "expect_error_text_contains": "ERR_CONNECTION_RESET",
+          "expect_error_document": true
+        },
+        {
+          "operation": "observe",
+          "expect": {
+            "url": "chrome-error://chromewebdata/",
+            "unreachable_path": "/agent/reset-before-response",
+            "old_marker_type": "undefined"
+          }
+        }
+      ]
+    },
+    {
+      "id": "idle-resume",
+      "start_path": "/agent/idle-resume",
+      "steps": [
+        {
+          "operation": "observe",
+          "expect": {
+            "url_path": "/agent/idle-resume",
+            "text_contains": ["Idle episode remains available"],
+            "min_controls": 1,
+            "idle_boot_type": "number"
+          }
+        },
+        {
+          "operation": "observe",
+          "expect": {
+            "url_path": "/agent/idle-resume",
+            "text_contains": ["Idle episode remains available"],
+            "min_controls": 1,
+            "idle_boot_type": "number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "episode-isolation",
+      "start_path": "/agent/isolation?token=alpha",
+      "peer_start_path": "/agent/isolation?token=beta",
+      "steps": [
+        {
+          "operation": "fill",
+          "participant": "primary",
+          "selector": "[data-lex-id=lex-0]",
+          "value": "alpha-value"
+        },
+        {
+          "operation": "fill",
+          "participant": "peer",
+          "selector": "[data-lex-id=lex-0]",
+          "value": "beta-value"
+        },
+        {
+          "operation": "observe",
+          "participant": "primary",
+          "expect": {
+            "url_path": "/agent/isolation",
+            "text_contains": ["token:alpha;value:alpha-value"],
+            "text_not_contains": ["beta-value"],
+            "isolation_token": "alpha"
+          }
+        },
+        {
+          "operation": "observe",
+          "participant": "peer",
+          "expect": {
+            "url_path": "/agent/isolation",
+            "text_contains": ["token:beta;value:beta-value"],
+            "text_not_contains": ["alpha-value"],
+            "isolation_token": "beta"
+          }
+        }
+      ]
+    }
+  ]
+}

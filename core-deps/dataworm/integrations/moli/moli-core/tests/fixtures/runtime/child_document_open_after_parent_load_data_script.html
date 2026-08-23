@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="child"></iframe>
+    <script>
+      window.childDocumentOpenAfterLoadOrder = [];
+      window.onload = function () {
+        childDocumentOpenAfterLoadOrder.push("parent-load");
+        const frame = document.getElementById("child");
+        const doc = frame.contentDocument;
+        doc.open();
+        doc.write(
+          "<script defer src='data:text/javascript,parent.childDocumentOpenAfterLoadOrder.push(%22data-script-1%22);'><\/script>" +
+          "<script defer src='data:text/javascript,parent.childDocumentOpenAfterLoadOrder.push(%22data-script-2%22);parent.childDocumentOpenAfterLoadResult=parent.childDocumentOpenAfterLoadOrder.join(%22,%22);parent.childDocumentOpenAfterLoadDone=true;'><\/script>"
+        );
+        doc.close();
+        childDocumentOpenAfterLoadOrder.push("after-close");
+        window.childDocumentOpenAfterLoadResult =
+          childDocumentOpenAfterLoadOrder.join(",");
+      };
+    </script>
+  </body>
+</html>

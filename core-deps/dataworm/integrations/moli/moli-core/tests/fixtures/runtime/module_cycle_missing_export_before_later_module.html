@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleCycleMissingExportOrder = [];
+      window.addEventListener("error", () => {
+        window.moduleCycleMissingExportOrder.push("error");
+        window.moduleCycleMissingExportError = "missing-export";
+      });
+    </script>
+    <script
+      type="module"
+      src="/assets/module-cycle-missing-export-a.mjs"
+    ></script>
+    <script type="module">
+      window.moduleCycleMissingExportOrder.push("later-module");
+      window.moduleCycleMissingExportContinuation = true;
+      window.moduleCycleMissingExportOrderResult =
+        window.moduleCycleMissingExportOrder.join(",");
+    </script>
+  </body>
+</html>

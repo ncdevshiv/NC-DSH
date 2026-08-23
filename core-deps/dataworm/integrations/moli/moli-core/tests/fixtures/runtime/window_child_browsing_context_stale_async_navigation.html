@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body data-second-navigation-issued="false">
+    <iframe id="child" src="about:blank"></iframe>
+    <script>
+      const iframe = document.getElementById('child');
+      const loads = [];
+      iframe.addEventListener('load', () => {
+        loads.push(iframe.contentWindow.location.pathname);
+        document.body.setAttribute('data-loads', loads.join('|'));
+        document.body.setAttribute(
+          'data-current-child',
+          iframe.contentDocument?.body?.getAttribute('data-child') ?? 'null'
+        );
+        document.body.setAttribute(
+          'data-current-url',
+          iframe.contentWindow.location.href
+        );
+      });
+      iframe.src = '/compat/window-child-browsing-context-stale-slow-child';
+      setTimeout(() => {
+        iframe.src = '/compat/window-child-browsing-context-stale-fast-child';
+        document.body.setAttribute('data-second-navigation-issued', 'true');
+      }, 0);
+    </script>
+  </body>
+</html>

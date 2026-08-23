@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+promise_test(async function () {
+  const helperUrl = new URL(
+    "/wpt/ported/worker/resources/importscripts-helper.js",
+    location.href,
+  ).href;
+
+  const worker = new Worker(
+    worker_url(
+      [
+        "importScripts(" + JSON.stringify(helperUrl) + ");",
+        "postMessage({",
+        "  loaded: globalThis.workerImportedValue,",
+        "  echoed: globalThis.workerImportedEcho('ok')",
+        "});",
+      ].join("\n"),
+    ),
+  );
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.loaded, "loaded", "importScripts should execute the helper script");
+    assert_equals(
+      message.data.echoed,
+      "imported:ok",
+      "imported globals should stay callable inside the worker",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "importScripts loads same-origin helper scripts into the dedicated worker global");
+</script>

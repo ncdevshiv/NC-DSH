@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="after">after</main>
+    <script>
+      const xhr = new XMLHttpRequest();
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 4) {
+          throw new Error("xhr readyState boom");
+        }
+      };
+      xhr.open("GET", "/net/xhr");
+      xhr.send();
+    </script>
+  </body>
+</html>

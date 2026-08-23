@@ -1,0 +1,92 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("Worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+promise_test(async function () {
+  const depUrl = worker_url([
+    "export let counter = 0;",
+    "export const moduleUrl = import.meta.url;",
+    "export function bump() {",
+    "  counter += 1;",
+    "  return counter;",
+    "}",
+  ].join("\n"));
+  const oneUrl = depUrl + "#one";
+  const twoUrl = depUrl + "#two";
+  const resolveBaseUrl = worker_url("export const resolved = true;");
+  const resolveOneUrl = resolveBaseUrl + "#resolve-one";
+  const resolveTwoUrl = resolveBaseUrl + "#resolve-two";
+  const source = [
+    "import * as one from " + JSON.stringify(oneUrl) + ";",
+    "import * as sameOne from " + JSON.stringify(oneUrl) + ";",
+    "import * as two from " + JSON.stringify(twoUrl) + ";",
+    "try {",
+    "  const oneFirst = one.bump();",
+    "  const oneSecond = sameOne.bump();",
+    "  const twoFirst = two.bump();",
+    "  postMessage({",
+    "    oneUrl: one.moduleUrl,",
+    "    sameOneUrl: sameOne.moduleUrl,",
+    "    twoUrl: two.moduleUrl,",
+    "    resolvedOne: import.meta.resolve(" + JSON.stringify(resolveOneUrl) + "),",
+    "    resolvedTwo: import.meta.resolve(" + JSON.stringify(resolveTwoUrl) + "),",
+    "    oneFirst,",
+    "    oneSecond,",
+    "    sameOneCounter: sameOne.counter,",
+    "    twoFirst,",
+    "    twoCounter: two.counter,",
+    "    importScriptsType: typeof importScripts,",
+    "  });",
+    "} catch (error) {",
+    "  postMessage({ error: String(error && error.message || error) });",
+    "}",
+  ].join("\n");
+  const worker = new Worker(worker_url(source), { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.error, undefined, "module worker should not fail");
+    assert_equals(message.data.oneUrl, oneUrl, "first data fragment import should preserve its URL");
+    assert_equals(message.data.sameOneUrl, oneUrl, "duplicate data fragment import should share the same module URL");
+    assert_equals(message.data.twoUrl, twoUrl, "second data fragment import should preserve its URL");
+    assert_equals(message.data.resolvedOne, resolveOneUrl, "import.meta.resolve should preserve data URL fragments");
+    assert_equals(message.data.resolvedTwo, resolveTwoUrl, "import.meta.resolve should distinguish data URL fragments");
+    assert_equals(message.data.oneFirst, 1, "first data fragment module should start at its own counter");
+    assert_equals(message.data.oneSecond, 2, "same data fragment module should reuse the first module record");
+    assert_equals(message.data.sameOneCounter, 2, "duplicate data fragment namespace should observe the shared live binding");
+    assert_equals(message.data.twoFirst, 1, "different data fragment module should get an independent module record");
+    assert_equals(message.data.twoCounter, 1, "second data fragment module state should stay independent");
+    assert_equals(message.data.importScriptsType, "function", "module workers should expose WorkerGlobalScope.importScripts");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers use full data URL fragments as module identity");
+</script>

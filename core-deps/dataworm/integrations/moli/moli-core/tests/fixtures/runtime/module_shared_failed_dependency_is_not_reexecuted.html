@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleSharedFailedOrder = [];
+      const sharedFailedIds = ["module-shared-failed-a", "module-shared-failed-b"];
+      window.addEventListener("error", () => {
+        const id = sharedFailedIds.shift();
+        if (id) {
+          window.moduleSharedFailedOrder.push(`${id}:error`);
+        }
+        window.moduleSharedFailedEvalCountDuringErrors =
+          window.moduleSharedFailedEvalCount || 0;
+      });
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleSharedFailedOrder.push("dcl");
+        window.moduleSharedFailedOrderResult =
+          window.moduleSharedFailedOrder.join(",");
+        window.moduleSharedFailedEvalCountAtDcl =
+          window.moduleSharedFailedEvalCount || 0;
+      });
+    </script>
+    <script
+      id="module-shared-failed-a"
+      type="module"
+      src="/assets/module-shared-failed-parent-a.mjs"
+    ></script>
+    <script
+      id="module-shared-failed-b"
+      type="module"
+      src="/assets/module-shared-failed-parent-b.mjs"
+    ></script>
+  </body>
+</html>

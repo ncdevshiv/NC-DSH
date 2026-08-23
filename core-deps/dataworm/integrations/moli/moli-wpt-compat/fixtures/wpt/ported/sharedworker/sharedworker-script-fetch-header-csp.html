@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const worker = new SharedWorker(
+    "/wpt/runtime/sharedworker/script-fetch-policy/report-cookie.js",
+    "header-csp-worker-src-none-" + Date.now(),
+  );
+  const outcome = await new Promise(function (resolve) {
+    worker.onerror = function (event) {
+      resolve({ type: "error", message: event.message });
+    };
+    worker.port.onmessage = function (event) {
+      resolve({ type: "message", data: event.data });
+    };
+    worker.port.start();
+  });
+
+  assert_equals(
+    outcome.type,
+    "error",
+    "document response worker-src CSP must block the SharedWorker script before it executes",
+  );
+}, "SharedWorker top-level script fetch obeys document response worker-src CSP");
+</script>

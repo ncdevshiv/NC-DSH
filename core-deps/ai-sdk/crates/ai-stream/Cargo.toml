@@ -1,0 +1,32 @@
+[package]
+name = "ai-stream"
+description = "Unified streaming events: text deltas, tool calls, usage, errors; SSE parsing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-core = { path = "../ai-core" }
+ai-types = { path = "../ai-types" }
+ai-errors = { path = "../ai-errors" }
+serde.workspace = true
+serde_json.workspace = true
+async-stream.workspace = true
+futures.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+proptest.workspace = true
+
+[[bench]]
+name = "sse_bench"
+harness = false

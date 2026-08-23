@@ -1,0 +1,192 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "week";
+
+  input.value = "2024-W01";
+  assert_equals(input.value, "2024-W01", "valid week values should be preserved");
+
+  input.value = "2020-W53";
+  assert_equals(input.value, "2020-W53", "ISO years with week 53 should be accepted");
+
+  input.value = "2019-W53";
+  assert_equals(input.value, "", "ISO years without week 53 should sanitize to empty");
+  assert_true(input.validity.valid, "empty non-required week input should remain valid");
+
+  input.value = "2024-W00";
+  assert_equals(input.value, "", "week 00 should sanitize to empty");
+
+  input.value = "2024-W54";
+  assert_equals(input.value, "", "week 54 should sanitize to empty");
+
+  input.value = "2024-W1";
+  assert_equals(input.value, "", "non-normalized week strings should sanitize to empty");
+
+  input.value = "0000-W01";
+  assert_equals(input.value, "", "year zero is not a valid week input value");
+}, "week input value setter sanitizes invalid ISO week strings");
+
+test(function () {
+  withHost(
+    `<input id="week" type="week" value="2019-W53">`,
+    function (host) {
+      const input = host.querySelector("#week");
+      assert_equals(input.getAttribute("value"), "2019-W53", "content attribute should keep the original week text");
+      assert_equals(input.value, "", "invalid initial week content value should sanitize to empty");
+
+      input.setAttribute("value", "2024-W01");
+      assert_equals(input.value, "2024-W01", "non-dirty valid week attribute changes should update the current value");
+
+      input.setAttribute("value", "2024-W99");
+      assert_equals(input.value, "", "non-dirty invalid week attribute changes should sanitize the current value");
+    },
+  );
+}, "week input initial value and non-dirty value attribute sync use week sanitization");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "not-a-week";
+  assert_equals(input.value, "not-a-week", "text input should keep the script-set value");
+
+  input.type = "week";
+  assert_equals(input.value, "", "switching to week should sanitize the existing value");
+}, "changing an input to type=week sanitizes the current value");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "week";
+  input.min = "2024-W01";
+  input.max = "2024-W04";
+
+  input.value = "2023-W52";
+  assert_true(input.validity.rangeUnderflow, "week below min should set rangeUnderflow");
+  assert_false(input.validity.rangeOverflow, "week below min should not set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeUnderflow should fail checkValidity");
+
+  input.value = "2024-W05";
+  assert_false(input.validity.rangeUnderflow, "week above max should not set rangeUnderflow");
+  assert_true(input.validity.rangeOverflow, "week above max should set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeOverflow should fail checkValidity");
+
+  input.value = "2024-W01";
+  assert_false(input.validity.rangeUnderflow, "week equal to min should pass");
+  assert_false(input.validity.rangeOverflow, "week equal to min should not overflow");
+  assert_true(input.validity.valid, "week at min should be valid");
+
+  input.min = "bad";
+  input.max = "also-bad";
+  input.value = "2024-W52";
+  assert_false(input.validity.rangeUnderflow, "invalid week min should be ignored");
+  assert_false(input.validity.rangeOverflow, "invalid week max should be ignored");
+  assert_true(input.validity.valid, "invalid week range attributes should not make the control invalid");
+}, "week input validity reflects min/max range constraints");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "week";
+  input.min = "2024-W01";
+  input.step = "2";
+
+  input.value = "2024-W03";
+  assert_false(input.validity.stepMismatch, "week aligned to min + n * step weeks should pass");
+  assert_true(input.checkValidity(), "aligned week should pass checkValidity");
+
+  input.value = "2024-W02";
+  assert_true(input.validity.stepMismatch, "week not aligned to min + n * step weeks should set stepMismatch");
+  assert_false(input.validity.valid, "stepMismatch should make the week invalid");
+
+  input.step = "bad";
+  assert_false(input.validity.stepMismatch, "invalid week step should fall back to the 1 week default");
+  assert_true(input.validity.valid, "default week step should allow every whole week value");
+
+  input.step = "0";
+  assert_false(input.validity.stepMismatch, "zero week step should fall back to the 1 week default");
+
+  input.step = "any";
+  assert_false(input.validity.stepMismatch, "week step=any should disable stepMismatch");
+}, "week input validity reflects stepMismatch in week units");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "week";
+  input.step = "2";
+
+  input.value = "1970-W01";
+  assert_false(input.validity.stepMismatch, "1970-W01 is the default week step base");
+
+  input.value = "1970-W02";
+  assert_true(input.validity.stepMismatch, "one week after the default base should mismatch step=2");
+
+  input.value = "1970-W03";
+  assert_false(input.validity.stepMismatch, "two weeks after the default base should align with step=2");
+}, "week input stepMismatch uses the 1970-W01 default step base");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "week";
+
+  assert_true(Number.isNaN(input.valueAsNumber), "empty week input should expose NaN");
+
+  input.value = "1970-W01";
+  assert_equals(input.valueAsNumber, -259200000, "1970-W01 should expose the Monday before the Unix epoch");
+
+  input.value = "1970-W02";
+  assert_equals(input.valueAsNumber, 345600000, "week valueAsNumber should advance in week-sized UTC milliseconds");
+
+  input.value = "2024-W01";
+  assert_equals(input.valueAsNumber, 1704067200000, "week valueAsNumber should expose the Monday of the ISO week");
+
+  input.valueAsNumber = -259200000;
+  assert_equals(input.value, "1970-W01", "week valueAsNumber setter should write the default base week");
+
+  input.valueAsNumber = 345600000;
+  assert_equals(input.value, "1970-W02", "week valueAsNumber setter should write positive week offsets");
+
+  input.valueAsNumber = 1704067200000;
+  assert_equals(input.value, "2024-W01", "week valueAsNumber setter should write modern ISO weeks");
+
+  input.valueAsNumber = NaN;
+  assert_equals(input.value, "", "NaN week valueAsNumber setter should clear the value");
+  assert_true(Number.isNaN(input.valueAsNumber), "cleared week input should expose NaN");
+}, "week input valueAsNumber getter and setter round-trip ISO week Monday milliseconds");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "week";
+  input.value = "1970-W02";
+
+  assert_throws_name("TypeError", function () {
+    input.valueAsNumber = Infinity;
+  }, "setting week valueAsNumber to Infinity should throw TypeError");
+  assert_equals(input.value, "1970-W02", "failed infinite valueAsNumber setter should not change week value");
+}, "week input valueAsNumber setter rejects infinite values");
+</script>

@@ -1,0 +1,516 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (caught) {
+    error = caught;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+const idlStyleElement = document.createElement("style");
+idlStyleElement.textContent = "body { color: red; }";
+document.head.appendChild(idlStyleElement);
+const idlSecondStyleElement = document.createElement("style");
+idlSecondStyleElement.textContent = "p { color: green; }";
+document.head.appendChild(idlSecondStyleElement);
+const idlConstructedSheet = new CSSStyleSheet();
+idlConstructedSheet.insertRule(".idl-rule { color: purple; }");
+const idlCssRuleList = idlConstructedSheet.cssRules;
+const idlCssStyleRule = idlCssRuleList.item(0);
+const idlCssMediaSheet = new CSSStyleSheet();
+idlCssMediaSheet.insertRule("@media screen { body { color: red; } }");
+const idlCssMediaRule = idlCssMediaSheet.cssRules.item(0);
+const idlCssSupportsSheet = new CSSStyleSheet();
+idlCssSupportsSheet.insertRule("@supports (display: grid) { body { display: grid; } }");
+const idlCssSupportsRule = idlCssSupportsSheet.cssRules.item(0);
+const idlCssImportStyleElement = document.createElement("style");
+idlCssImportStyleElement.textContent = "@import url(\"a.css\");";
+const idlCssImportTerminal = new Promise(resolve => {
+  idlCssImportStyleElement.addEventListener("load", resolve, { once: true });
+  idlCssImportStyleElement.addEventListener("error", resolve, { once: true });
+});
+document.head.appendChild(idlCssImportStyleElement);
+const idlCssImportSheet = idlCssImportStyleElement.sheet;
+const idlCssImportRule = idlCssImportSheet.cssRules.item(0);
+const idlCssFontFaceSheet = new CSSStyleSheet();
+idlCssFontFaceSheet.insertRule("@font-face { font-family: Test; src: url(test.woff2); }");
+const idlCssFontFaceRule = idlCssFontFaceSheet.cssRules.item(0);
+const idlCssKeyframesSheet = new CSSStyleSheet();
+idlCssKeyframesSheet.insertRule("@keyframes fade { from { opacity: 0; } to { opacity: 1; } }");
+const idlCssKeyframesRule = idlCssKeyframesSheet.cssRules.item(0);
+const idlCssKeyframeRule = idlCssKeyframesRule.cssRules.item(0);
+const idlCssPageSheet = new CSSStyleSheet();
+idlCssPageSheet.insertRule("@page { margin-top: 0; @top-left { content: \"x\"; } }");
+const idlCssPageRule = idlCssPageSheet.cssRules.item(0);
+const idlCssMarginRule = idlCssPageRule.cssRules.item(0);
+const idlCssNamespaceSheet = new CSSStyleSheet();
+idlCssNamespaceSheet.insertRule("@namespace svg url(\"http://www.w3.org/2000/svg\");");
+const idlCssNamespaceRule = idlCssNamespaceSheet.cssRules.item(0);
+const idlCssCounterStyleSheet = new CSSStyleSheet();
+idlCssCounterStyleSheet.insertRule("@counter-style thumbs { system: cyclic; symbols: \"*\"; }");
+const idlCssCounterStyleRule = idlCssCounterStyleSheet.cssRules.item(0);
+
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+idl_test([`
+interface StyleSheetList {
+  readonly attribute unsigned long length;
+  CSSStyleSheet? item(unsigned long index);
+};
+
+interface CSSRuleList {
+  readonly attribute unsigned long length;
+  CSSRule? item(unsigned long index);
+};
+
+interface CSSRule {
+  const unsigned short UNKNOWN_RULE = 0;
+  const unsigned short STYLE_RULE = 1;
+  readonly attribute unsigned short type;
+  attribute CSSOMString cssText;
+  readonly attribute CSSRule? parentRule;
+  readonly attribute CSSStyleSheet? parentStyleSheet;
+};
+
+interface CSSGroupingRule : CSSRule {
+  readonly attribute object cssRules;
+};
+interface CSSConditionRule : CSSGroupingRule {
+  readonly attribute CSSOMString conditionText;
+};
+interface CSSMediaRule : CSSConditionRule {};
+interface CSSSupportsRule : CSSConditionRule {};
+interface CSSImportRule : CSSRule {
+  readonly attribute CSSOMString href;
+  readonly attribute object media;
+  readonly attribute CSSStyleSheet? styleSheet;
+};
+interface CSSFontFaceRule : CSSRule {
+  readonly attribute CSSStyleProperties style;
+};
+interface CSSKeyframesRule : CSSRule {
+  readonly attribute CSSOMString name;
+  readonly attribute object cssRules;
+  undefined appendRule(CSSOMString rule);
+  undefined deleteRule(CSSOMString key);
+  CSSKeyframeRule? findRule(CSSOMString key);
+};
+interface CSSKeyframeRule : CSSRule {
+  attribute CSSOMString keyText;
+  readonly attribute CSSStyleProperties style;
+};
+interface CSSPageDescriptors : CSSStyleDeclaration {};
+interface CSSPageRule : CSSGroupingRule {
+  attribute CSSOMString selectorText;
+  readonly attribute CSSPageDescriptors style;
+};
+interface CSSMarginRule : CSSRule {
+  readonly attribute CSSOMString name;
+  readonly attribute CSSStyleDeclaration style;
+};
+interface CSSNamespaceRule : CSSRule {
+  readonly attribute CSSOMString namespaceURI;
+  readonly attribute CSSOMString prefix;
+};
+interface CSSCounterStyleRule : CSSRule {
+  readonly attribute CSSOMString name;
+};
+interface CSSStyleRule : CSSGroupingRule {
+  attribute CSSOMString selectorText;
+  readonly attribute CSSStyleProperties style;
+};
+
+interface CSSStyleSheet {
+  constructor(optional CSSStyleSheetInit options = {});
+  readonly attribute object cssRules;
+  readonly attribute object? ownerRule;
+  unsigned long insertRule(CSSOMString rule, optional unsigned long index);
+  undefined deleteRule(unsigned long index);
+  Promise<CSSStyleSheet> replace(CSSOMString text);
+  undefined replaceSync(CSSOMString text);
+};
+
+interface CSSStyleDeclaration {};
+interface CSSStyleProperties : CSSStyleDeclaration {};
+
+typedef DOMString CSSOMString;
+dictionary CSSStyleSheetInit {
+  DOMString baseURL = null;
+  MediaList media;
+  boolean disabled = false;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    StyleSheetList: ["document.styleSheets"],
+    CSSRuleList: ["idlCssRuleList"],
+    CSSStyleRule: ["idlCssStyleRule"],
+    CSSMediaRule: ["idlCssMediaRule"],
+    CSSSupportsRule: ["idlCssSupportsRule"],
+    CSSImportRule: ["idlCssImportRule"],
+    CSSFontFaceRule: ["idlCssFontFaceRule"],
+    CSSKeyframesRule: ["idlCssKeyframesRule"],
+    CSSKeyframeRule: ["idlCssKeyframeRule"],
+    CSSPageRule: ["idlCssPageRule"],
+    CSSMarginRule: ["idlCssMarginRule"],
+    CSSNamespaceRule: ["idlCssNamespaceRule"],
+    CSSCounterStyleRule: ["idlCssCounterStyleRule"],
+    CSSStyleSheet: ["new CSSStyleSheet()", "idlStyleElement.sheet"]
+  });
+});
+
+idl_test([`
+interface CSSStyleSheet {
+  readonly attribute object cssRules;
+  readonly attribute object? ownerRule;
+};
+`], [], function (idlArray) {
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.add_objects({
+    CSSStyleSheet: ["new CSSStyleSheet()", "idlStyleElement.sheet"]
+  });
+});
+
+promise_test(async function () {
+  const sheet = new CSSStyleSheet();
+  const firstIndex = sheet.insertRule("body { color: red; }");
+  const secondIndex = sheet.insertRule("p { color: blue; }", 1);
+
+  assert_equals(firstIndex, 0);
+  assert_equals(secondIndex, 1);
+  assert_equals(sheet.cssRules.length, 2);
+  assert_equals(sheet.cssRules.item(0).cssText, "body { color: red; }");
+  assert_equals(sheet.cssRules.item(1).cssText, "p { color: blue; }");
+  assert_true(sheet.cssRules instanceof CSSRuleList);
+  assert_false(Object.hasOwn(sheet.cssRules, "item"));
+  assert_true(sheet.cssRules.item(0) instanceof CSSStyleRule);
+  assert_true(sheet.cssRules.item(0) instanceof CSSRule);
+  assert_equals(Object.getPrototypeOf(CSSStyleRule.prototype), CSSGroupingRule.prototype);
+  assert_equals(Object.getPrototypeOf(CSSGroupingRule.prototype), CSSRule.prototype);
+  assert_equals(Object.prototype.toString.call(sheet.cssRules), "[object CSSRuleList]");
+  assert_equals(Object.prototype.toString.call(sheet.cssRules.item(0)), "[object CSSStyleRule]");
+  assert_equals(CSSRule.STYLE_RULE, 1);
+  assert_equals(CSSRule.prototype.STYLE_RULE, 1);
+  assert_equals(sheet.cssRules.item(0).type, CSSRule.STYLE_RULE);
+  assert_equals(sheet.cssRules.item(0).selectorText, "body");
+  assert_equals(sheet.cssRules.item(0).style.getPropertyValue("color"), "red");
+  assert_equals(sheet.cssRules.item(0).parentStyleSheet, sheet);
+  assert_equals(sheet.cssRules.item(0).parentRule, null);
+  assert_equals(sheet.cssRules.item(99), null);
+  assert_equals(sheet.cssRules.item(-1), null, "wrapped negative CSSRuleList index should return null when out of range");
+  assert_throws_name("TypeError", () => sheet.cssRules.item(), "CSSRuleList.item() should require its index argument");
+  assert_equals(sheet.cssRules.item(undefined).cssText, "body { color: red; }", "explicit undefined should convert to zero");
+  assert_equals(sheet.cssRules.item(null).cssText, "body { color: red; }", "null should convert to zero");
+  assert_equals(sheet.cssRules.item("1.9").cssText, "p { color: blue; }", "string decimals should truncate through unsigned long conversion");
+  assert_equals(sheet.cssRules.item(NaN).cssText, "body { color: red; }", "NaN should convert to zero");
+  assert_equals(sheet.cssRules.item(Infinity).cssText, "body { color: red; }", "Infinity should convert to zero");
+  assert_equals(sheet.cssRules.item(-4294967295).cssText, "p { color: blue; }", "negative values should wrap through unsigned long conversion");
+  assert_equals(sheet.cssRules.item(4294967297).cssText, "p { color: blue; }", "large values should wrap through unsigned long conversion");
+  assert_equals(
+    sheet.cssRules.item({
+      valueOf() { return {}; },
+      toString() { return "1"; },
+    }).cssText,
+    "p { color: blue; }",
+    "object values should fall back to toString during unsigned long conversion",
+  );
+  assert_throws_name("Error", () => {
+    sheet.cssRules.item({ valueOf() { throw new Error("item conversion failed"); } });
+  }, "CSSRuleList.item() should propagate object conversion exceptions");
+  assert_throws_name("TypeError", () => sheet.cssRules.item(Symbol("index")), "CSSRuleList.item() should reject Symbol conversion");
+  assert_throws_name("TypeError", () => sheet.cssRules.item(1n), "CSSRuleList.item() should reject BigInt conversion");
+  assert_equals(sheet.ownerRule, null);
+  sheet.deleteRule(0);
+  assert_equals(sheet.cssRules.length, 1);
+  assert_equals(await sheet.replace("main { display: block; }"), sheet);
+
+  document.adoptedStyleSheets = [sheet];
+  assert_equals(document.adoptedStyleSheets[0], sheet);
+  assert_true(document.styleSheets instanceof StyleSheetList);
+  assert_true(idlStyleElement.sheet instanceof CSSStyleSheet);
+  assert_true(document.styleSheets.length >= 2, "document.styleSheets should include both style elements");
+  assert_equals(document.styleSheets.item(0), idlStyleElement.sheet);
+  assert_equals(document.styleSheets.item(1), idlSecondStyleElement.sheet);
+  assert_equals(document.styleSheets.item(99), null);
+  assert_equals(document.styleSheets.item(-1), null, "wrapped negative StyleSheetList index should return null when out of range");
+  assert_throws_name("TypeError", () => document.styleSheets.item(), "StyleSheetList.item() should require its index argument");
+  assert_equals(document.styleSheets.item(undefined), idlStyleElement.sheet, "explicit undefined should convert to zero");
+  assert_equals(document.styleSheets.item(null), idlStyleElement.sheet, "null should convert to zero");
+  assert_equals(document.styleSheets.item("1.9"), idlSecondStyleElement.sheet, "string decimals should truncate through unsigned long conversion");
+  assert_equals(document.styleSheets.item(NaN), idlStyleElement.sheet, "NaN should convert to zero");
+  assert_equals(document.styleSheets.item(Infinity), idlStyleElement.sheet, "Infinity should convert to zero");
+  assert_equals(document.styleSheets.item(-4294967295), idlSecondStyleElement.sheet, "negative values should wrap through unsigned long conversion");
+  assert_equals(document.styleSheets.item(4294967297), idlSecondStyleElement.sheet, "large values should wrap through unsigned long conversion");
+  assert_equals(
+    document.styleSheets.item({
+      valueOf() { return {}; },
+      toString() { return "1"; },
+    }),
+    idlSecondStyleElement.sheet,
+    "object values should fall back to toString during unsigned long conversion",
+  );
+  assert_throws_name("Error", () => {
+    document.styleSheets.item({ valueOf() { throw new Error("item conversion failed"); } });
+  }, "StyleSheetList.item() should propagate object conversion exceptions");
+  assert_throws_name("TypeError", () => document.styleSheets.item(Symbol("index")), "StyleSheetList.item() should reject Symbol conversion");
+  assert_throws_name("TypeError", () => document.styleSheets.item(1n), "StyleSheetList.item() should reject BigInt conversion");
+  assert_false(Object.hasOwn(sheet, "cssRules"));
+  assert_false(Object.hasOwn(sheet, "ownerRule"));
+  assert_false(Object.hasOwn(idlStyleElement.sheet, "cssRules"));
+  assert_false(Object.hasOwn(idlStyleElement.sheet, "ownerRule"));
+  assert_equals(sheet.cssRules, sheet.cssRules);
+  assert_equals(idlStyleElement.sheet.cssRules, idlStyleElement.sheet.cssRules);
+}, "CSSStyleSheet idlharness sample covers constructable sheets and document sheet lists");
+
+test(function () {
+  const sheet = new CSSStyleSheet();
+  sheet.insertRule(".one, main > .two { color: red; margin: 0 !important; }");
+  const rule = sheet.cssRules.item(0);
+
+  assert_equals(rule.selectorText, ".one, main > .two");
+  assert_equals(rule.style.getPropertyValue("color"), "red");
+  assert_equals(rule.style.getPropertyPriority("margin"), "important");
+  rule.selectorText = ".updated";
+  assert_equals(rule.cssText, ".updated { color: red; margin: 0px !important; }");
+  rule.cssText = ".reset { display: block; }";
+  assert_equals(rule.selectorText, ".reset");
+  assert_equals(rule.style.getPropertyValue("display"), "block");
+  rule.style.setProperty("opacity", "0.5", "important");
+  assert_equals(rule.cssText, ".reset { display: block; opacity: 0.5 !important; }");
+  rule.style.display = "inline";
+  assert_equals(rule.cssText, ".reset { opacity: 0.5 !important; display: inline; }");
+  assert_equals(rule.style.removeProperty("opacity"), "0.5");
+  assert_equals(rule.cssText, ".reset { display: inline; }");
+}, "CSSStyleRule exposes selectorText, cssText, style, and CSSRule inheritance");
+
+test(function () {
+  const sheet = new CSSStyleSheet();
+  sheet.insertRule("#a#b, article > .card::before { color: red; }");
+  const rule = sheet.cssRules[0];
+  assert_equals(rule.selectorText, "#a#b, article > .card::before");
+
+  rule.selectorText = ".valid";
+  assert_equals(rule.selectorText, ".valid");
+  assert_equals(rule.cssText, ".valid { color: red; }");
+
+  rule.selectorText = ".broken,";
+  assert_equals(rule.selectorText, ".valid", "invalid selectorText assignment keeps the old selector");
+  assert_equals(rule.cssText, ".valid { color: red; }", "invalid selectorText assignment keeps cssText in sync with the old selector");
+  assert_equals(rule.style.getPropertyValue("color"), "red", "invalid selectorText assignment preserves style object contents");
+}, "CSSStyleRule selectorText setter validates with CSS selector semantics");
+
+promise_test(async function () {
+  await idlCssImportTerminal;
+
+  assert_true(idlCssMediaRule instanceof CSSMediaRule, "media rule brand");
+  assert_true(idlCssMediaRule instanceof CSSConditionRule, "media rule condition inheritance");
+  assert_true(idlCssMediaRule instanceof CSSGroupingRule, "media rule grouping inheritance");
+  assert_true(idlCssMediaRule instanceof CSSRule, "media rule base inheritance");
+  assert_equals(idlCssMediaRule.type, CSSRule.MEDIA_RULE);
+  assert_equals(idlCssMediaRule.parentStyleSheet, idlCssMediaSheet);
+  assert_equals(idlCssMediaRule.conditionText, "screen");
+  assert_equals(idlCssMediaRule.cssRules.length, 1);
+  assert_equals(idlCssMediaRule.cssRules[0].cssText, "body { color: red; }");
+  assert_equals(idlCssMediaRule.cssRules[0].parentRule, idlCssMediaRule);
+  assert_equals(idlCssMediaRule.cssRules[0].parentStyleSheet, idlCssMediaSheet);
+  assert_equals(idlCssMediaRule.cssRules, idlCssMediaRule.cssRules, "CSSGroupingRule.cssRules is SameObject");
+
+  assert_true(idlCssSupportsRule instanceof CSSSupportsRule, "supports rule brand");
+  assert_true(idlCssSupportsRule instanceof CSSConditionRule, "supports rule condition inheritance");
+  assert_equals(idlCssSupportsRule.type, CSSRule.SUPPORTS_RULE);
+  assert_equals(idlCssSupportsRule.conditionText, "(display: grid)");
+  assert_equals(idlCssSupportsRule.cssRules.length, 1);
+  assert_equals(idlCssSupportsRule.cssRules[0].cssText, "body { display: grid; }");
+
+  assert_true(idlCssImportRule instanceof CSSImportRule, "import rule brand");
+  assert_equals(idlCssImportRule.type, CSSRule.IMPORT_RULE);
+  assert_equals(idlCssImportRule.href, "a.css");
+  assert_true(idlCssImportRule.media instanceof MediaList);
+  assert_equals(idlCssImportRule.media.mediaText, "");
+  assert_equals(Object.prototype.toString.call(idlCssImportRule.styleSheet), "[object CSSStyleSheet]");
+  assert_equals(idlCssImportRule.styleSheet.ownerRule, idlCssImportRule);
+
+  assert_true(idlCssFontFaceRule instanceof CSSFontFaceRule, "font-face rule brand");
+  assert_equals(idlCssFontFaceRule.type, CSSRule.FONT_FACE_RULE);
+  assert_true(idlCssFontFaceRule.style instanceof CSSStyleDeclaration, "font-face style brand");
+  assert_equals(idlCssFontFaceRule.style.getPropertyValue("font-family"), "Test", "font-face font-family descriptor");
+  assert_equals(idlCssFontFaceRule.style, idlCssFontFaceRule.style, "CSSFontFaceRule.style is SameObject");
+
+  assert_true(idlCssKeyframesRule instanceof CSSKeyframesRule, "keyframes rule brand");
+  assert_equals(idlCssKeyframesRule.type, CSSRule.KEYFRAMES_RULE);
+  assert_equals(idlCssKeyframesRule.name, "fade");
+  assert_equals(idlCssKeyframesRule.cssRules.length, 2);
+  assert_true(idlCssKeyframesRule.cssRules[0] instanceof CSSKeyframeRule, "keyframe rule brand");
+  assert_equals(idlCssKeyframesRule.cssRules[0].type, CSSRule.KEYFRAME_RULE);
+  assert_equals(idlCssKeyframesRule.cssRules[0].keyText, "0%");
+  assert_true(idlCssKeyframesRule.cssRules[0].style instanceof CSSStyleDeclaration, "keyframe style brand");
+  assert_equals(idlCssKeyframesRule.cssRules[0].style.getPropertyValue("opacity"), "0", "keyframe opacity declaration");
+  assert_equals(idlCssKeyframesRule.cssRules[0].parentRule, idlCssKeyframesRule);
+  assert_equals(idlCssKeyframesRule.cssRules[0].parentStyleSheet, idlCssKeyframesSheet);
+
+  assert_true(idlCssPageRule instanceof CSSPageRule, "page rule brand");
+  assert_equals(idlCssPageRule.type, CSSRule.PAGE_RULE);
+  assert_equals(idlCssPageRule.selectorText, "");
+  assert_true(idlCssPageRule.style instanceof CSSStyleDeclaration, "page rule style brand");
+  assert_equals(idlCssPageRule.style.getPropertyValue("margin-top"), "0px", "page margin descriptor");
+  assert_equals(idlCssPageRule.cssRules.length, 1);
+  assert_true(idlCssMarginRule instanceof CSSMarginRule, "margin rule brand");
+  assert_equals(idlCssMarginRule.type, CSSRule.MARGIN_RULE);
+  assert_equals(idlCssMarginRule.name, "top-left");
+  assert_true(idlCssMarginRule.style instanceof CSSStyleDeclaration, "margin style brand");
+  assert_equals(idlCssMarginRule.style.getPropertyValue("content"), "\"x\"", "margin content descriptor");
+  assert_equals(idlCssMarginRule.parentRule, idlCssPageRule);
+  assert_equals(idlCssMarginRule.parentStyleSheet, idlCssPageSheet);
+
+  assert_true(idlCssNamespaceRule instanceof CSSNamespaceRule, "namespace rule brand");
+  assert_equals(idlCssNamespaceRule.type, CSSRule.NAMESPACE_RULE);
+  assert_equals(idlCssNamespaceRule.prefix, "svg");
+  assert_equals(idlCssNamespaceRule.namespaceURI, "http://www.w3.org/2000/svg");
+
+  assert_true(idlCssCounterStyleRule instanceof CSSCounterStyleRule, "counter-style rule brand");
+  assert_equals(idlCssCounterStyleRule.type, CSSRule.COUNTER_STYLE_RULE);
+  assert_equals(idlCssCounterStyleRule.name, "thumbs");
+}, "CSS at-rule objects expose baseline CSSOM subclass brands and rule types");
+
+test(function () {
+  const style = document.createElement("style");
+  style.textContent = "body { width: 50%; }\n#foo { height: 100px; }";
+  document.head.appendChild(style);
+  const rules = style.sheet.cssRules;
+
+  assert_equals(rules.length, 2, "CSSRuleList length");
+  assert_equals(rules[0].cssText, "body { width: 50%; }", "CSSRuleList indexed getter first rule");
+  assert_equals(rules[1].cssText, "#foo { height: 100px; }", "CSSRuleList indexed getter second rule");
+  assert_equals(rules[2], undefined, "CSSRuleList indexed getter out of range");
+  assert_equals(rules.item(0), rules[0], "item(0) returns the indexed rule object");
+  assert_equals(rules.item(1), rules[1], "item(1) returns the indexed rule object");
+  assert_equals(rules.item(2), null, "item() returns null out of range");
+}, "Chromium CSSRuleList WPT subset covers indexed getter and item()");
+
+test(function () {
+  const sheet = new CSSStyleSheet();
+  sheet.insertRule("div { margin: 10px; padding: 0px; }");
+  const rule = sheet.cssRules[0];
+
+  assert_true(rule instanceof CSSRule);
+  assert_true(rule instanceof CSSStyleRule);
+  assert_equals(rule.STYLE_RULE, 1);
+  assert_equals(rule.IMPORT_RULE, 3);
+  assert_equals(rule.MEDIA_RULE, 4);
+  assert_equals(rule.FONT_FACE_RULE, 5);
+  assert_equals(rule.PAGE_RULE, 6);
+  assert_equals(rule.NAMESPACE_RULE, 10);
+  assert_equals(rule.type, rule.STYLE_RULE);
+  assert_equals(rule.cssText, "div { margin: 10px; padding: 0px; }");
+  assert_equals(rule.parentRule, null);
+  assert_equals(rule.parentStyleSheet, sheet);
+  const style = rule.style;
+  assert_true(style instanceof CSSStyleProperties);
+  assert_true(style instanceof CSSStyleDeclaration);
+  assert_equals(Object.prototype.toString.call(style), "[object CSSStyleProperties]");
+  assert_equals(rule.style, style, "CSSStyleRule.style is SameObject");
+  assert_equals(style.getPropertyValue("margin"), "10px");
+  assert_equals(style.getPropertyValue("padding"), "0px");
+
+  rule.type = 99;
+  rule.parentRule = {};
+  rule.parentStyleSheet = null;
+  assert_equals(rule.type, rule.STYLE_RULE, "CSSRule.type is readonly");
+  assert_equals(rule.parentRule, null, "CSSRule.parentRule is readonly");
+  assert_equals(rule.parentStyleSheet, sheet, "CSSRule.parentStyleSheet is readonly");
+}, "Chromium CSSStyleRule WPT subset covers CSSRule attributes, constants, and style SameObject");
+
+test(function () {
+  const sheet = new CSSStyleSheet();
+  sheet.insertRule("body { width: 50%; }");
+  sheet.insertRule("#foo { height: 100px; }", 1);
+  const rules = sheet.cssRules;
+  rules[0].randomProperty = 1;
+  rules[1].randomProperty = 2;
+
+  sheet.insertRule("#bar { margin: 10px; }", 1);
+  assert_equals(sheet.cssRules, rules, "cssRules remains the same object after insertRule");
+  assert_equals(rules.length, 3);
+  assert_equals(rules[0].cssText, "body { width: 50%; }");
+  assert_equals(rules[1].cssText, "#bar { margin: 10px; }");
+  assert_equals(rules[2].cssText, "#foo { height: 100px; }");
+  assert_equals(rules[0].randomProperty, 1, "existing first rule object is preserved");
+  assert_equals(rules[2].randomProperty, 2, "existing shifted rule object is preserved");
+
+  sheet.deleteRule(1);
+  assert_equals(sheet.cssRules, rules, "cssRules remains the same object after deleteRule");
+  assert_equals(rules.length, 2);
+  assert_equals(rules[0].cssText, "body { width: 50%; }");
+  assert_equals(rules[1].cssText, "#foo { height: 100px; }");
+  assert_equals(rules[0].randomProperty, 1, "first rule object is preserved after deleteRule");
+  assert_equals(rules[1].randomProperty, 2, "shifted rule object is preserved after deleteRule");
+}, "Chromium CSSStyleSheet WPT subset covers cssRules SameObject and rule identity across mutation");
+
+promise_test(async function () {
+  const sheet = new CSSStyleSheet();
+  const rules = sheet.cssRules;
+
+  sheet.replaceSync("main { color: blue; } aside { display: none; }");
+  assert_equals(sheet.cssRules, rules, "replaceSync keeps cssRules SameObject");
+  assert_equals(rules.length, 2);
+  assert_equals(rules[0].cssText, "main { color: blue; }");
+  assert_equals(rules[0].parentStyleSheet, sheet);
+  assert_equals(rules[1].cssText, "aside { display: none; }");
+
+  assert_equals(await sheet.replace("p { margin: 0; }"), sheet);
+  assert_equals(sheet.cssRules, rules, "replace keeps cssRules SameObject");
+  assert_equals(rules.length, 1);
+  assert_equals(rules[0].cssText, "p { margin: 0px; }");
+  assert_equals(rules[0].parentStyleSheet, sheet);
+}, "CSSStyleSheet replaceSync() and replace() replace cssRules in place");
+
+test(function () {
+  const sheet = new CSSStyleSheet();
+
+  assert_equals(sheet.insertRule("body { color: red; }"), 0);
+  assert_equals(sheet.insertRule("main { color: blue; }", "1"), 1, "string index should convert with unsigned long semantics");
+  assert_equals(sheet.insertRule("aside { color: green; }", NaN), 0, "NaN index should convert to 0");
+  assert_equals(sheet.cssRules.length, 3);
+  assert_equals(sheet.cssRules.item(0).cssText, "aside { color: green; }");
+  assert_equals(sheet.cssRules.item(1).cssText, "body { color: red; }");
+  assert_equals(sheet.cssRules.item(2).cssText, "main { color: blue; }");
+
+  assert_throws_name("IndexSizeError", function () {
+    sheet.insertRule("p { color: black; }", 99);
+  }, "insertRule index greater than cssRules.length should throw");
+
+  assert_throws_name("TypeError", function () {
+    sheet.deleteRule();
+  }, "deleteRule requires an index");
+
+  assert_throws_name("IndexSizeError", function () {
+    sheet.deleteRule(99);
+  }, "deleteRule index greater than cssRules.length - 1 should throw");
+
+  sheet.deleteRule("1");
+  assert_equals(sheet.cssRules.length, 2);
+  assert_equals(sheet.cssRules.item(0).cssText, "aside { color: green; }");
+  assert_equals(sheet.cssRules.item(1).cssText, "main { color: blue; }");
+}, "CSSStyleSheet rule mutation uses WebIDL index conversion and range errors");
+</script>

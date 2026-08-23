@@ -1,0 +1,153 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+async function assert_window_owned_port_transfers_to_worker() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "onmessage = function (event) {",
+        "  if (event.data !== 'connect') {",
+        "    return;",
+        "  }",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (messageEvent) {",
+        "    port.postMessage('pong:' + messageEvent.data);",
+        "  };",
+        "  postMessage({",
+        "    kind: 'worker-ready',",
+        "    isMessageEvent: event instanceof MessageEvent,",
+        "    typeString: Object.prototype.toString.call(event),",
+        "    origin: event.origin,",
+        "    lastEventId: event.lastEventId,",
+        "    sourceIsNull: event.source === null,",
+        "    portsLength: event.ports.length,",
+        "    portsStable: event.ports === event.ports,",
+        "    portIsMessagePort: port instanceof MessagePort,",
+        "  });",
+        "};",
+      ].join("\n"),
+    ),
+  );
+  const channel = new MessageChannel();
+
+  try {
+    const reply = new Promise(function (resolve) {
+      channel.port1.onmessage = function (event) {
+        assert_true(event instanceof MessageEvent, "worker-owned port reply should use MessageEvent");
+        assert_equals(event.origin, "", "worker-owned port reply should use the empty origin default");
+        assert_equals(event.lastEventId, "", "worker-owned port reply should use the empty lastEventId default");
+        assert_equals(event.source, null, "worker-owned port reply should not expose a source object");
+        assert_equals(event.ports.length, 0, "worker-owned port reply should not expose transferred ports");
+        resolve(event.data);
+      };
+      worker.onmessage = function (event) {
+        if (!event.data || event.data.kind !== "worker-ready") {
+          return;
+        }
+        assert_true(event instanceof MessageEvent, "worker ready delivery should use MessageEvent");
+        assert_equals(event.origin, "", "worker ready delivery should use the empty origin default");
+        assert_equals(event.lastEventId, "", "worker ready delivery should use the empty lastEventId default");
+        assert_equals(event.source, null, "worker ready delivery should not expose a source object");
+        assert_equals(event.ports.length, 0, "worker ready delivery should not expose transferred ports");
+        assert_equals(event.data.isMessageEvent, true, "worker receive event should use MessageEvent");
+        assert_equals(event.data.typeString, "[object MessageEvent]", "worker receive event brand");
+        assert_equals(event.data.origin, "", "worker receive event.origin");
+        assert_equals(event.data.lastEventId, "", "worker receive event.lastEventId");
+        assert_equals(event.data.sourceIsNull, true, "worker receive event.source");
+        assert_equals(event.data.portsLength, 1, "worker receive event should expose the transferred port");
+        assert_equals(event.data.portsStable, true, "worker receive event.ports should be stable");
+        assert_equals(event.data.portIsMessagePort, true, "worker receive event.ports entry should be a MessagePort");
+        channel.port1.postMessage("ping");
+      };
+    });
+
+    worker.postMessage("connect", [channel.port2]);
+
+    assert_equals(await reply, "pong:ping", "transferred MessagePort should round-trip messages");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}
+
+async function assert_worker_created_port_transfers_to_window() {
+  const worker = new Worker(
+    worker_url(
+      [
+        "const channel = new MessageChannel();",
+        "channel.port1.onmessage = function (event) {",
+        "  channel.port1.postMessage('worker:' + event.data);",
+        "};",
+        "postMessage('port-ready', [channel.port2]);",
+      ].join("\n"),
+    ),
+  );
+
+  try {
+    const reply = new Promise(function (resolve) {
+      worker.onmessage = function (event) {
+        if (event.data !== "port-ready") {
+          return;
+        }
+        assert_true(event instanceof MessageEvent, "worker-to-window port transfer should use MessageEvent");
+        assert_equals(event.origin, "", "worker-to-window port transfer should use the empty origin default");
+        assert_equals(event.lastEventId, "", "worker-to-window port transfer should use the empty lastEventId default");
+        assert_equals(event.source, null, "worker-to-window port transfer should not expose a source object");
+        assert_equals(event.ports.length, 1, "worker message should transfer exactly one port");
+        assert_equals(event.ports, event.ports, "worker-to-window port transfer event.ports should be stable");
+        assert_true(event.ports[0] instanceof MessagePort, "transferred value should be a MessagePort");
+
+        const port = event.ports[0];
+        port.onmessage = function (messageEvent) {
+          assert_true(messageEvent instanceof MessageEvent, "window-owned transferred port should use MessageEvent");
+          assert_equals(messageEvent.origin, "", "window-owned transferred port should use the empty origin default");
+          assert_equals(messageEvent.lastEventId, "", "window-owned transferred port should use the empty lastEventId default");
+          assert_equals(messageEvent.source, null, "window-owned transferred port should not expose a source object");
+          assert_equals(messageEvent.ports.length, 0, "window-owned transferred port should not expose transferred ports");
+          resolve(messageEvent.data);
+        };
+        port.postMessage("ping");
+      };
+    });
+
+    assert_equals(await reply, "worker:ping", "worker-created MessagePorts should work in the window");
+  } finally {
+    worker.terminate();
+  }
+}
+
+function assert_worker_rejects_unlisted_messageport_transfer() {
+  const worker = new Worker(worker_url("postMessage('ready');"));
+  const channel = new MessageChannel();
+
+  try {
+    let thrown = null;
+    try {
+      worker.postMessage(channel.port1);
+    } catch (error) {
+      thrown = error;
+    }
+
+    assert_true(!!thrown, "posting a MessagePort without transfer should throw");
+    assert_equals(thrown.name, "DataCloneError", "invalid MessagePort posting should throw DataCloneError");
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+    worker.terminate();
+  }
+}
+
+promise_test(async function () {
+  await assert_window_owned_port_transfers_to_worker();
+  await assert_worker_created_port_transfers_to_window();
+  assert_worker_rejects_unlisted_messageport_transfer();
+}, "Dedicated workers support basic MessagePort transfer semantics");
+</script>

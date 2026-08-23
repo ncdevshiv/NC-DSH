@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const HTML_NS = "http://www.w3.org/1999/xhtml";
+
+function to_ascii_uppercase(value) {
+  return value.replace(/[a-z]/g, (ch) => ch.toUpperCase());
+}
+
+function to_ascii_lowercase(value) {
+  return value.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
+}
+
+[undefined, null, "foo", "f1oo", "foo1", "xml", "xmlns", "svg", "math", "FOO", "mar\u212a"].forEach(
+  function (value) {
+    test(function () {
+      const element = document.createElement(value);
+      const expected = String(value);
+
+      assert_true(element instanceof Element, "instanceof Element");
+      assert_true(element instanceof Node, "instanceof Node");
+      assert_equals(element.ownerDocument, document);
+      assert_equals(element.localName, to_ascii_lowercase(expected), "localName");
+      assert_equals(element.tagName, to_ascii_uppercase(expected), "tagName");
+      assert_equals(element.nodeName, to_ascii_uppercase(expected), "nodeName");
+      assert_equals(element.prefix, null, "prefix");
+      assert_equals(element.namespaceURI, HTML_NS, "namespaceURI");
+      assert_equals(element.nodeType, Node.ELEMENT_NODE, "nodeType");
+      assert_equals(element.nodeValue, null, "nodeValue");
+      assert_equals(element.hasChildNodes(), false, "hasChildNodes");
+    }, "createElement(" + JSON.stringify(value) + ") in an HTML document");
+  }
+);
+
+test(function () {
+  ["", "1bad", "bad name"].forEach(function (name) {
+    assert_throws_dom("InvalidCharacterError", function () {
+      document.createElement(name);
+    }, "current document " + JSON.stringify(name));
+  });
+
+  const htmlDoc = document.implementation.createHTMLDocument("");
+  const xmlDoc = document.implementation.createDocument(null, "root", null);
+  assert_throws_dom("InvalidCharacterError", function () {
+    htmlDoc.createElement("1bad");
+  }, "created HTML document");
+  assert_throws_dom("InvalidCharacterError", function () {
+    xmlDoc.createElement("bad name");
+  }, "created XML document");
+}, "createElement() rejects invalid XML names across live and detached documents");
+</script>

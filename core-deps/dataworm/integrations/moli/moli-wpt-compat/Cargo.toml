@@ -1,0 +1,24 @@
+[package]
+license.workspace = true
+name = "moli-wpt-compat"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+axum = { version = "0.8.6", features = ["ws"] }
+html5ever = "0.39.0"
+parking_lot = "0.12"
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+tokio = { version = "1.51.0", features = ["fs", "net", "rt", "sync"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["aws_lc_rs", "logging", "tls12"] }
+tokio-stream = "0.1.17"
+toml = "1.1"
+
+[dev-dependencies]
+tokio = { version = "1.51.0", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

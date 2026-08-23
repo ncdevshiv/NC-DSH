@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <body>
+    <div id="before_script">Before</div>
+    <script>
+      window.documentWriteParserVisibleDomAccessorRan = false;
+      window.documentWriteParserVisibleDomResult = "initial";
+
+      document.write(
+        '<script>' +
+          'document.getElementById("before_script").setAttribute("data-modified", "yes");' +
+          'window.documentWriteParserVisibleDomAccessorRan = true;' +
+        '<\/script>'
+      );
+    </script>
+    <script>
+      const beforeScript = document.getElementById("before_script");
+      window.documentWriteParserVisibleDomResult =
+        (window.documentWriteParserVisibleDomAccessorRan ? "ran" : "missed") +
+        "|" +
+        (beforeScript ? beforeScript.getAttribute("data-modified") : "missing");
+    </script>
+  </body>
+</html>

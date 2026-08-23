@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+"use strict";
+
+test(function () {
+  const doctype = document.implementation.createDocumentType("name", "publicId", "systemId");
+  const doc = document.implementation.createDocument("namespace", "", doctype);
+
+  const clone = doc.cloneNode(true);
+
+  assert_equals(clone.childNodes.length, 1, "Only one child node");
+  assert_equals(clone.childNodes[0].nodeType, Node.DOCUMENT_TYPE_NODE, "doctype nodeType");
+  assert_equals(clone.childNodes[0].name, "name", "doctype name");
+  assert_equals(clone.childNodes[0].publicId, "publicId", "doctype publicId");
+  assert_equals(clone.childNodes[0].systemId, "systemId", "doctype systemId");
+  assert_equals(clone.childNodes[0].ownerDocument, clone, "doctype ownerDocument");
+}, "cloneNode(true) preserves createDocument/createDocumentType doctype");
+
+test(function () {
+  const doc = document.implementation.createHTMLDocument();
+
+  const clone = doc.cloneNode(true);
+
+  assert_equals(clone.childNodes.length, 2, "Two child nodes");
+  assert_equals(clone.childNodes[0].nodeType, Node.DOCUMENT_TYPE_NODE, "doctype nodeType");
+  assert_equals(clone.childNodes[0].name, "html", "doctype name");
+  assert_equals(clone.childNodes[0].publicId, "", "doctype publicId");
+  assert_equals(clone.childNodes[0].systemId, "", "doctype systemId");
+}, "cloneNode(true) preserves createHTMLDocument doctype");
+
+test(function () {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString("<!DOCTYPE html><html></html>", "text/html");
+
+  const clone = doc.cloneNode(true);
+
+  assert_equals(clone.childNodes.length, 2, "Two child nodes");
+  assert_equals(clone.childNodes[0].nodeType, Node.DOCUMENT_TYPE_NODE, "doctype nodeType");
+  assert_equals(clone.childNodes[0].name, "html", "doctype name");
+  assert_equals(clone.childNodes[0].publicId, "", "doctype publicId");
+  assert_equals(clone.childNodes[0].systemId, "", "doctype systemId");
+}, "cloneNode(true) preserves DOMParser document doctype");
+</script>

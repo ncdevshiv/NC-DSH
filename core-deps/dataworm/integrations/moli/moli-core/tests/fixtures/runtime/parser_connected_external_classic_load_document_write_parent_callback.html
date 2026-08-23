@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.parserConnectedFrameLoadWriteText = "not-called";
+      window.parserConnectedFrameLoadWriteDone = function(text) {
+        window.parserConnectedFrameLoadWriteText = text;
+      };
+    </script>
+  </head>
+  <body>
+    <iframe src="/compat/parser-connected-external-classic-load-document-write-parent-callback-child"></iframe>
+  </body>
+</html>

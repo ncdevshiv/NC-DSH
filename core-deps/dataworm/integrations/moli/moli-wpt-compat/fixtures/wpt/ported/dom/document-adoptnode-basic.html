@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName);
+    return;
+  }
+  throw new Error("Expected " + expectedName);
+}
+
+function createDetachedTree() {
+  const sourceDocument = document.implementation.createDocument(null, "root", null);
+  const root = sourceDocument.documentElement;
+  const child = sourceDocument.createElement("child");
+  root.appendChild(child);
+  return { sourceDocument, root, child };
+}
+
+test(function () {
+  const { sourceDocument, root, child } = createDetachedTree();
+
+  const adopted = document.adoptNode(root);
+
+  assert_equals(adopted, root, "return value");
+  assert_equals(root.parentNode, null, "adopted root is detached");
+  assert_equals(root.firstChild.localName, "child", "child preserved");
+  assert_equals(root.ownerDocument, document, "root ownerDocument");
+  assert_equals(root.firstChild.ownerDocument, document, "child ownerDocument");
+  assert_equals(sourceDocument.documentElement, null, "source document lost root");
+}, "adoptNode() adopts a detached element subtree into the current document");
+
+test(function () {
+  const { root, child } = createDetachedTree();
+  const targetDocument = document.implementation.createDocument(null, null, null);
+
+  const adopted = targetDocument.adoptNode(root);
+
+  assert_equals(adopted, root, "return value");
+  assert_equals(root.parentNode, null, "adopted root is detached");
+  assert_equals(root.firstChild.localName, "child", "child preserved");
+  assert_equals(root.ownerDocument, targetDocument, "root ownerDocument");
+  assert_equals(root.firstChild.ownerDocument, targetDocument, "child ownerDocument");
+}, "adoptNode() adopts a detached element subtree into another XML document");
+
+test(function () {
+  const sourceDocument = document.implementation.createDocument(null, "root", null);
+
+  assert_throws_name("NotSupportedError", function () {
+    document.adoptNode(sourceDocument);
+  });
+}, "adoptNode() rejects Document nodes");
+</script>

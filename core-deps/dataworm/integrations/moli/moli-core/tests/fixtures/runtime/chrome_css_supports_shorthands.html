@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+  <body
+    data-border-true=""
+    data-border-inherit=""
+    data-border-mixed-false=""
+    data-border-side-true=""
+    data-border-side-inherit=""
+    data-border-side-mixed-false=""
+    data-border-radius-true=""
+    data-border-radius-inherit=""
+    data-border-radius-mixed-false=""
+    data-border-spacing-true=""
+    data-border-spacing-inherit=""
+    data-border-spacing-mixed-false=""
+    data-font-true=""
+    data-font-inherit=""
+    data-font-mixed-false=""
+    data-list-style-true=""
+    data-list-style-inherit=""
+    data-list-style-mixed-false=""
+    data-margin-inherit=""
+    data-margin-mixed-false=""
+    data-outline-true=""
+    data-outline-inherit=""
+    data-outline-mixed-false=""
+    data-outline-color-invert=""
+    data-overflow-true=""
+    data-overflow-inherit=""
+    data-overflow-mixed-false=""
+    data-overflow-overlay=""
+    data-transform-true=""
+    data-transform-inherit=""
+    data-transform-mixed-false=""
+    data-transition-true=""
+    data-transition-inherit=""
+    data-transition-mixed-false=""
+  >
+    <script>
+      document.body.setAttribute('data-border-true', String(CSS.supports('border', '1px solid #000')));
+      document.body.setAttribute('data-border-inherit', String(CSS.supports('border', 'inherit')));
+      document.body.setAttribute('data-border-mixed-false', String(CSS.supports('border', '1px solid inherit')));
+
+      document.body.setAttribute('data-border-side-true', String(CSS.supports('border-bottom', 'thick green')));
+      document.body.setAttribute('data-border-side-inherit', String(CSS.supports('border-bottom', 'inherit')));
+      document.body.setAttribute('data-border-side-mixed-false', String(CSS.supports('border-bottom', 'thick green inherit')));
+
+      document.body.setAttribute('data-border-radius-true', String(CSS.supports('border-radius', '1px 0 3px 4px')));
+      document.body.setAttribute('data-border-radius-inherit', String(CSS.supports('border-radius', 'inherit')));
+      document.body.setAttribute('data-border-radius-mixed-false', String(CSS.supports('border-radius', '1px 0 3px inherit')));
+
+      document.body.setAttribute('data-border-spacing-true', String(CSS.supports('border-spacing', '5px 5px')));
+      document.body.setAttribute('data-border-spacing-inherit', String(CSS.supports('border-spacing', 'inherit')));
+      document.body.setAttribute('data-border-spacing-mixed-false', String(CSS.supports('border-spacing', '5px inherit')));
+
+      document.body.setAttribute('data-font-true', String(CSS.supports('font', 'italic small-caps bolder 16px/3 cursive')));
+      document.body.setAttribute('data-font-inherit', String(CSS.supports('font', 'inherit')));
+      document.body.setAttribute('data-font-mixed-false', String(CSS.supports('font', 'inherit small-caps bolder 16px/3 cursive')));
+
+      document.body.setAttribute('data-list-style-true', String(CSS.supports('list-style', 'georgian inside')));
+      document.body.setAttribute('data-list-style-inherit', String(CSS.supports('list-style', 'inherit')));
+      document.body.setAttribute('data-list-style-mixed-false', String(CSS.supports('list-style', 'georgian inherit')));
+
+      document.body.setAttribute('data-margin-inherit', String(CSS.supports('margin', 'inherit')));
+      document.body.setAttribute('data-margin-mixed-false', String(CSS.supports('margin', 'inherit 5px')));
+
+      document.body.setAttribute('data-outline-true', String(CSS.supports('outline', '1px solid #000')));
+      document.body.setAttribute('data-outline-inherit', String(CSS.supports('outline', 'inherit')));
+      document.body.setAttribute('data-outline-mixed-false', String(CSS.supports('outline', 'inherit solid #000')));
+      document.body.setAttribute('data-outline-color-invert', String(CSS.supports('outline-color', 'invert')));
+
+      document.body.setAttribute('data-overflow-true', String(CSS.supports('overflow', 'scroll')));
+      document.body.setAttribute('data-overflow-inherit', String(CSS.supports('overflow', 'inherit')));
+      document.body.setAttribute('data-overflow-mixed-false', String(CSS.supports('overflow', 'inherit scroll')));
+      document.body.setAttribute('data-overflow-overlay', String(CSS.supports('overflow', 'overlay hidden')));
+
+      document.body.setAttribute('data-transform-true', String(CSS.supports('transform', 'scaleX(2)')));
+      document.body.setAttribute('data-transform-inherit', String(CSS.supports('transform', 'inherit')));
+      document.body.setAttribute('data-transform-mixed-false', String(CSS.supports('transform', 'scaleX(2) inherit')));
+
+      document.body.setAttribute('data-transition-true', String(CSS.supports('transition', 'margin-left 4s')));
+      document.body.setAttribute('data-transition-inherit', String(CSS.supports('transition', 'inherit')));
+      document.body.setAttribute('data-transition-mixed-false', String(CSS.supports('transition', 'inherit 4s')));
+    </script>
+  </body>
+</html>

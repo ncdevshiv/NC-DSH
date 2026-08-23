@@ -1,0 +1,18 @@
+[package]
+license.workspace = true
+name = "moli-stylesheet-blocking"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+futures-util = "0.3.31"
+moli-dom = { path = "../moli-dom" }
+moli-fetch = { path = "../moli-fetch" }
+moli-owner-queue = { path = "../moli-owner-queue" }
+moli-page-types = { path = "../moli-page-types" }
+moli-time = { path = "../moli-time" }
+tokio = { version = "1.51.0", features = ["rt", "sync"] }
+url = "2.5.7"
+
+[lints]
+workspace = true

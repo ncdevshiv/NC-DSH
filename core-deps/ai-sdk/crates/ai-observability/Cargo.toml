@@ -1,0 +1,23 @@
+[package]
+name = "ai-observability"
+description = "Observability: structured logging, spans, chronological event history, exporters"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-core = { path = "../ai-core" }
+ai-errors = { path = "../ai-errors" }
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time = { workspace = true, features = ["parsing"] }
+uuid.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true

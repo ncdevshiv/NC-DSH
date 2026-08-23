@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<body
+  data-activation-type=""
+  data-activation-is-null=""
+  data-transition-is-null=""
+  data-length=""
+  data-entry-url=""
+  data-from-url=""
+  data-navigation-type=""
+  data-currententrychange-count=""
+  data-property-currententrychange-count=""
+  data-history-state=""
+  data-navigation-state=""
+></body>
+<script>
+  let listenerCount = 0;
+  let propertyCount = 0;
+
+  navigation.addEventListener("currententrychange", () => {
+    listenerCount += 1;
+  });
+
+  navigation.oncurrententrychange = () => {
+    propertyCount += 1;
+  };
+
+  const activation = navigation.activation;
+  document.body.setAttribute("data-activation-type", typeof activation);
+  document.body.setAttribute("data-activation-is-null", String(activation === null));
+  document.body.setAttribute("data-transition-is-null", String(navigation.transition === null));
+  document.body.setAttribute("data-length", String(history.length));
+  document.body.setAttribute("data-entry-url", String(activation?.entry?.url ?? ""));
+  document.body.setAttribute("data-from-url", String(activation?.from?.url ?? ""));
+  document.body.setAttribute(
+    "data-navigation-type",
+    String(activation?.navigationType ?? "")
+  );
+  document.body.setAttribute(
+    "data-currententrychange-count",
+    String(listenerCount)
+  );
+  document.body.setAttribute(
+    "data-property-currententrychange-count",
+    String(propertyCount)
+  );
+  document.body.setAttribute("data-history-state", JSON.stringify(history.state));
+  document.body.setAttribute(
+    "data-navigation-state",
+    JSON.stringify(navigation.currentEntry?.getState?.() ?? null)
+  );
+</script>

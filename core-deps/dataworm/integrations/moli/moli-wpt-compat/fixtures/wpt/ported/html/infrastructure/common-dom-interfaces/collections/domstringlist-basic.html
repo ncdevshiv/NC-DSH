@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_type_error(callback, description) {
+  assert_throws_name("TypeError", callback, description);
+}
+
+function assert_throws_name(expectedName, callback, description) {
+  let thrown = null;
+  try {
+    callback();
+  } catch (error) {
+    thrown = error;
+  }
+  assert_equals(
+    thrown && thrown.name,
+    expectedName,
+    (description || "assert_throws_name") + ": unexpected exception name"
+  );
+}
+
+function createDOMStringList(entries) {
+  return new Promise((resolve, reject) => {
+    const dbname = String(self.location + Math.random());
+    const request = indexedDB.open(dbname);
+    request.onerror = () => reject(request.error);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      entries.forEach((entry) => db.createObjectStore(entry));
+      resolve(db.objectStoreNames);
+      request.transaction.abort();
+    };
+  });
+}
+
+promise_test(async () => {
+  const dsl = await createDOMStringList(["a", "b", "c"]);
+  assert_equals(dsl.item(0), "a", "item(0)");
+  assert_equals(dsl.item(undefined), "a", "undefined converts to 0");
+  assert_equals(dsl.item(null), "a", "null converts to 0");
+  assert_equals(dsl.item(NaN), "a", "NaN converts to 0");
+  assert_equals(dsl.item(1.9), "b", "fraction truncates");
+  assert_equals(dsl.item("1"), "b", "string numeric converts");
+  assert_equals(dsl.item(3), null, "out of range");
+  assert_equals(dsl.item(-1), null, "negative wraps out of range");
+  assert_throws_type_error(() => dsl.item(), "missing argument");
+  assert_throws_type_error(() => dsl.item(Symbol()), "Symbol conversion error");
+}, "DOMStringList.item() follows WebIDL unsigned long conversion");
+
+promise_test(async () => {
+  const dsl = await createDOMStringList(["a", "b", "undefined"]);
+  const throwingString = {
+    toString() {
+      throw new RangeError("string conversion");
+    },
+  };
+
+  assert_true(dsl.contains("a"), "contains existing string");
+  assert_false(dsl.contains("missing"), "missing string is not contained");
+  assert_true(dsl.contains(undefined), "present undefined converts to string");
+  assert_false(dsl.contains(null), "null converts to string");
+  assert_throws_type_error(() => dsl.contains(), "missing string argument");
+  assert_throws_type_error(() => dsl.contains(Symbol()), "Symbol conversion error");
+  assert_throws_name(
+    "RangeError",
+    () => dsl.contains(throwingString),
+    "stringification errors should propagate"
+  );
+}, "DOMStringList.contains() follows WebIDL DOMString conversion");
+</script>

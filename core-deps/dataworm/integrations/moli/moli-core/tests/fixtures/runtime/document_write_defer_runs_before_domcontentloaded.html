@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.documentWriteDeferDclOrder = [];
+      document.write(
+        '<script defer src="/assets/document_write_defer_written_dcl.js"><\/script>'
+      );
+    </script>
+    <script>
+      window.documentWriteDeferDclOrder.push("classic-after-write");
+      document.addEventListener("DOMContentLoaded", () => {
+        window.documentWriteDeferDclOrder.push("dcl");
+        window.documentWriteDeferDclAtDcl =
+          window.documentWriteDeferDclOrder.join(",");
+      });
+      window.addEventListener("load", () => {
+        window.documentWriteDeferDclOrder.push("load");
+        window.documentWriteDeferDclFinal =
+          window.documentWriteDeferDclOrder.join(",");
+      });
+    </script>
+  </body>
+</html>

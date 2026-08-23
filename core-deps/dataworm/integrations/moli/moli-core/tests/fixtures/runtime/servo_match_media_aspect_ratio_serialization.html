@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <body data-aspect-ratio="" data-min-aspect-ratio="" data-device-aspect-ratio="">
+    <script>
+      const body = document.body;
+      body.setAttribute(
+        'data-aspect-ratio',
+        window.matchMedia('(aspect-ratio: 1/3)').media
+      );
+      body.setAttribute(
+        'data-min-aspect-ratio',
+        window.matchMedia('(min-aspect-ratio: 59/79)').media
+      );
+      body.setAttribute(
+        'data-device-aspect-ratio',
+        window.matchMedia('(device-aspect-ratio: 1280/720)').media
+      );
+    </script>
+  </body>
+</html>

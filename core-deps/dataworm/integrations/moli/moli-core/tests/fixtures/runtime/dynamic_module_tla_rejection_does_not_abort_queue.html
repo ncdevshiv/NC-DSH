@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.dynamicModuleTlaFailureOrder = [];
+      window.addEventListener("error", () => {
+        window.dynamicModuleTlaFailureOrder.push("error");
+        window.dynamicModuleTlaFailureErrors =
+          (window.dynamicModuleTlaFailureErrors || 0) + 1;
+        window.dynamicModuleTlaFailureOrderResult =
+          window.dynamicModuleTlaFailureOrder.join(",");
+      });
+
+      const broken = document.createElement("script");
+      broken.type = "module";
+      broken.text = 'await Promise.reject(new Error("tla-broken"));';
+      document.body.appendChild(broken);
+
+      const later = document.createElement("script");
+      later.type = "module";
+      later.text =
+        'window.dynamicModuleTlaFailureOrder.push("later-module"); window.dynamicModuleTlaFailureContinuation = true; window.dynamicModuleTlaFailureOrderResult = window.dynamicModuleTlaFailureOrder.join(",");';
+      document.body.appendChild(later);
+    </script>
+  </body>
+</html>

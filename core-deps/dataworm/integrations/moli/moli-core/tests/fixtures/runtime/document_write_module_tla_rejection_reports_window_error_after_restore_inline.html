@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.documentWriteTlaRestoreOrder = [];
+      window.documentWriteTlaRestoreErrors = 0;
+      window.addEventListener("error", () => {
+        window.documentWriteTlaRestoreErrors += 1;
+        window.documentWriteTlaRestoreOrder.push("window-error");
+        queueMicrotask(() => {
+          window.documentWriteTlaRestoreOrder.push("window-error-microtask");
+          window.documentWriteTlaRestoreMicrotaskOrder =
+            window.documentWriteTlaRestoreOrder.join(",");
+          window.documentWriteTlaRestoreFinalOrder =
+            window.documentWriteTlaRestoreOrder.join(",");
+        });
+        window.documentWriteTlaRestoreFinalOrder =
+          window.documentWriteTlaRestoreOrder.join(",");
+      });
+      document.write(
+        '<script type="module">await Promise.reject(new Error("tla-broken"));<\/script>' +
+          '<script>window.documentWriteTlaRestoreOrder.push("restore-inline"); window.documentWriteTlaRestoreRestoreOrder = window.documentWriteTlaRestoreOrder.join(","); window.documentWriteTlaRestoreFinalOrder = window.documentWriteTlaRestoreOrder.join(",");<\/script>',
+      );
+    </script>
+  </body>
+</html>

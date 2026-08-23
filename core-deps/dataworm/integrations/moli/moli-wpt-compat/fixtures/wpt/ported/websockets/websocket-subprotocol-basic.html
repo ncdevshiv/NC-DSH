@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function websocket_url(path) {
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return scheme + "//" + location.host + path;
+}
+
+function open_socket(protocols) {
+  const socket = protocols === undefined
+    ? new WebSocket(websocket_url("/wpt/runtime/websocket/subprotocol"))
+    : new WebSocket(websocket_url("/wpt/runtime/websocket/subprotocol"), protocols);
+  const opened = new Promise(function (resolve, reject) {
+    socket.addEventListener("open", function () { resolve(socket); }, { once: true });
+    socket.addEventListener("error", function (event) {
+      reject(new Error("WebSocket error before open: " + event.type));
+    }, { once: true });
+  });
+  return { socket, opened };
+}
+
+function next_message_or_error(socket) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      socket.removeEventListener("message", onmessage);
+      socket.removeEventListener("error", onerror);
+    }
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+    function onerror(event) {
+      cleanup();
+      reject(new Error("WebSocket error before message: " + event.type));
+    }
+    socket.addEventListener("message", onmessage);
+    socket.addEventListener("error", onerror);
+  });
+}
+
+function wait_for_close(socket) {
+  return new Promise(function (resolve) {
+    socket.addEventListener("close", resolve, { once: true });
+  });
+}
+
+promise_test(async function () {
+  const state = open_socket("superchat");
+  assert_equals(state.socket.protocol, "", "protocol should be empty before the opening handshake completes");
+  await state.opened;
+  assert_equals(state.socket.protocol, "superchat", "accepted subprotocol should be exposed after open");
+  const message = await next_message_or_error(state.socket);
+  assert_equals(message.data, "subprotocol-open", "server should complete the negotiated WebSocket session");
+  const closed = wait_for_close(state.socket);
+  state.socket.close(1000, "done");
+  await closed;
+}, "WebSocket exposes the accepted subprotocol after the opening handshake");
+
+promise_test(async function () {
+  const state = open_socket();
+  await state.opened;
+  assert_equals(state.socket.protocol, "", "protocol should remain empty when no subprotocol was offered");
+  const message = await next_message_or_error(state.socket);
+  assert_equals(message.data, "subprotocol-open", "server should still accept a connection without protocols");
+  const closed = wait_for_close(state.socket);
+  state.socket.close(1000, "done");
+  await closed;
+}, "WebSocket protocol remains empty when the client offers no subprotocol");
+</script>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<body>
+<script>
+window.__sharedWorkerPerfResult = {
+  done: false,
+  error: "",
+  events: [],
+};
+
+function record(event) {
+  window.__sharedWorkerPerfResult.events.push(event);
+}
+
+function fail(error) {
+  window.__sharedWorkerPerfResult.error = String(error && (error.stack || error.message || error));
+  window.__sharedWorkerPerfResult.done = true;
+}
+
+try {
+  const worker = new SharedWorker("/assets/shared_worker_iframe_performance_owner.js");
+  worker.port.onmessage = (event) => {
+    record({
+      phase: "top-callback",
+      data: event.data,
+      now: performance.now(),
+      origin: performance.timeOrigin,
+      href: location.href,
+    });
+
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const script = iframe.contentWindow.document.createElement("script");
+    script.textContent =
+      'window.top.__sharedWorkerPerfResult.iframeStartTime = window.performance.now();' +
+      'window.top.__sharedWorkerPerfResult.iframeTimeOrigin = window.performance.timeOrigin;' +
+      'window.top.__sharedWorkerPerfResult.iframeHref = window.location.href;' +
+      'window.top.__sharedWorkerPerfResult.events.push({' +
+      '  phase: "child-before-post",' +
+      '  now: window.performance.now(),' +
+      '  origin: window.performance.timeOrigin,' +
+      '  topNow: window.top.performance.now(),' +
+      '  topOrigin: window.top.performance.timeOrigin,' +
+      '  href: window.location.href' +
+      '});' +
+      'const worker = new SharedWorker("/assets/shared_worker_iframe_performance_owner.js");' +
+      'worker.port.onmessage = function(event) {' +
+      '  const workerTime = event.data[3];' +
+      '  window.top.__sharedWorkerPerfResult.events.push({' +
+      '    phase: "child-callback",' +
+      '    data: event.data,' +
+      '    now: window.performance.now(),' +
+      '    origin: window.performance.timeOrigin,' +
+      '    topNow: window.top.performance.now(),' +
+      '    topOrigin: window.top.performance.timeOrigin,' +
+      '    iframeStartTime: window.top.__sharedWorkerPerfResult.iframeStartTime,' +
+      '    workerAfterIframeStart: workerTime > window.top.__sharedWorkerPerfResult.iframeStartTime,' +
+      '    href: window.location.href' +
+      '  });' +
+      '  window.top.__sharedWorkerPerfResult.done = true;' +
+      '};' +
+      'worker.port.postMessage("");';
+    iframe.contentWindow.document.body.appendChild(script);
+  };
+  worker.port.postMessage("");
+} catch (error) {
+  fail(error);
+}
+</script>
+</body>
+</html>

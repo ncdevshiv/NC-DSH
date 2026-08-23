@@ -1,0 +1,122 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("unexpected worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+function worker_fixture_url() {
+  return new URL(
+    "/wpt/ported/worker/resources/worker-importscripts-failure-worker.js",
+    location.href,
+  ).href;
+}
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage("syntax-error");
+    const message = await next_message(worker);
+    assert_equals(
+      message.data.first,
+      "ok",
+      "earlier importScripts entries should keep their side effects before a later syntax error",
+    );
+    assert_false(
+      message.data.hasThird,
+      "later importScripts entries should not run after a syntax error",
+    );
+    assert_equals(
+      message.data.name,
+      "SyntaxError",
+      "syntax failures should preserve the SyntaxError surface",
+    );
+    assert_true(
+      message.data.syntax,
+      "syntax failures should still expose a SyntaxError instance",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers keep earlier importScripts side effects when a later imported script has a syntax error");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage("runtime-throw");
+    const message = await next_message(worker);
+    assert_equals(
+      message.data.first,
+      1,
+      "earlier importScripts entries should keep their side effects before a later throw",
+    );
+    assert_equals(
+      message.data.thrown,
+      2,
+      "runtime throws should preserve the thrown value",
+    );
+    assert_false(
+      message.data.hasThird,
+      "later importScripts entries should not run after a thrown exception",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers keep earlier importScripts side effects when a later imported script throws");
+
+promise_test(async function () {
+  const worker = new Worker(worker_fixture_url());
+
+  try {
+    worker.postMessage("fetch-failure");
+    const message = await next_message(worker);
+    assert_equals(
+      message.data.firstLoaded,
+      "yes",
+      "earlier same-origin importScripts entries should run before a later fetch failure",
+    );
+    assert_false(
+      message.data.afterLoaded,
+      "later importScripts entries should not run after a fetch failure",
+    );
+    assert_equals(
+      message.data.name,
+      "NetworkError",
+      "missing same-origin importScripts targets should fail with NetworkError",
+    );
+    assert_true(
+      message.data.domException,
+      "missing same-origin importScripts targets should throw a DOMException",
+    );
+    assert_true(
+      message.data.message.length > 0,
+      "fetch failures should preserve a non-empty error message surface",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers keep earlier importScripts side effects when a later same-origin imported script fails to load");
+</script>

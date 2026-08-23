@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <body
+    data-optional-ok=""
+    data-dedupe-count=""
+    data-order=""
+    data-handle-event-count=""
+    data-shared-count=""
+    data-removed-count=""
+  >
+    <script>
+      const body = document.body;
+
+      const optionalMql = matchMedia('(min-width: 100px)');
+      let optionalOk = true;
+      try {
+        optionalMql.addListener(null);
+        optionalMql.addListener(undefined);
+        optionalMql.removeListener(null);
+        optionalMql.removeListener(undefined);
+      } catch (error) {
+        optionalOk = false;
+      }
+      body.setAttribute('data-optional-ok', String(optionalOk));
+
+      const dedupeMql = matchMedia('(min-width: 101px)');
+      let dedupeCount = 0;
+      const dedupeListener = () => {
+        dedupeCount++;
+      };
+      dedupeMql.addListener(dedupeListener);
+      dedupeMql.addListener(dedupeListener);
+      dedupeMql.dispatchEvent(new Event('change'));
+      body.setAttribute('data-dedupe-count', String(dedupeCount));
+
+      const orderMql = matchMedia('(min-width: 102px)');
+      const order = [];
+      orderMql.addListener(() => {
+        order.push('first');
+      });
+      orderMql.addListener(() => {
+        order.push('second');
+      });
+      orderMql.dispatchEvent(new Event('change'));
+      body.setAttribute('data-order', order.join(','));
+
+      const handleEventMql = matchMedia('(min-width: 103px)');
+      let handleEventCount = 0;
+      handleEventMql.addListener({
+        handleEvent() {
+          handleEventCount++;
+        },
+      });
+      handleEventMql.dispatchEvent(new Event('change'));
+      body.setAttribute('data-handle-event-count', String(handleEventCount));
+
+      const firstMql = matchMedia('(min-width: 104px)');
+      const secondMql = matchMedia('(min-width: 104px)');
+      let sharedCount = 0;
+      const sharedListener = () => {
+        sharedCount++;
+      };
+      firstMql.addListener(sharedListener);
+      secondMql.removeListener(sharedListener);
+      firstMql.dispatchEvent(new Event('change'));
+      body.setAttribute('data-shared-count', String(sharedCount));
+
+      const removedMql = matchMedia('(min-width: 105px)');
+      let removedCount = 0;
+      const removedListener = () => {
+        removedCount++;
+      };
+      removedMql.addListener(removedListener);
+      removedMql.removeListener(removedListener);
+      removedMql.dispatchEvent(new Event('change'));
+      body.setAttribute('data-removed-count', String(removedCount));
+    </script>
+  </body>
+</html>

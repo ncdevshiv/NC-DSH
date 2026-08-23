@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleDefaultImportOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleDefaultImportOrder.push("dcl");
+        window.moduleDefaultImportOrderResult =
+          window.moduleDefaultImportOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import greeting from "/assets/module-default-export-value.mjs";
+      import "/assets/module-side-effect-only.mjs";
+
+      window.moduleDefaultImportOrder.push(`module:${greeting}`);
+      window.moduleDefaultImportValue = greeting;
+      window.moduleDefaultImportSawSideEffectCount =
+        window.moduleSideEffectOnlyCount || 0;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,184 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (caught) {
+    error = caught;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+test(function () {
+  const transfer = new DataTransfer();
+  const file = new File(["file"], "note.txt", { type: "text/plain" });
+
+  const text = transfer.items.add("alpha", "text/plain");
+  const fileItem = transfer.items.add(file);
+  const html = transfer.items.add("<p>beta</p>", "text/html");
+
+  assert_equals(transfer.items.length, 3, "initial item count");
+  assert_equals(transfer.files.length, 1, "initial FileList count");
+  assert_array_equals(Array.from(transfer.types), ["text/plain", "text/html", "Files"], "initial types");
+  assert_equals(transfer.items[0], text, "initial indexed string item");
+  assert_equals(transfer.items[1], fileItem, "initial indexed file item");
+  assert_equals(transfer.items.item(2), html, "initial item() lookup");
+
+  transfer.items.remove(1);
+  assert_equals(transfer.items.length, 2, "remove updates item count");
+  assert_equals(transfer.files.length, 0, "remove updates FileList");
+  assert_array_equals(Array.from(transfer.types), ["text/plain", "text/html"], "remove updates types");
+  assert_equals(transfer.items[0], text, "remove preserves earlier wrapper");
+  assert_equals(transfer.items[1], html, "remove compacts later wrapper");
+  assert_equals(transfer.items.item(2), null, "removed tail no longer resolves");
+  assert_equals(transfer.items[2], undefined, "removed tail no longer exposes an indexed property");
+
+  transfer.items.remove(99);
+  transfer.items.remove(-1);
+  assert_equals(transfer.items.length, 2, "out-of-range remove is a no-op");
+
+  transfer.items.clear();
+  assert_equals(transfer.items.length, 0, "clear empties the item list");
+  assert_equals(transfer.files.length, 0, "clear empties FileList");
+  assert_array_equals(Array.from(transfer.types), [], "clear empties types");
+  assert_equals(transfer.items.item(0), null, "clear removes indexed items");
+  assert_equals(transfer.items[0], undefined, "clear removes indexed properties");
+}, "DataTransferItemList remove() and clear() synchronize DataTransfer surface state");
+
+test(function () {
+  function makeTransfer() {
+    const transfer = new DataTransfer();
+    transfer.items.add("alpha", "text/plain");
+    transfer.items.add(new File(["file"], "note.txt", { type: "text/plain" }));
+    transfer.items.add("<p>beta</p>", "text/html");
+    return transfer;
+  }
+
+  function itemTypes(transfer) {
+    return Array.from({ length: transfer.items.length }, function (_, index) {
+      return transfer.items[index].kind + ":" + transfer.items[index].type;
+    });
+  }
+
+  let transfer = makeTransfer();
+  assert_throws_name("TypeError", function () {
+    transfer.items.remove();
+  }, "remove() should require an index argument");
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "file:text/plain", "string:text/html"], "missing argument should not mutate");
+
+  transfer = makeTransfer();
+  transfer.items.remove(undefined);
+  assert_array_equals(itemTypes(transfer), ["file:text/plain", "string:text/html"], "undefined converts to unsigned long zero");
+
+  transfer = makeTransfer();
+  transfer.items.remove(null);
+  assert_array_equals(itemTypes(transfer), ["file:text/plain", "string:text/html"], "null converts to unsigned long zero");
+
+  transfer = makeTransfer();
+  transfer.items.remove(NaN);
+  assert_array_equals(itemTypes(transfer), ["file:text/plain", "string:text/html"], "NaN converts to unsigned long zero");
+
+  transfer = makeTransfer();
+  transfer.items.remove(Infinity);
+  assert_array_equals(itemTypes(transfer), ["file:text/plain", "string:text/html"], "Infinity converts to unsigned long zero");
+
+  transfer = makeTransfer();
+  transfer.items.remove("1.9");
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "string:text/html"], "fractional strings truncate through unsigned long conversion");
+
+  transfer = makeTransfer();
+  transfer.items.remove(-4294967295);
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "string:text/html"], "negative values wrap through unsigned long conversion");
+
+  transfer = makeTransfer();
+  transfer.items.remove(4294967297);
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "string:text/html"], "large values wrap through unsigned long conversion");
+
+  transfer = makeTransfer();
+  transfer.items.remove({ valueOf() { return 1; } });
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "string:text/html"], "object indexes use ToNumber conversion");
+
+  transfer = makeTransfer();
+  assert_throws_name("Error", function () {
+    transfer.items.remove({ valueOf() { throw new Error("remove conversion failed"); } });
+  }, "throwing ToNumber should propagate");
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "file:text/plain", "string:text/html"], "throwing ToNumber should not mutate");
+
+  assert_throws_name("TypeError", function () {
+    transfer.items.remove(Symbol("index"));
+  }, "remove() should reject Symbol conversion");
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "file:text/plain", "string:text/html"], "Symbol conversion failure should not mutate");
+
+  assert_throws_name("TypeError", function () {
+    transfer.items.remove(1n);
+  }, "remove() should reject BigInt conversion");
+  assert_array_equals(itemTypes(transfer), ["string:text/plain", "file:text/plain", "string:text/html"], "BigInt conversion failure should not mutate");
+}, "DataTransferItemList.remove applies WebIDL unsigned long index conversion");
+
+test(function () {
+  const transfer = new DataTransfer();
+  const first = transfer.items.add("alpha", "text/plain");
+  const second = transfer.items.add("beta", "text/html");
+
+  assert_equals(transfer.items.item(0), first, "item(0) returns first item");
+  assert_equals(transfer.items.item("1.9"), second, "item() converts index with unsigned long");
+  assert_equals(transfer.items.item(99), null, "item() returns null out of range");
+  assert_throws_name("TypeError", function () {
+    transfer.items.item();
+  }, "item() should require index");
+  assert_throws_name("TypeError", function () {
+    transfer.items.item(Symbol("index"));
+  }, "item() should reject Symbol index");
+}, "DataTransferItemList.item applies WebIDL unsigned long index conversion");
+
+test(function () {
+  const transfer = new DataTransfer();
+  const first = transfer.items.add("alpha", "text");
+  assert_equals(first.kind, "string", "first string item kind");
+  assert_equals(first.type, "text/plain", "text alias should normalize to text/plain");
+  assert_throws_name("NotSupportedError", function () {
+    transfer.items.add("beta", "TEXT/PLAIN");
+  }, "duplicate string type should throw");
+  assert_equals(transfer.items.length, 1, "duplicate add should not mutate length");
+  assert_equals(transfer.items[0], first, "duplicate add should preserve the first wrapper");
+  assert_equals(transfer.getData("text/plain"), "alpha", "duplicate add should preserve the first payload");
+
+  const file = new File(["file"], "note.txt", { type: "text/plain" });
+  const fileItem = transfer.items.add(file);
+  assert_equals(fileItem.kind, "file", "file item with same MIME type is still allowed");
+  assert_equals(transfer.items.length, 2, "file item should be added after duplicate string rejection");
+
+  transfer.items.clear();
+  const replacement = transfer.items.add("gamma", "text/plain");
+  assert_equals(replacement.type, "text/plain", "clear should allow adding the string type again");
+  assert_equals(transfer.getData("text"), "gamma", "replacement payload should be visible");
+}, "DataTransferItemList add() rejects duplicate string item types without rejecting files");
+
+test(function () {
+  const transfer = new DataTransfer();
+  const throwingData = {
+    toString() {
+      throw new RangeError("data conversion");
+    },
+  };
+
+  assert_equals(transfer.items.add(), null, "missing data stays a null add result");
+  assert_equals(transfer.items.add(null), null, "null without type is not a File");
+  assert_throws_name("TypeError", function () {
+    transfer.items.add("alpha", Symbol("text/plain"));
+  }, "string item type rejects Symbol");
+  assert_throws_name("RangeError", function () {
+    transfer.items.add(throwingData, "text/plain");
+  }, "string item data propagates stringification errors");
+
+  const item = transfer.items.add(null, "text/plain");
+  assert_equals(item.kind, "string", "null data with type creates a string item");
+  assert_equals(transfer.getData("text/plain"), "null", "null data uses DOMString conversion");
+}, "DataTransferItemList.add string overload follows WebIDL conversion");
+</script>

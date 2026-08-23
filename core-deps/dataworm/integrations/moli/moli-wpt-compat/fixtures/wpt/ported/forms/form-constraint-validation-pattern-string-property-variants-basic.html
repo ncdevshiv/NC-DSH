@@ -1,0 +1,159 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function textInput(value, pattern) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.pattern = pattern;
+  document.body.appendChild(input);
+  return input;
+}
+
+function assertPatternMatch(value, pattern, description) {
+  const input = textInput(value, pattern);
+  assert_false(input.validity.patternMismatch, description);
+  assert_true(input.validity.valid, description + " should keep the control valid");
+}
+
+function assertPatternMismatch(value, pattern, description) {
+  const input = textInput(value, pattern);
+  assert_true(input.validity.patternMismatch, description);
+  assert_false(input.validity.valid, description + " should make the control invalid");
+}
+
+test(function () {
+  assertPatternMatch(
+    "✅",
+    "\\p{Basic_Emoji}",
+    "basic emoji should match as one string-property atom",
+  );
+  assertPatternMismatch(
+    "✅✅",
+    "\\p{Basic_Emoji}",
+    "whole-value matching should reject two basic emoji for one atom",
+  );
+  assertPatternMismatch(
+    "A",
+    "\\p{Basic_Emoji}",
+    "ASCII letters should not satisfy the basic emoji property",
+  );
+}, "patternMismatch supports Basic_Emoji string properties");
+
+test(function () {
+  assertPatternMatch(
+    "1️⃣",
+    "\\p{Emoji_Keycap_Sequence}",
+    "emoji keycap sequences should match as one string-property atom",
+  );
+  assertPatternMismatch(
+    "1",
+    "\\p{Emoji_Keycap_Sequence}",
+    "plain digits should not satisfy the keycap-sequence property",
+  );
+  assertPatternMismatch(
+    "1️⃣2️⃣",
+    "\\p{Emoji_Keycap_Sequence}",
+    "whole-value matching should reject two keycap sequences for one atom",
+  );
+}, "patternMismatch supports Emoji_Keycap_Sequence string properties");
+
+test(function () {
+  assertPatternMatch(
+    "👍🏽",
+    "\\p{RGI_Emoji_Modifier_Sequence}",
+    "emoji modifier sequences should match as one string-property atom",
+  );
+  assertPatternMismatch(
+    "👍",
+    "\\p{RGI_Emoji_Modifier_Sequence}",
+    "an unmodified emoji should not satisfy the modifier-sequence property",
+  );
+  assertPatternMismatch(
+    "👍🏽👍🏽",
+    "\\p{RGI_Emoji_Modifier_Sequence}",
+    "whole-value matching should reject two modifier sequences for one atom",
+  );
+}, "patternMismatch supports RGI_Emoji_Modifier_Sequence string properties");
+
+test(function () {
+  assertPatternMatch(
+    "🇯🇵",
+    "\\p{RGI_Emoji_Flag_Sequence}",
+    "regional-indicator flag sequences should match as one string-property atom",
+  );
+  assertPatternMismatch(
+    "🇯",
+    "\\p{RGI_Emoji_Flag_Sequence}",
+    "a single regional indicator should not satisfy the flag-sequence property",
+  );
+  assertPatternMismatch(
+    "🇯🇵🇺🇸",
+    "\\p{RGI_Emoji_Flag_Sequence}",
+    "whole-value matching should reject two flag sequences for one atom",
+  );
+}, "patternMismatch supports RGI_Emoji_Flag_Sequence string properties");
+
+test(function () {
+  assertPatternMatch(
+    "👩‍💻",
+    "\\p{RGI_Emoji_ZWJ_Sequence}",
+    "ZWJ emoji sequences should match as one string-property atom",
+  );
+  assertPatternMismatch(
+    "👩",
+    "\\p{RGI_Emoji_ZWJ_Sequence}",
+    "a single emoji should not satisfy the ZWJ-sequence property",
+  );
+  assertPatternMismatch(
+    "👩‍💻👩‍💻",
+    "\\p{RGI_Emoji_ZWJ_Sequence}",
+    "whole-value matching should reject two ZWJ sequences for one atom",
+  );
+}, "patternMismatch supports RGI_Emoji_ZWJ_Sequence string properties");
+
+test(function () {
+  assertPatternMatch(
+    "👍🏽👍🏽",
+    "(?:\\p{RGI_Emoji_Modifier_Sequence}){2}",
+    "quantified modifier-sequence atoms should match repeated modifier sequences",
+  );
+  assertPatternMismatch(
+    "👍🏽",
+    "(?:\\p{RGI_Emoji_Modifier_Sequence}){2}",
+    "quantified modifier-sequence atoms should still enforce the count",
+  );
+  assertPatternMismatch(
+    "👍🏽👍",
+    "(?:\\p{RGI_Emoji_Modifier_Sequence}){2}",
+    "quantified modifier-sequence atoms should reject a trailing unmodified emoji",
+  );
+
+  assertPatternMatch(
+    "🇯🇵🇺🇸",
+    "(?:\\p{RGI_Emoji_Flag_Sequence}){2}",
+    "quantified flag-sequence atoms should match repeated flag sequences",
+  );
+  assertPatternMismatch(
+    "🇯🇵",
+    "(?:\\p{RGI_Emoji_Flag_Sequence}){2}",
+    "quantified flag-sequence atoms should still enforce the count",
+  );
+
+  assertPatternMatch(
+    "👩‍💻👨‍💻",
+    "(?:\\p{RGI_Emoji_ZWJ_Sequence}){2}",
+    "quantified ZWJ-sequence atoms should match repeated ZWJ sequences",
+  );
+  assertPatternMismatch(
+    "👩‍💻x",
+    "(?:\\p{RGI_Emoji_ZWJ_Sequence}){2}",
+    "quantified ZWJ-sequence atoms should reject non-emoji trailing text",
+  );
+}, "patternMismatch supports quantifiers around v-flag string-property variants");
+
+</script>

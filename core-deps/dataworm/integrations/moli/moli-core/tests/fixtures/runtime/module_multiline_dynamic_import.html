@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.moduleMultilineDynamicImportOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleMultilineDynamicImportOrder.push("dcl");
+        window.moduleMultilineDynamicImportFinalOrder =
+          window.moduleMultilineDynamicImportOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      const imported = import(
+        "/assets/module-multiline-dynamic-import-target.mjs"
+      );
+      window.moduleMultilineDynamicImportIsPromise =
+        !!imported && typeof imported.then === "function";
+
+      imported.then((namespace) => {
+        window.moduleMultilineDynamicImportValue = namespace.label;
+        window.moduleMultilineDynamicImportOrder.push(`resolved:${namespace.label}`);
+        window.moduleMultilineDynamicImportFinalOrder =
+          window.moduleMultilineDynamicImportOrder.join(",");
+      });
+
+      window.moduleMultilineDynamicImportOrder.push("module");
+    </script>
+  </head>
+  <body>
+    <main>module multiline dynamic import</main>
+  </body>
+</html>

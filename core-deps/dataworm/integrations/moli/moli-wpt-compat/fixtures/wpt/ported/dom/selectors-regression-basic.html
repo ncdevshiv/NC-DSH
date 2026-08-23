@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<body>
+  <div id="container"></div>
+  <a title="test with - dash and space" id="dash-space">Test One</a>
+  <input name="User" id="case-input">
+</body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function ids(nodes) {
+  return Array.from(nodes).map((node) => node.id);
+}
+
+test(function () {
+  const container = document.querySelector("#container");
+  function get_ids() {
+    return ids(container.querySelectorAll("a.test"));
+  }
+
+  container.innerHTML = '<a id="link-a" class="test">a link</a>';
+  assert_array_equals(get_ids(), ["link-a"], "initial setup");
+
+  container.innerHTML = '<a id="link-b" class="test"><img src="foo.jpg"></a>';
+  assert_array_equals(get_ids(), ["link-b"], "after replacement");
+
+  container.innerHTML = '<a id="link-a" class="test">a link</a>';
+  assert_array_equals(get_ids(), ["link-a"], "after changing back to original HTML");
+}, "querySelectorAll must not return removed elements after innerHTML replacement");
+
+test(function () {
+  const element = document.getElementById("dash-space");
+
+  assert_equals(document.querySelector("a[title='test with - dash and space']"), element);
+  assert_array_equals(Array.from(document.querySelectorAll("a[title='test with - dash and space']")), [element]);
+}, "querySelector(All) matches attribute values that contain spaces and dashes");
+
+test(function () {
+  const input = document.getElementById("case-input");
+
+  assert_equals(document.querySelector("input[name*=user i]"), input);
+  assert_array_equals(Array.from(document.querySelectorAll("input[name*=user i]")), [input]);
+}, "querySelector(All) supports case-insensitive substring attribute selectors");
+</script>

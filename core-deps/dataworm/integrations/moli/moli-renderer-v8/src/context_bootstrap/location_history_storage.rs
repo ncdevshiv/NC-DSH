@@ -1,0 +1,15 @@
+pub(super) const HISTORY_ENTRIES_SLOT: &str = "__lmHistoryEntries";
+pub(super) const HISTORY_INDEX_SLOT: &str = "__lmHistoryIndex";
+pub(super) const HISTORY_LENGTH_SLOT: &str = "__lmHistoryLength";
+pub(super) const HISTORY_STATE_SLOT: &str = "__lmHistoryState";
+pub(super) const HISTORY_SCROLL_RESTORATION_SLOT: &str = "__lmHistoryScrollRestoration";
+pub(super) const HISTORY_ENTRY_STATE_SNAPSHOT_SLOT: &str = "__lmHistoryEntryStateSnapshot";
+pub(super) const NAVIGATION_ENTRY_STATE_SNAPSHOT_SLOT: &str = "__lmNavigationEntryStateSnapshot";
+pub(super) const NAVIGATION_ENTRY_DOCUMENT_ID_SLOT: &str = "__lmNavigationEntryDocumentId";
+pub(super) const NAVIGATION_ENTRY_EVENT_LISTENERS_SLOT: &str = "__lmNavigationEntryEventListeners";
+pub(super) const NAVIGATION_EVENT_LISTENERS_SLOT: &str = "__lmNavigationEventListeners";
+pub(super) const NAVIGATION_CURRENT_ENTRY_SLOT: &str = "__lmNavigationCurrentEntry";
+pub(super) const NAVIGATION_ACTIVATION_SLOT: &str = "__lmNavigationActivation";
+pub(super) const NAVIGATION_TRANSITION_SLOT: &str = "__lmNavigationTransition";
+pub(super) const WINDOW_RUNTIME_OWNER_SLOT: &str = "__moliWindowRuntimeOwner";
+pub(super) use super::CHILD_BROWSING_CONTEXT_HANDLE_SLOT as WINDOW_CHILD_CONTEXT_HANDLE_SLOT;

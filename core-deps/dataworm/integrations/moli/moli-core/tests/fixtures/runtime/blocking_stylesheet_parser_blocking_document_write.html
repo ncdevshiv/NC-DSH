@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.blockingStylesheetStart = Date.now();
+      window.blockingStylesheetOrder = [];
+      window.blockingStylesheetParserWriteRan = false;
+      window.blockingStylesheetParserWriteSawLate = false;
+      window.blockingStylesheetParserWriteSawWrittenDuringScript = false;
+      window.addEventListener("load", () => {
+        const written = document.getElementById("written-before-late");
+        const late = document.getElementById("late");
+        const beforeLate =
+          !!written &&
+          !!late &&
+          !!(written.compareDocumentPosition(late) & Node.DOCUMENT_POSITION_FOLLOWING);
+        window.blockingStylesheetParserWriteResult =
+          (window.blockingStylesheetParserWriteRan ? "ran" : "missed") +
+          "|" +
+          (window.blockingStylesheetParserWriteSawLate ? "late" : "no-late") +
+          "|" +
+          (window.blockingStylesheetParserWriteSawWrittenDuringScript
+            ? "written-during-script"
+            : "missing-during-script") +
+          "|" +
+          (beforeLate ? "before-late" : "not-before-late");
+      });
+    </script>
+  </head>
+  <body>
+    <link rel="stylesheet" href="/assets/blocking_stylesheet_slow.css">
+    <script src="/assets/blocking_stylesheet_parser_blocking_document_write.js"></script>
+    <div id="late">late</div>
+  </body>
+</html>

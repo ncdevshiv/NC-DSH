@@ -1,0 +1,119 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "10";
+  input.max = "20";
+
+  assert_equals(input.getAttribute("min"), "10", "min property should reflect to the content attribute");
+  assert_equals(input.getAttribute("max"), "20", "max property should reflect to the content attribute");
+
+  assert_false(input.validity.rangeUnderflow, "empty number input should not underflow");
+  assert_false(input.validity.rangeOverflow, "empty number input should not overflow");
+  assert_true(input.validity.valid, "empty non-required number input should stay valid");
+
+  input.value = "9";
+  assert_true(input.validity.rangeUnderflow, "value below min should set rangeUnderflow");
+  assert_false(input.validity.rangeOverflow, "value below min should not set rangeOverflow");
+  assert_false(input.validity.valid, "rangeUnderflow should make the control invalid");
+  assert_false(input.checkValidity(), "rangeUnderflow should fail checkValidity");
+  assert_true(input.validationMessage.length > 0, "rangeUnderflow should expose a validation message");
+
+  input.value = "21";
+  assert_false(input.validity.rangeUnderflow, "value above max should not set rangeUnderflow");
+  assert_true(input.validity.rangeOverflow, "value above max should set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeOverflow should fail checkValidity");
+
+  input.value = "10";
+  assert_false(input.validity.rangeUnderflow, "value equal to min should pass");
+  assert_false(input.validity.rangeOverflow, "value equal to min should not overflow");
+  assert_true(input.checkValidity(), "value at min should pass checkValidity");
+
+  input.value = "20";
+  assert_false(input.validity.rangeUnderflow, "value equal to max should not underflow");
+  assert_false(input.validity.rangeOverflow, "value equal to max should pass");
+  assert_true(input.validity.valid, "value at max should be valid");
+}, "number input validity reflects min/max range constraints");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "not-a-number";
+  input.max = "also-not-a-number";
+  input.value = "100";
+
+  assert_false(input.validity.rangeUnderflow, "invalid min should be ignored");
+  assert_false(input.validity.rangeOverflow, "invalid max should be ignored");
+  assert_true(input.validity.valid, "invalid range attributes should not make the control invalid");
+
+  input.min = "101";
+  assert_true(input.validity.rangeUnderflow, "changing min should update rangeUnderflow");
+
+  input.min = "";
+  input.max = "99";
+  assert_true(input.validity.rangeOverflow, "changing max should update rangeOverflow");
+
+  input.removeAttribute("max");
+  assert_false(input.validity.rangeOverflow, "removing max should clear rangeOverflow");
+  assert_true(input.validity.valid, "control should become valid after range removal");
+}, "range attribute changes update number validity");
+
+test(function () {
+  const text = document.createElement("input");
+  text.type = "text";
+  text.min = "10";
+  text.max = "20";
+  text.value = "9";
+
+  assert_false(text.validity.rangeUnderflow, "text input should not apply min as rangeUnderflow");
+  assert_false(text.validity.rangeOverflow, "text input should not apply max as rangeOverflow");
+  assert_true(text.validity.valid, "text input min/max should not affect validity");
+}, "non-number input ignores range constraints");
+
+test(function () {
+  withHost(
+    `<form id="form">
+       <input id="low" type="number" min="10" value="9">
+       <input id="ok" type="number" max="20" value="15">
+     </form>`,
+    function (host) {
+      const form = host.querySelector("#form");
+      const low = host.querySelector("#low");
+      const ok = host.querySelector("#ok");
+      const events = [];
+
+      low.addEventListener("invalid", function () {
+        events.push("low");
+      });
+      ok.addEventListener("invalid", function () {
+        events.push("ok");
+      });
+
+      assert_false(form.checkValidity(), "form should fail when a number control is below min");
+      assert_array_equals(events, ["low"], "form checkValidity should dispatch invalid only for failing range controls");
+
+      events.length = 0;
+      low.value = "10";
+      assert_true(form.reportValidity(), "form should pass once rangeUnderflow is cleared");
+      assert_array_equals(events, [], "valid form reportValidity should not dispatch invalid");
+    },
+  );
+}, "form validation aggregates number range controls");
+</script>

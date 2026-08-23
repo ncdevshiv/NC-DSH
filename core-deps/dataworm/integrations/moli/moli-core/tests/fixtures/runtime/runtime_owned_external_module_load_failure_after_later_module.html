@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.runtimeOwnedExternalModuleLoadFailureOrder = [];
+      window.runtimeOwnedExternalModuleLoadFailureWindowErrors = 0;
+      window.runtimeOwnedExternalModuleLoadFailureOrder.push(
+        "ready:" + document.readyState,
+      );
+      document.addEventListener("DOMContentLoaded", () => {
+        window.runtimeOwnedExternalModuleLoadFailureOrder.push(
+          "dcl:" + document.readyState,
+        );
+        window.runtimeOwnedExternalModuleLoadFailureOrderAtDcl =
+          window.runtimeOwnedExternalModuleLoadFailureOrder.join(",");
+      });
+      window.addEventListener("error", () => {
+        window.runtimeOwnedExternalModuleLoadFailureWindowErrors += 1;
+        window.runtimeOwnedExternalModuleLoadFailureOrder.push("window-error");
+      });
+
+      const broken = document.createElement("script");
+      broken.type = "module";
+      broken.src = "/assets/missing_runtime_owned_external_module_load_failure.mjs";
+      broken.onerror = () => {
+        window.runtimeOwnedExternalModuleLoadFailureOrder.push("script-error");
+        queueMicrotask(() => {
+          window.runtimeOwnedExternalModuleLoadFailureOrder.push(
+            "script-error-microtask",
+          );
+        });
+      };
+      document.head.appendChild(broken);
+      window.runtimeOwnedExternalModuleLoadFailureOrder.push(
+        "after-broken:" + document.readyState + ":async=" + String(broken.async),
+      );
+
+      const later = document.createElement("script");
+      later.type = "module";
+      later.text =
+        'window.runtimeOwnedExternalModuleLoadFailureOrder.push("later-module"); queueMicrotask(() => window.runtimeOwnedExternalModuleLoadFailureOrder.push("later-module-microtask"));';
+      document.head.appendChild(later);
+      window.runtimeOwnedExternalModuleLoadFailureOrder.push(
+        "after-later:" + document.readyState + ":async=" + String(later.async),
+      );
+
+      window.addEventListener("load", () => {
+        window.runtimeOwnedExternalModuleLoadFailureOrder.push(
+          "window-load:" + document.readyState,
+        );
+        window.runtimeOwnedExternalModuleLoadFailureFinalOrder =
+          window.runtimeOwnedExternalModuleLoadFailureOrder.join(",");
+      });
+    </script>
+  </head>
+  <body>
+    <main id="after">after</main>
+  </body>
+</html>

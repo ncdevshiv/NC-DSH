@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleCycleExportStarMultihopLateAmbiguousOrder = [];
+      window.addEventListener("error", () => {
+        window.moduleCycleExportStarMultihopLateAmbiguousOrder.push("error");
+        window.moduleCycleExportStarMultihopLateAmbiguousError = "ambiguous";
+      });
+    </script>
+    <script type="module">
+      import { shared } from "/assets/module-cycle-export-star-multihop-late-ambiguous-outer-barrel.mjs";
+      window.moduleCycleExportStarMultihopLateAmbiguousValue = shared;
+    </script>
+    <script type="module">
+      window.moduleCycleExportStarMultihopLateAmbiguousOrder.push("later-module");
+      window.moduleCycleExportStarMultihopLateAmbiguousContinuation = true;
+      window.moduleCycleExportStarMultihopLateAmbiguousOrderResult =
+        window.moduleCycleExportStarMultihopLateAmbiguousOrder.join(",");
+    </script>
+  </body>
+</html>

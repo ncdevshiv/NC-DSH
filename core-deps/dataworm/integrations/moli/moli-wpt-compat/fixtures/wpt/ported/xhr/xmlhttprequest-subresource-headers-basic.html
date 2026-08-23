@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const xhr = new XMLHttpRequest();
+  xhr.open("GET", "/wpt/runtime/xhr/request-headers");
+  xhr.setRequestHeader("X-Test", "xhr");
+  xhr.responseType = "json";
+
+  await new Promise(function (resolve) {
+    xhr.onload = resolve;
+    xhr.send();
+  });
+
+  assert_equals(xhr.status, 200, "xhr header echo status");
+  const payload = xhr.response;
+  assert_equals(payload.x_test, "xhr", "custom request header");
+  assert_equals(payload.accept, "*/*", "default Accept header");
+  assert_true(
+    typeof payload.referer === "string" &&
+      payload.referer.indexOf("/wpt/ported/xhr/xmlhttprequest-subresource-headers-basic.html") !== -1,
+    "xhr should send the current document as Referer",
+  );
+  assert_equals(payload.sec_fetch_site, "same-origin", "Sec-Fetch-Site");
+  assert_equals(payload.sec_fetch_mode, "cors", "Sec-Fetch-Mode");
+  assert_equals(payload.sec_fetch_dest, "empty", "Sec-Fetch-Dest");
+  assert_true(payload.sec_ch_ua_present, "Sec-CH-UA should be present");
+  assert_equals(payload.sec_ch_ua_mobile, "?0", "Sec-CH-UA-Mobile");
+  assert_equals(
+    String(payload.sec_ch_ua_platform).toLowerCase(),
+    "\"windows\"",
+    "Sec-CH-UA-Platform",
+  );
+}, "XMLHttpRequest sends browser-style same-origin subresource request headers");
+</script>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleNestedInitializerOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleNestedInitializerOrder.push("dcl");
+      });
+    </script>
+    <script type="module">
+      import {
+        config,
+        label,
+        state,
+        step
+      } from "/assets/module-export-nested-initializer-commas.mjs";
+
+      window.moduleNestedInitializerOrder.push("module");
+      window.moduleNestedInitializerImmediate = `${config.answer}:${config.nested.join("-")}:${label}:${state.count}:${step}`;
+
+      setTimeout(() => {
+        window.moduleNestedInitializerOrder.push("timeout");
+        window.moduleNestedInitializerLater = `${config.meta.ok}:${state.count}:${step}`;
+        window.moduleNestedInitializerFinalOrder = window.moduleNestedInitializerOrder.join(",");
+      }, 0);
+    </script>
+  </body>
+</html>

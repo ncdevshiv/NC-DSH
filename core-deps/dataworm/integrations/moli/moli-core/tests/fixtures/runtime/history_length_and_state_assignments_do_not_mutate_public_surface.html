@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body
+    data-before-length=""
+    data-after-length=""
+    data-before-state=""
+    data-after-state=""
+  >
+    <script>
+      history.pushState({ x: 1 }, "", "#one");
+      document.body.setAttribute("data-before-length", String(history.length));
+      document.body.setAttribute(
+        "data-before-state",
+        JSON.stringify(history.state)
+      );
+
+      history.length = 99;
+      history.state = { y: 2 };
+
+      document.body.setAttribute("data-after-length", String(history.length));
+      document.body.setAttribute(
+        "data-after-state",
+        JSON.stringify(history.state)
+      );
+    </script>
+  </body>
+</html>

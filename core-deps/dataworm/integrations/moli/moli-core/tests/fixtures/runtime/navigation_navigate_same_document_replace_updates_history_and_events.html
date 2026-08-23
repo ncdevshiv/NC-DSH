@@ -1,0 +1,93 @@
+<!doctype html>
+<body></body>
+<script>
+  const order = [];
+  let committed = false;
+  let finished = false;
+
+  window.addEventListener("popstate", () => {
+    order.push("popstate:" + location.hash);
+  });
+
+  window.addEventListener("hashchange", () => {
+    order.push("hashchange:" + location.hash);
+  });
+
+  navigation.addEventListener("currententrychange", (event) => {
+    order.push(
+      "cec:" +
+        String(event.navigationType) +
+        ":" +
+        location.hash +
+        ":" +
+        (event.from ? new URL(event.from.url).hash || "(none)" : "(null)")
+    );
+    queueMicrotask(() => {
+      order.push(
+        "cec-micro:" + location.hash + ":" + String(history.state?.step ?? "null")
+      );
+    });
+  });
+
+  history.replaceState({ base: 1 }, "", "#base");
+
+  const beforeLen = history.length;
+  const beforeUrl = navigation.currentEntry.url;
+  const result = navigation.navigate(location.pathname + "#dest-replace", {
+    history: "replace",
+    state: { step: 9 },
+  });
+  result.committed.then((entry) => {
+    committed = true;
+    order.push(
+      "committed:" +
+        new URL(entry.url).hash +
+        ":" +
+        String(entry === navigation.currentEntry)
+    );
+  });
+  result.finished.then((entry) => {
+    finished = true;
+    order.push(
+      "finished:" +
+        new URL(entry.url).hash +
+        ":" +
+        String(entry === navigation.currentEntry)
+    );
+  });
+
+  document.body.setAttribute(
+    "data-sync",
+    [
+      "hash=" + location.hash,
+      "len=" + history.length,
+      "current=" + (new URL(navigation.currentEntry.url).hash || "(none)"),
+      "beforeLen=" + beforeLen,
+      "beforeUrl=" + (new URL(beforeUrl).hash || "(none)"),
+      "history=" + JSON.stringify(history.state),
+      "entry=" + JSON.stringify(navigation.currentEntry.getState()),
+      "hasPromises=" + (!!result && !!result.committed && !!result.finished),
+      "committed=" + committed,
+      "finished=" + finished,
+      "order=" + order.join(","),
+    ].join("|")
+  );
+
+  setTimeout(() => {
+    document.body.setAttribute(
+      "data-final",
+      [
+        "hash=" + location.hash,
+        "len=" + history.length,
+        "current=" + (new URL(navigation.currentEntry.url).hash || "(none)"),
+        "history=" + JSON.stringify(history.state),
+        "entry=" + JSON.stringify(navigation.currentEntry.getState()),
+        "committed=" + committed,
+        "finished=" + finished,
+        "order=" + order.join(","),
+        "canBack=" + navigation.canGoBack,
+        "canForward=" + navigation.canGoForward,
+      ].join("|")
+    );
+  }, 0);
+</script>

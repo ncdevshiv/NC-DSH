@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const target = new EventTarget();
+  const calls = [];
+  function first(event) {
+    calls.push("first:" + event.type + ":" + String(event.target === target));
+  }
+  function second() {
+    calls.push("second");
+  }
+
+  target.addEventListener("alpha", first);
+  target.addEventListener("alpha", second);
+  assert_true(target.dispatchEvent(new Event("alpha")), "dispatchEvent should return true");
+  target.removeEventListener("alpha", second);
+  assert_true(target.dispatchEvent(new Event("alpha")), "second dispatch should still return true");
+  assert_array_equals(calls, ["first:alpha:true", "second", "first:alpha:true"]);
+}, "EventTarget dispatches events and removes listeners");
+</script>

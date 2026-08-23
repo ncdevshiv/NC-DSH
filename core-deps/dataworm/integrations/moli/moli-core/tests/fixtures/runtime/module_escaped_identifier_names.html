@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleEscapedIdentifierNamesOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleEscapedIdentifierNamesOrder.push("dcl");
+        window.moduleEscapedIdentifierNamesFinalOrder =
+          window.moduleEscapedIdentifierNamesOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import def\u0061ultValue, {
+        answer as ans\u0077er,
+        makeValue as ma\u006beValue,
+        ValueBox as Val\u0075eBox,
+      } from "/assets/module-escaped-identifier-names.mjs";
+
+      window.moduleEscapedIdentifierNamesOrder.push("module");
+      window.moduleEscapedIdentifierNamesResult =
+        `${defaultValue()}:${answer}:${makeValue()}:${ValueBox.kind()}`;
+    </script>
+  </body>
+</html>

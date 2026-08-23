@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.slowChunkOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.slowChunkOrder.push("dcl");
+        window.slowChunkDclOrder = window.slowChunkOrder.join(",");
+      });
+    </script>
+    <script async src="/assets/parse_time_async_slow_chunked_first.js"></script>
+    <!-- slow-tail-padding -->
+    <script defer src="/assets/parse_time_async_slow_chunked_defer.js"></script>
+  </head>
+  <body>
+    <main id="late">late</main>
+  </body>
+</html>

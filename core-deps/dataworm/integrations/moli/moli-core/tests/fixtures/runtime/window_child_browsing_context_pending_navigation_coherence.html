@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="child" src="about:blank"></iframe>
+    <script>
+      const iframe = document.getElementById("child");
+      let loadCount = 0;
+      let initialWindow = null;
+      let initialDocument = null;
+
+      iframe.addEventListener("load", () => {
+        loadCount += 1;
+        if (loadCount === 1) {
+          const childWindow = iframe.contentWindow;
+          const childDocument = iframe.contentDocument;
+          initialWindow = childWindow;
+          initialDocument = childDocument;
+
+          iframe.src = "/compat/window-child-browsing-context-delayed-child";
+
+          document.body.setAttribute(
+            "data-window-same-immediate",
+            String(childWindow === iframe.contentWindow)
+          );
+          document.body.setAttribute(
+            "data-document-same-immediate",
+            String(childDocument === iframe.contentDocument)
+          );
+          document.body.setAttribute(
+            "data-window-document-same-immediate",
+            String(iframe.contentWindow.document === iframe.contentDocument)
+          );
+          document.body.setAttribute(
+            "data-document-default-view-same-immediate",
+            String(iframe.contentDocument.defaultView === iframe.contentWindow)
+          );
+          document.body.setAttribute(
+            "data-default-view-document-same-immediate",
+            String(iframe.contentDocument.defaultView.document === iframe.contentDocument)
+          );
+          document.body.setAttribute(
+            "data-location-immediate",
+            iframe.contentWindow.location.href
+          );
+          document.body.setAttribute(
+            "data-document-url-immediate",
+            iframe.contentDocument.URL
+          );
+          document.body.setAttribute(
+            "data-current-entry-immediate",
+            iframe.contentWindow.navigation.currentEntry?.url ?? "null"
+          );
+          document.body.setAttribute(
+            "data-document-text-immediate",
+            iframe.contentDocument.body.textContent.trim()
+          );
+
+          queueMicrotask(() => {
+            document.body.setAttribute(
+              "data-window-same-pending-microtask",
+              String(childWindow === iframe.contentWindow)
+            );
+            document.body.setAttribute(
+              "data-document-same-pending-microtask",
+              String(childDocument === iframe.contentDocument)
+            );
+            document.body.setAttribute(
+              "data-window-document-same-pending-microtask",
+              String(iframe.contentWindow.document === iframe.contentDocument)
+            );
+            document.body.setAttribute(
+              "data-document-default-view-same-pending-microtask",
+              String(iframe.contentDocument.defaultView === iframe.contentWindow)
+            );
+            document.body.setAttribute(
+              "data-default-view-document-same-pending-microtask",
+              String(iframe.contentDocument.defaultView.document === iframe.contentDocument)
+            );
+            document.body.setAttribute(
+              "data-location-pending-microtask",
+              iframe.contentWindow.location.href
+            );
+            document.body.setAttribute(
+              "data-document-url-pending-microtask",
+              iframe.contentDocument.URL
+            );
+            document.body.setAttribute(
+              "data-current-entry-pending-microtask",
+              iframe.contentWindow.navigation.currentEntry?.url ?? "null"
+            );
+            document.body.setAttribute(
+              "data-document-text-pending-microtask",
+              iframe.contentDocument.body.textContent.trim()
+            );
+          });
+          return;
+        }
+
+        document.body.setAttribute(
+          "data-window-same-after-load",
+          String(initialWindow === iframe.contentWindow)
+        );
+        document.body.setAttribute(
+          "data-document-replaced-after-load",
+          String(initialDocument !== iframe.contentDocument)
+        );
+        document.body.setAttribute(
+          "data-window-document-same-after-load",
+          String(iframe.contentWindow.document === iframe.contentDocument)
+        );
+        document.body.setAttribute(
+          "data-document-default-view-same-after-load",
+          String(iframe.contentDocument.defaultView === iframe.contentWindow)
+        );
+        document.body.setAttribute(
+          "data-default-view-document-same-after-load",
+          String(iframe.contentDocument.defaultView.document === iframe.contentDocument)
+        );
+        document.body.setAttribute(
+          "data-location-after-load",
+          iframe.contentWindow.location.href
+        );
+        document.body.setAttribute(
+          "data-document-url-after-load",
+          iframe.contentDocument.URL
+        );
+        document.body.setAttribute(
+          "data-current-entry-after-load",
+          iframe.contentWindow.navigation.currentEntry?.url ?? "null"
+        );
+        document.body.setAttribute(
+          "data-document-text-after-load",
+          iframe.contentDocument.body.getAttribute("data-child") ?? "null"
+        );
+        document.body.setAttribute(
+          "data-child-script-ran-after-load",
+          iframe.contentDocument.body.getAttribute("data-script-ran") ?? "null"
+        );
+      });
+    </script>
+  </body>
+</html>

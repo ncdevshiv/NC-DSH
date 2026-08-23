@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <body
+    data-set-non-important=""
+    data-prop-non-important=""
+    data-set-to-important=""
+    data-important-to-non-important=""
+    data-prop-important-to-non-important=""
+    data-important-to-important=""
+  >
+    <div id="element"></div>
+    <script>
+      const body = document.body;
+      const element = document.getElementById('element');
+
+      element.style.cssText = '';
+      element.style.setProperty('color', 'red');
+      element.style.setProperty('color', 'green');
+      body.setAttribute(
+        'data-set-non-important',
+        String(
+          element.style.getPropertyValue('color') === 'green' &&
+            element.style.getPropertyPriority('color') === ''
+        )
+      );
+
+      element.style.cssText = '';
+      element.style.color = 'red';
+      element.style.color = 'green';
+      body.setAttribute(
+        'data-prop-non-important',
+        String(
+          element.style.getPropertyValue('color') === 'green' &&
+            element.style.getPropertyPriority('color') === ''
+        )
+      );
+
+      element.style.cssText = '';
+      element.style.setProperty('color', 'red');
+      element.style.setProperty('color', 'green', 'important');
+      body.setAttribute(
+        'data-set-to-important',
+        String(
+          element.style.getPropertyValue('color') === 'green' &&
+            element.style.getPropertyPriority('color') === 'important'
+        )
+      );
+
+      element.style.cssText = '';
+      element.style.setProperty('color', 'red', 'important');
+      element.style.setProperty('color', 'green');
+      body.setAttribute(
+        'data-important-to-non-important',
+        String(
+          element.style.getPropertyValue('color') === 'green' &&
+            element.style.getPropertyPriority('color') === ''
+        )
+      );
+
+      element.style.cssText = '';
+      element.style.setProperty('color', 'red', 'important');
+      element.style.color = 'green';
+      body.setAttribute(
+        'data-prop-important-to-non-important',
+        String(
+          element.style.getPropertyValue('color') === 'green' &&
+            element.style.getPropertyPriority('color') === ''
+        )
+      );
+
+      element.style.cssText = '';
+      element.style.setProperty('color', 'red', 'important');
+      element.style.setProperty('color', 'green', 'important');
+      body.setAttribute(
+        'data-important-to-important',
+        String(
+          element.style.getPropertyValue('color') === 'green' &&
+            element.style.getPropertyPriority('color') === 'important'
+        )
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+# …except the built dashboard bundle, which is committed into the package
+# (end users need zero Node tooling; see web/ + dataworm/webapp/dist).
+!dataworm/webapp/dist/
+!dataworm/webapp/dist/**
+.venv/
+venv/
+
+# Frontend tooling
+web/node_modules/
+
+# Compiled extension (built by maturin; never commit per-interpreter binaries)
+dataworm/_rust*.pyd
+dataworm/_rust*.so
+dataworm/_rust*.pyi
+
+# DataWorm's own output
+.dataworm/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.benchmarks/
+
+# Editors / agents
+.zcode/
+.vscode/
+.idea/
+
+# Rust
+rust/target/
+
+# Local update/install artifacts
+dw-up.log
+dw-up.bat
+

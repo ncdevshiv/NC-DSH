@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+html,body{margin:0;padding:0;background:white}
+#stage{position:relative;width:1200px;height:620px}
+.case{position:absolute;height:70px;background:rgb(235,235,235);font-size:0}
+.auto-float{float:left;background:rgb(200,220,255)}
+.right{float:right}
+.primary,.secondary{display:inline-block;height:20px}
+.primary{width:160px;background:rgb(255,0,0)}
+.secondary{width:80px;margin-left:8px;background:rgb(0,0,255)}
+#baidu-case{left:20px;top:20px;width:1076px}
+#baidu-logo{float:left;margin-top:17px;background:rgb(220,255,220)}
+#baidu-logo img{display:inline;width:101px;height:33px}
+#baidu-main{float:left;width:748px;height:45px;margin:15px 0 8px 18px;background:rgb(255,220,220)}
+#max-case{left:20px;top:120px;width:300px}
+#limit-case{left:380px;top:120px;width:200px}
+#min-case{left:640px;top:120px;width:120px}
+#right-case{left:20px;top:220px;width:300px}
+#margin-case{left:380px;top:220px;width:200px}
+#max-clamp-case{left:640px;top:220px;width:300px}
+#min-clamp-case{left:20px;top:320px;width:300px}
+#specified-case{left:380px;top:320px;width:300px}
+#edge-case{left:740px;top:320px;width:300px}
+#block-control-case{left:20px;top:420px;width:300px}
+#replaced-control-case{left:380px;top:420px;width:300px}
+#stretch-control-case{left:740px;top:420px;width:300px}
+#inline-margin-case{left:20px;top:520px;width:200px}
+#negative-margin-case{left:380px;top:520px;width:200px}
+#inline-negative-margin-case{left:740px;top:520px;width:200px}
+#margin-float{margin-left:10px;margin-right:15px}
+#inline-margin-float{margin-left:10px;margin-right:15px}
+#negative-margin-float,#inline-negative-margin-float{margin-left:-10px;margin-right:-15px}
+#max-clamp{max-width:200px}
+#min-clamp{min-width:260px}
+#specified{width:120px}
+#edge{margin-left:10px;margin-right:15px;padding:0 10px;border:2px solid rgb(0,0,0)}
+#block-control{float:left;background:rgb(220,255,220)}
+#block-control>div{width:180px;height:20px;background:rgb(0,128,0)}
+#replaced-control{float:left;width:101px;height:33px}
+#stretch-control{background:rgb(255,240,200)}
+</style>
+<div id="stage">
+  <div id="baidu-case" class="case"><a id="baidu-logo"><img width="101" height="33" alt=""></a><div id="baidu-main"></div></div>
+  <div id="max-case" class="case"><div id="max" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="limit-case" class="case"><div id="limit" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="min-case" class="case"><div id="min" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="right-case" class="case"><div id="right" class="auto-float right"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="margin-case" class="case"><div id="margin-float" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="max-clamp-case" class="case"><div id="max-clamp" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="min-clamp-case" class="case"><div id="min-clamp" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="specified-case" class="case"><div id="specified" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="edge-case" class="case"><div id="edge" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="block-control-case" class="case"><div id="block-control"><div></div></div></div>
+  <div id="replaced-control-case" class="case"><img id="replaced-control" width="101" height="33" alt=""></div>
+  <div id="stretch-control-case" class="case"><div id="stretch-control"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="inline-margin-case" class="case"><span></span><div id="inline-margin-float" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="negative-margin-case" class="case"><div id="negative-margin-float" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+  <div id="inline-negative-margin-case" class="case"><span></span><div id="inline-negative-margin-float" class="auto-float"><span class="primary"></span> <span class="secondary"></span></div></div>
+</div>
+<pre id="output"></pre>
+<script>
+const ids=['baidu-case','baidu-logo','baidu-logo-image','baidu-main','max-case','max','limit-case','limit','min-case','min','right-case','right','margin-case','margin-float','max-clamp-case','max-clamp','min-clamp-case','min-clamp','specified-case','specified','edge-case','edge','block-control-case','block-control','replaced-control-case','replaced-control','stretch-control-case','stretch-control','inline-margin-case','inline-margin-float','negative-margin-case','negative-margin-float','inline-negative-margin-case','inline-negative-margin-float'];
+document.querySelector('#baidu-logo img').id='baidu-logo-image';
+const rect=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height]};
+const geometry=Object.fromEntries(ids.map(id=>[id,rect(document.getElementById(id))]));
+const computed=Object.fromEntries(['baidu-logo','max','limit','min','right','margin-float','max-clamp','min-clamp','specified','edge','block-control','replaced-control','stretch-control','inline-margin-float','negative-margin-float','inline-negative-margin-float'].map(id=>{const s=getComputedStyle(document.getElementById(id));return [id,{display:s.display,float:s.float,width:s.width,boxSizing:s.boxSizing}]}));
+document.getElementById('output').textContent=JSON.stringify({geometry,computed});
+</script>

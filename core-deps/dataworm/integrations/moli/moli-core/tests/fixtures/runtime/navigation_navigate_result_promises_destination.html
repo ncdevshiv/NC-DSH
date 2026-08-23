@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <body
+    data-result-order=""
+    data-source-log=""
+    data-committed-type=""
+    data-committed-url=""
+    data-finished-type=""
+    data-finished-url=""
+  >
+    <script>
+      document.body.setAttribute(
+        "data-result-order",
+        sessionStorage.getItem("navigateResultOrder") ?? "null"
+      );
+      document.body.setAttribute(
+        "data-source-log",
+        sessionStorage.getItem("navigateSourceLog") ?? "null"
+      );
+      document.body.setAttribute(
+        "data-committed-type",
+        sessionStorage.getItem("navigateCommittedType") ?? "null"
+      );
+      document.body.setAttribute(
+        "data-committed-url",
+        sessionStorage.getItem("navigateCommittedUrl") ?? "null"
+      );
+      document.body.setAttribute(
+        "data-finished-type",
+        sessionStorage.getItem("navigateFinishedType") ?? "null"
+      );
+      document.body.setAttribute(
+        "data-finished-url",
+        sessionStorage.getItem("navigateFinishedUrl") ?? "null"
+      );
+    </script>
+  </body>
+</html>

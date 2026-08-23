@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.parserConnectedUnknownSchemeOrder = [];
+      window.parserConnectedUnknownSchemeReadyStates = [];
+      window.parserConnectedUnknownSchemeFlag = false;
+      function unknownSchemeError() {
+        window.parserConnectedUnknownSchemeOrder.push("unknown-error");
+        window.parserConnectedUnknownSchemeReadyStates.push("unknown-error:" + document.readyState);
+        document.write(
+          "<scr" +
+            "ipt>window.parserConnectedUnknownSchemeOrder.push('unknown-written');window.parserConnectedUnknownSchemeUnknownSawFlag=String(window.parserConnectedUnknownSchemeFlag);window.parserConnectedUnknownSchemeFlag=true;window.parserConnectedUnknownSchemeReadyStates.push('unknown-written:' + document.readyState);</scr" +
+            "ipt>"
+        );
+      }
+      function missingScriptError() {
+        window.parserConnectedUnknownSchemeOrder.push("missing-error");
+        window.parserConnectedUnknownSchemeReadyStates.push("missing-error:" + document.readyState);
+        document.write(
+          "<scr" +
+            "ipt>window.parserConnectedUnknownSchemeOrder.push('missing-written');window.parserConnectedUnknownSchemeMissingSawFlag=String(window.parserConnectedUnknownSchemeFlag);window.parserConnectedUnknownSchemeReadyStates.push('missing-written:' + document.readyState);</scr" +
+            "ipt>"
+        );
+      }
+    </script>
+    <script onerror="unknownSchemeError();" src="unknown://example/"></script>
+    <script onerror="missingScriptError();" src="/assets/must-not-exist-parser-classic.js"></script>
+    <script>
+      window.parserConnectedUnknownSchemeOrder.push("after-inline");
+      window.parserConnectedUnknownSchemeScriptCount =
+        document.getElementsByTagName("script").length;
+      window.parserConnectedUnknownSchemeFinalOrder =
+        window.parserConnectedUnknownSchemeOrder.join(",");
+      window.parserConnectedUnknownSchemeFinalReadyStates =
+        window.parserConnectedUnknownSchemeReadyStates.join(",");
+    </script>
+  </head>
+  <body>
+    <main id="after">after</main>
+  </body>
+</html>

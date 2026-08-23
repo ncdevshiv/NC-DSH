@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_type_error(callback, description) {
+  let thrown = null;
+  try {
+    callback();
+  } catch (error) {
+    thrown = error;
+  }
+  assert_true(thrown instanceof TypeError, (description || "assert_throws_type_error") + ": expected TypeError");
+}
+
+function test_character_data_conversion(create, type) {
+  test(function () {
+    assert_throws_type_error(function () {
+      create().appendData();
+    }, "appendData() requires one argument");
+    assert_throws_type_error(function () {
+      create().appendData(Symbol());
+    }, "appendData() must propagate DOMString conversion errors");
+  }, type + ".appendData() validates required DOMString conversion");
+
+  test(function () {
+    assert_throws_type_error(function () {
+      create().insertData();
+    }, "insertData() requires two arguments");
+    assert_throws_type_error(function () {
+      create().insertData(Symbol(), "x");
+    }, "insertData() must propagate unsigned long conversion errors");
+  }, type + ".insertData() validates required unsigned long conversion");
+
+  test(function () {
+    assert_throws_type_error(function () {
+      create().deleteData();
+    }, "deleteData() requires two arguments");
+    assert_throws_type_error(function () {
+      create().deleteData(Symbol(), 1);
+    }, "deleteData() must propagate unsigned long conversion errors");
+  }, type + ".deleteData() validates required unsigned long conversion");
+
+  test(function () {
+    assert_throws_type_error(function () {
+      create().replaceData();
+    }, "replaceData() requires three arguments");
+    assert_throws_type_error(function () {
+      create().replaceData(Symbol(), 1, "x");
+    }, "replaceData() must propagate unsigned long conversion errors");
+  }, type + ".replaceData() validates required unsigned long conversion");
+
+  test(function () {
+    assert_throws_type_error(function () {
+      create().substringData();
+    }, "substringData() requires two arguments");
+    assert_throws_type_error(function () {
+      create().substringData(Symbol(), 1);
+    }, "substringData() must propagate unsigned long conversion errors");
+  }, type + ".substringData() validates required unsigned long conversion");
+}
+
+function test_text_split_conversion(create, type) {
+  test(function () {
+    assert_throws_type_error(function () {
+      create().splitText();
+    }, "splitText() requires one argument");
+    assert_throws_type_error(function () {
+      create().splitText(Symbol());
+    }, "splitText() must propagate unsigned long conversion errors");
+  }, type + ".splitText() validates required unsigned long conversion");
+
+  test(function () {
+    const node = create();
+    const split = node.splitText(undefined);
+    assert_equals(node.data, "", "undefined converts to offset 0");
+    assert_equals(split.data, "test", "split remainder");
+  }, type + ".splitText() treats undefined as offset 0");
+}
+
+test_character_data_conversion(function () { return document.createTextNode("test"); }, "Text");
+test_character_data_conversion(function () { return document.createTextNode("test").cloneNode(); }, "Detached Text");
+test_character_data_conversion(function () { return document.createComment("test"); }, "Comment");
+test_character_data_conversion(function () { return document.createComment("test").cloneNode(); }, "Detached Comment");
+
+test_text_split_conversion(function () { return document.createTextNode("test"); }, "Text");
+test_text_split_conversion(function () { return document.createTextNode("test").cloneNode(); }, "Detached Text");
+</script>

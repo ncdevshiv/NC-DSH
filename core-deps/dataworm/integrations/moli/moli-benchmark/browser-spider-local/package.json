@@ -1,0 +1,18 @@
+{
+  "name": "browser-spider-local-bench",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "bench": "node bench.mjs",
+    "bench:assert": "node bench.mjs --assert-no-stale-page-leakage",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.52.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

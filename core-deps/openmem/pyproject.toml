@@ -1,0 +1,81 @@
+[project]
+name = "openmem"
+version = "2.0.0"
+description = "Agent-agnostic autonomous memory system for AI agents"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = [
+    "lancedb>=0.12.0",
+    "pyarrow>=16.0.0",
+    "numpy>=1.24.0",
+    "python-dateutil>=2.8.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+mcp = [
+    "mcp>=2.0.0",
+]
+ml = [
+    "torch>=2.0.0",
+    "sentence-transformers>=2.2.0",
+    "transformers>=4.30.0",
+    "pandas>=2.0.0",
+]
+llm = [
+    "litellm>=1.0.0",
+]
+honcho = [
+    "honcho-ai>=1.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+openmem = "openmem_cli:main"
+openmem-mcp = "mcp_server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Top-level console-script modules; bin/, tests/, skills/, data/,
+# generated_skills/ stay out of the distribution.
+py-modules = ["openmem_cli", "mcp_server"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "memory_store*",
+    "learning_loop*",
+    "autonomous*",
+    "core*",
+    "agents*",
+]
+exclude = [
+    "bin*",
+    "tests*",
+    "skills*",
+    "data*",
+    "generated_skills*",
+    ".venv*",
+]
+
+[tool.setuptools.package-data]
+# Ship skill assets inside every package that has a skill/ data directory
+# (currently agents.<name>/skill/{SKILL.md,config.json,learner.py}).
+"*" = [
+    "skill/SKILL.md",
+    "skill/config.json",
+    "skill/learner.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"

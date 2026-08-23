@@ -1,0 +1,2 @@
+Reporting-Endpoints: csp="/wpt/runtime/csp/reporting/collect?token=document-report-to-report-only-websocket"
+Content-Security-Policy-Report-Only: connect-src 'none'; report-to csp

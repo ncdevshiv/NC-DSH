@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      var childShared = 'shared-from-first-script';
+      function childReader() {
+        return childShared;
+      }
+    </script>
+    <script>
+      document.body.setAttribute('data-shared', childShared);
+      document.body.setAttribute('data-reader', childReader());
+      document.body.setAttribute('data-window-shared', window.childShared);
+      document.body.setAttribute(
+        'data-window-reader-type',
+        typeof window.childReader
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    worker.addEventListener("message", resolve, { once: true });
+    worker.addEventListener("error", function (event) {
+      reject(new Error("Worker error: " + event.message));
+    }, { once: true });
+  });
+}
+
+async function assert_worker_error(source, expectedFragments, description) {
+  const previousOnerror = window.onerror;
+  let messageSeen = false;
+  const worker = new Worker(worker_url(source), { type: "module" });
+
+  try {
+    window.onerror = function () {
+      return true;
+    };
+    worker.onmessage = function () {
+      messageSeen = true;
+    };
+
+    const event = await new Promise(function (resolve) {
+      worker.onerror = function (event) {
+        resolve(event);
+        return true;
+      };
+    });
+
+    assert_equals(event.type, "error", description + " should dispatch an error event");
+    const lowerMessage = String(event.message).toLowerCase();
+    assert_true(expectedFragments.every(function (fragment) {
+      return lowerMessage.indexOf(fragment.toLowerCase()) !== -1;
+    }), description + " should expose the expected error reason");
+    assert_false(messageSeen, description + " should stop module evaluation");
+  } finally {
+    window.onerror = previousOnerror;
+    worker.terminate();
+  }
+}
+
+promise_test(async function () {
+  const jsonUrl = new URL(
+    "/wpt/runtime/worker/module-json-mime/config.data",
+    location.href
+  ).href;
+  const charsetJsonUrl = new URL(
+    "/wpt/runtime/worker/module-json-mime/json-with-charset.data",
+    location.href
+  ).href;
+  const javascriptJsonPathUrl = new URL(
+    "/wpt/runtime/worker/module-json-mime/javascript.json",
+    location.href
+  ).href;
+  const source = [
+    "import config from " + JSON.stringify(jsonUrl) + " with { type: 'json' };",
+    "import charsetConfig from " + JSON.stringify(charsetJsonUrl) + " with { type: 'json' };",
+    "import jsValue from " + JSON.stringify(javascriptJsonPathUrl) + ";",
+    "postMessage({",
+    "  configName: config.name,",
+    "  configNested: config.nested.value,",
+    "  charsetName: charsetConfig.name,",
+    "  jsValue,",
+    "  importScriptsType: typeof importScripts",
+    "});",
+  ].join("\n");
+  const worker = new Worker(worker_url(source), { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.configName, "runtime-json", "application/*+json should be treated as a JSON module");
+    assert_equals(message.data.configNested, 11, "JSON module payload should be parsed from HTTP response bytes");
+    assert_equals(message.data.charsetName, "charset-json", "application/json parameters should not hide the JSON media type");
+    assert_equals(message.data.jsValue, "javascript-from-json-path", ".json paths with JavaScript MIME should stay JavaScript modules");
+    assert_equals(message.data.importScriptsType, "function", "module workers should expose WorkerGlobalScope.importScripts");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers classify HTTP JSON modules by Content-Type instead of URL path");
+
+promise_test(async function () {
+  const jsonUrl = new URL(
+    "/wpt/runtime/worker/module-json-mime/config.data",
+    location.href
+  ).href;
+  const javascriptJsonPathUrl = new URL(
+    "/wpt/runtime/worker/module-json-mime/javascript.json",
+    location.href
+  ).href;
+  const plainJsonUrl = new URL(
+    "/wpt/runtime/worker/module-json-mime/plain-json.json",
+    location.href
+  ).href;
+
+  await assert_worker_error(
+    [
+      "import config from " + JSON.stringify(jsonUrl) + ";",
+      "postMessage(config);",
+    ].join("\n"),
+    ["json"],
+    "HTTP JSON MIME without type=json",
+  );
+
+  await assert_worker_error(
+    [
+      "import value from " + JSON.stringify(javascriptJsonPathUrl) + " with { type: 'json' };",
+      "postMessage(value);",
+    ].join("\n"),
+    ["json"],
+    "HTTP JavaScript MIME with type=json",
+  );
+
+  await assert_worker_error(
+    [
+      "import value from " + JSON.stringify(plainJsonUrl) + " with { type: 'json' };",
+      "postMessage(value);",
+    ].join("\n"),
+    ["json"],
+    "HTTP text/plain JSON-like body with type=json",
+  );
+}, "Dedicated module workers reject HTTP JSON import-attribute mismatches by Content-Type");
+</script>

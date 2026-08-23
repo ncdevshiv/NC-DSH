@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleDynamicImportCommentOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleDynamicImportCommentOrder.push("dcl");
+        window.moduleDynamicImportCommentFinalOrder =
+          window.moduleDynamicImportCommentOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      window.moduleDynamicImportCommentOrder.push("module-start");
+      import(
+        /* before */ "/assets/module-dynamic-import-comments-target.mjs" /* after */,
+      ).then(ns => {
+        window.moduleDynamicImportCommentOrder.push(`resolved:${ns.value}`);
+        window.moduleDynamicImportCommentResolved = ns.value;
+        window.moduleDynamicImportCommentFinalOrder =
+          window.moduleDynamicImportCommentOrder.join(",");
+      });
+      window.moduleDynamicImportCommentOrder.push("module-end");
+    </script>
+  </body>
+</html>

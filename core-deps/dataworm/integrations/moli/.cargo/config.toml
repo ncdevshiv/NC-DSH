@@ -1,0 +1,12 @@
+# Most local tests spin up direct in-process HTTP servers and assert on
+# exact request/response behavior. In this environment, inheriting the
+# shell proxy settings would route those test requests through the host
+# proxy and cause broad unrelated failures, so test builds explicitly
+# clear curl's proxy when no proxy override was requested.
+[env]
+all_proxy = { value = "", force = true }
+http_proxy = { value = "", force = true }
+https_proxy = { value = "", force = true }
+ALL_PROXY = { value = "", force = true }
+HTTP_PROXY = { value = "", force = true }
+HTTPS_PROXY = { value = "", force = true }

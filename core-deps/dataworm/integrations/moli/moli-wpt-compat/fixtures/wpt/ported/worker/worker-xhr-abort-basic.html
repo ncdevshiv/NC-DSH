@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_worker_result(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+    }
+
+    function onMessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onError(event) {
+      cleanup();
+      reject(event.error || new Error(event.message || "worker error"));
+    }
+
+    worker.addEventListener("message", onMessage);
+    worker.addEventListener("error", onError);
+  });
+}
+
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-xhr-worker.js",
+    location.href,
+  ).href;
+  const worker = new Worker(workerUrl);
+
+  try {
+    worker.postMessage({ mode: "abort" });
+    const message = await next_worker_result(worker);
+
+    assert_equals(message.data.mode, "abort", "worker should report the abort mode");
+    assert_equals(message.data.readyState, 0, "abort should reset readyState to UNSENT");
+    assert_equals(message.data.status, 0, "abort should clear status");
+    assert_equals(message.data.responseText, "", "abort should clear responseText");
+    assert_equals(message.data.responseURL, "", "abort should clear responseURL");
+    assert_array_equals(
+      message.data.events,
+      ["abort", "loadend:4:0"],
+      "worker xhr abort should report DONE during loadend, suppress load/error, and ignore late completion",
+    );
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated workers abort in-flight XMLHttpRequest without surfacing late completion");
+</script>

@@ -1,0 +1,85 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function enumerableOwnPropsForIn(object) {
+  const props = [];
+  for (const prop in object) {
+    if (Object.prototype.hasOwnProperty.call(object, prop)) {
+      props.push(prop);
+    }
+  }
+  return props;
+}
+
+function enumerableOwnPropsFromDescriptors(object) {
+  return Object.getOwnPropertyNames(object).filter(function (name) {
+    return Object.getOwnPropertyDescriptor(object, name).enumerable;
+  });
+}
+
+function assert_all_own_props_are_attr(map) {
+  for (const propName of Object.getOwnPropertyNames(map)) {
+    assert_true(map[propName] instanceof Attr, "map has an Attr for " + propName);
+  }
+}
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttribute("a", "");
+  el.setAttribute("b", "");
+
+  assert_array_equals(enumerableOwnPropsForIn(el.attributes), ["0", "1"]);
+  assert_array_equals(enumerableOwnPropsFromDescriptors(el.attributes), ["0", "1"]);
+  assert_array_equals(Object.getOwnPropertyNames(el.attributes), ["0", "1", "a", "b"]);
+  assert_all_own_props_are_attr(el.attributes);
+}, "NamedNodeMap own property names expose indexed and non-enumerable named properties");
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttributeNS("", "a", "");
+  el.setAttribute("b", "");
+  el.setAttributeNS("foo", "a", "");
+
+  assert_array_equals(enumerableOwnPropsForIn(el.attributes), ["0", "1", "2"]);
+  assert_array_equals(enumerableOwnPropsFromDescriptors(el.attributes), ["0", "1", "2"]);
+  assert_array_equals(Object.getOwnPropertyNames(el.attributes), ["0", "1", "2", "a", "b"]);
+  assert_all_own_props_are_attr(el.attributes);
+}, "NamedNodeMap own property names deduplicate same-name attributes");
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttributeNS("foo", "a:b", "");
+  el.setAttributeNS("foo", "c:d", "");
+  el.setAttributeNS("bar", "a:b", "");
+
+  assert_array_equals(enumerableOwnPropsForIn(el.attributes), ["0", "1", "2"]);
+  assert_array_equals(enumerableOwnPropsFromDescriptors(el.attributes), ["0", "1", "2"]);
+  assert_array_equals(Object.getOwnPropertyNames(el.attributes), ["0", "1", "2", "a:b", "c:d"]);
+  assert_all_own_props_are_attr(el.attributes);
+}, "NamedNodeMap own property names deduplicate prefixed qualified names");
+
+test(function () {
+  const el = document.createElement("div");
+  el.setAttributeNS("foo", "A:B", "");
+  el.setAttributeNS("bar", "c:D", "");
+  el.setAttributeNS("baz", "e:F", "");
+  el.setAttributeNS("qux", "g:h", "");
+  el.setAttributeNS("", "I", "");
+  el.setAttributeNS("", "j", "");
+
+  assert_array_equals(Object.getOwnPropertyNames(el.attributes), [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "g:h",
+    "j",
+  ]);
+  assert_all_own_props_are_attr(el.attributes);
+}, "HTML element NamedNodeMap named properties only include all-lowercase qualified names");
+</script>

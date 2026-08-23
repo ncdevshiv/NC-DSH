@@ -1,0 +1,185 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "time";
+
+  input.value = "23:59";
+  assert_equals(input.value, "23:59", "HH:mm values should be preserved");
+
+  input.value = "01:02:03.004";
+  assert_equals(input.value, "01:02:03.004", "time values with seconds and milliseconds should be preserved");
+
+  input.value = "24:00";
+  assert_equals(input.value, "", "hour 24 should sanitize to empty");
+
+  input.value = "12:60";
+  assert_equals(input.value, "", "minute 60 should sanitize to empty");
+
+  input.value = "12:34:60";
+  assert_equals(input.value, "", "second 60 should sanitize to empty");
+
+  input.value = "1:02";
+  assert_equals(input.value, "", "non-normalized time strings should sanitize to empty");
+}, "time input value setter sanitizes invalid time strings");
+
+test(function () {
+  withHost(
+    `<input id="time" type="time" value="24:00">`,
+    function (host) {
+      const input = host.querySelector("#time");
+      assert_equals(input.getAttribute("value"), "24:00", "content attribute should keep the original time text");
+      assert_equals(input.value, "", "invalid initial time content value should sanitize to empty");
+
+      input.setAttribute("value", "10:30");
+      assert_equals(input.value, "10:30", "non-dirty valid time attribute changes should update the current value");
+
+      input.setAttribute("value", "10:99");
+      assert_equals(input.value, "", "non-dirty invalid time attribute changes should sanitize the current value");
+    },
+  );
+}, "time input initial value and non-dirty value attribute sync use time sanitization");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "not-a-time";
+  assert_equals(input.value, "not-a-time", "text input should keep the script-set value");
+
+  input.type = "time";
+  assert_equals(input.value, "", "switching to time should sanitize the existing value");
+}, "changing an input to type=time sanitizes the current value");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "time";
+  input.min = "09:00";
+  input.max = "17:00";
+
+  input.value = "08:59";
+  assert_true(input.validity.rangeUnderflow, "time below min should set rangeUnderflow");
+  assert_false(input.validity.rangeOverflow, "time below min should not set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeUnderflow should fail checkValidity");
+
+  input.value = "17:01";
+  assert_false(input.validity.rangeUnderflow, "time above max should not set rangeUnderflow");
+  assert_true(input.validity.rangeOverflow, "time above max should set rangeOverflow");
+  assert_false(input.checkValidity(), "rangeOverflow should fail checkValidity");
+
+  input.value = "09:00";
+  assert_false(input.validity.rangeUnderflow, "time equal to min should pass");
+  assert_false(input.validity.rangeOverflow, "time equal to min should not overflow");
+  assert_true(input.validity.valid, "time at min should be valid");
+
+  input.min = "bad";
+  input.max = "also-bad";
+  input.value = "18:00";
+  assert_false(input.validity.rangeUnderflow, "invalid time min should be ignored");
+  assert_false(input.validity.rangeOverflow, "invalid time max should be ignored");
+  assert_true(input.validity.valid, "invalid time range attributes should not make the control invalid");
+}, "time input validity reflects simple min/max range constraints");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "time";
+  input.min = "09:00";
+  input.step = "120";
+
+  input.value = "09:02";
+  assert_false(input.validity.stepMismatch, "time aligned to min + n * step seconds should pass");
+  assert_true(input.checkValidity(), "aligned time should pass checkValidity");
+
+  input.value = "09:01";
+  assert_true(input.validity.stepMismatch, "time not aligned to min + n * step seconds should set stepMismatch");
+  assert_false(input.validity.valid, "stepMismatch should make the time invalid");
+
+  input.step = "any";
+  assert_false(input.validity.stepMismatch, "time step=any should disable stepMismatch");
+  assert_true(input.validity.valid, "step=any should make the time valid when no other constraints fail");
+}, "time input validity reflects stepMismatch in seconds");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "time";
+
+  input.value = "00:00:30";
+  assert_true(input.validity.stepMismatch, "default time step should be 60 seconds");
+
+  input.step = "bad";
+  assert_true(input.validity.stepMismatch, "invalid time step should fall back to the 60 second default");
+
+  input.step = "0";
+  assert_true(input.validity.stepMismatch, "zero time step should fall back to the 60 second default");
+
+  input.step = "30";
+  assert_false(input.validity.stepMismatch, "explicit 30 second step should allow aligned values");
+}, "time input invalid step values fall back to the time default step");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "time";
+
+  assert_true(Number.isNaN(input.valueAsNumber), "empty time input should expose NaN");
+
+  input.value = "01:02:03.004";
+  assert_equals(input.valueAsNumber, 3723004, "time valueAsNumber should expose milliseconds since midnight");
+
+  input.valueAsNumber = 0;
+  assert_equals(input.value, "00:00", "time valueAsNumber setter should write midnight");
+
+  input.valueAsNumber = 3723004;
+  assert_equals(input.value, "01:02:03.004", "time valueAsNumber setter should write whole milliseconds");
+
+  input.valueAsNumber = NaN;
+  assert_equals(input.value, "", "NaN time valueAsNumber setter should clear the value");
+  assert_true(Number.isNaN(input.valueAsNumber), "cleared time input should expose NaN");
+}, "time input valueAsNumber getter and setter round-trip milliseconds since midnight");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "time";
+  input.value = "12:00";
+
+  assert_throws_name("TypeError", function () {
+    input.valueAsNumber = Infinity;
+  }, "setting time valueAsNumber to Infinity should throw TypeError");
+  assert_equals(input.value, "12:00", "failed infinite valueAsNumber setter should not change time value");
+
+  input.valueAsNumber = -3600000;
+  assert_equals(input.value, "23:00", "negative time valueAsNumber setter should wrap within one day");
+
+  input.value = "12:00";
+  input.valueAsNumber = 86400000;
+  assert_equals(input.value, "00:00", "time valueAsNumber at 24h should wrap to midnight");
+
+  input.valueAsNumber = 2.7343337071894478e26;
+  assert_equals(input.value, "10:54:10.944", "large time valueAsNumber setter should wrap within one day");
+}, "time input valueAsNumber setter wraps values into a single day");
+</script>

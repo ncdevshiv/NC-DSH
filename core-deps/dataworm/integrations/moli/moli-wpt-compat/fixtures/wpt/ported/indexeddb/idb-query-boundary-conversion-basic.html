@@ -1,0 +1,134 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+function wait_request(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+promise_test(async () => {
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.cmp(),
+    "cmp first key is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.cmp("a"),
+    "cmp second key is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => indexedDB.cmp(undefined, "a"),
+    "cmp validates present undefined as an IndexedDB key"
+  );
+  assert_equals(indexedDB.cmp("a", "b"), -1, "cmp still compares valid keys");
+
+  const dbname = "idb-query-boundary-conversion-" + Math.random();
+  const storeName = "store";
+  const indexName = "byGroup";
+
+  const openRequest = indexedDB.open(dbname, 1);
+  openRequest.onupgradeneeded = () => {
+    const store = openRequest.result.createObjectStore(storeName);
+    store.createIndex(indexName, "group");
+    store.add({ id: 1, group: "a" }, 1);
+    store.add({ id: 2, group: "b" }, 2);
+  };
+
+  const db = await wait_request(openRequest);
+
+  const readTx = db.transaction(storeName);
+  const store = readTx.objectStore(storeName);
+  const index = store.index(indexName);
+
+  assert_throws_name(
+    "TypeError",
+    () => store.get(),
+    "objectStore.get query is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => store.getKey(),
+    "objectStore.getKey query is required"
+  );
+  assert_throws_name(
+    "DataError",
+    () => store.get(undefined),
+    "objectStore.get validates present undefined as a query"
+  );
+  assert_throws_name(
+    "DataError",
+    () => store.getKey(undefined),
+    "objectStore.getKey validates present undefined as a query"
+  );
+  assert_equals((await wait_request(store.get(1))).id, 1, "objectStore.get keeps valid query behavior");
+  assert_equals(await wait_request(store.getKey(2)), 2, "objectStore.getKey keeps valid query behavior");
+
+  assert_throws_name(
+    "TypeError",
+    () => index.get(),
+    "index.get query is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => index.getKey(),
+    "index.getKey query is required"
+  );
+  assert_throws_name(
+    "DataError",
+    () => index.get(undefined),
+    "index.get validates present undefined as a query"
+  );
+  assert_throws_name(
+    "DataError",
+    () => index.getKey(undefined),
+    "index.getKey validates present undefined as a query"
+  );
+  assert_equals((await wait_request(index.get("a"))).id, 1, "index.get keeps valid query behavior");
+  assert_equals(await wait_request(index.getKey("b")), 2, "index.getKey keeps valid query behavior");
+
+  const writeTx = db.transaction(storeName, "readwrite");
+  const writeStore = writeTx.objectStore(storeName);
+  assert_throws_name(
+    "TypeError",
+    () => writeStore.delete(),
+    "objectStore.delete key is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => writeStore.delete(undefined),
+    "objectStore.delete validates present undefined as a key"
+  );
+  await wait_request(writeStore.delete(1));
+  assert_equals(
+    await wait_request(writeStore.get(1)),
+    undefined,
+    "objectStore.delete keeps valid key behavior"
+  );
+
+  db.close();
+  await wait_request(indexedDB.deleteDatabase(dbname));
+}, "IndexedDB query/key read and delete operations distinguish required any arguments from invalid keys");
+</script>

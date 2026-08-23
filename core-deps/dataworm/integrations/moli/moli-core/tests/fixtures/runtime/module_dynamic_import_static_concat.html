@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleDynamicImportStaticConcatOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleDynamicImportStaticConcatOrder.push("dcl");
+        window.moduleDynamicImportStaticConcatFinalOrder =
+          window.moduleDynamicImportStaticConcatOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      window.moduleDynamicImportStaticConcatOrder.push("module-start");
+
+      const promiseImport = import(
+        "/assets/" + "module-dynamic-import-comments-target.mjs"
+      );
+      window.moduleDynamicImportStaticConcatPromiseLike =
+        !!promiseImport && typeof promiseImport.then === "function";
+
+      promiseImport.then((ns) => {
+        window.moduleDynamicImportStaticConcatPromiseValue = ns.value;
+        window.moduleDynamicImportStaticConcatOrder.push(`promise:${ns.value}`);
+      });
+
+      const awaited = await import(
+        ("/assets/" + "module-dynamic-import-" + "comments-target.mjs")
+      );
+      window.moduleDynamicImportStaticConcatAwaitedValue = awaited.value;
+      window.moduleDynamicImportStaticConcatOrder.push(`awaited:${awaited.value}`);
+      window.moduleDynamicImportStaticConcatFinalOrder =
+        window.moduleDynamicImportStaticConcatOrder.join(",");
+    </script>
+  </body>
+</html>

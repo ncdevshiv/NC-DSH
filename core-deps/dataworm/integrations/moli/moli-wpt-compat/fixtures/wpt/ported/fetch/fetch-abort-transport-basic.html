@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function wait(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function wait_for_abort_observation(token) {
+  const statusUrl = "/wpt/runtime/fetch/abort-observing-status/" + encodeURIComponent(token);
+
+  for (let attempt = 0; attempt < 250; attempt += 1) {
+    const response = await fetch(statusUrl);
+    const payload = await response.json();
+    if (payload.complete) {
+      return payload;
+    }
+    await wait(20);
+  }
+
+  throw new Error("timed out waiting for abort observation " + token);
+}
+
+promise_test(async function () {
+  const token = "fetch-abort-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  const controller = new AbortController();
+
+  const pending = fetch(
+    "/wpt/runtime/fetch/abort-observing/" + encodeURIComponent(token),
+    { signal: controller.signal },
+  );
+
+  setTimeout(function () {
+    controller.abort();
+  }, 40);
+
+  let error = null;
+  try {
+    const response = await pending;
+    assert_equals(response.status, 200, "fetch should resolve after response headers");
+    await response.text();
+  } catch (caught) {
+    error = caught;
+  }
+
+  const observation = await wait_for_abort_observation(token);
+
+  assert_true(controller.signal.aborted, "abort should flip the signal state");
+  assert_true(error !== null, "aborting during body transfer should reject body consumption");
+  assert_equals(error.name, "AbortError", "aborting body consumption should reject with AbortError");
+  assert_true(error instanceof DOMException, "fetch abort should reject with DOMException");
+  assert_equals(
+    error.message,
+    "The operation was aborted.",
+    "fetch abort should keep the AbortError message",
+  );
+  assert_true(observation.disconnected, "aborting the fetch should close the underlying response stream early");
+}, "fetch abort closes the in-flight response transport");
+</script>

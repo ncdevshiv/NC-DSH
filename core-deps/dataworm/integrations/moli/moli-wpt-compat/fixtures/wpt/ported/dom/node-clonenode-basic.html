@@ -1,0 +1,97 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<div id="fixture" class="root" data-kind="sample">
+  <p id="p1">Paragraph 1</p>
+  <span id="s1">Some text</span>
+</div>
+<svg id="svg-fixture" width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+  <circle id="circle" cx="50" cy="50" r="40"></circle>
+  <text id="svg-text">SVG Text</text>
+</svg>
+<script>
+test(function () {
+  const text = document.createTextNode("hello world");
+  const clone = text.cloneNode();
+
+  assert_false(text.isSameNode(clone));
+  assert_true(clone instanceof Text);
+  assert_equals(clone.nodeType, Node.TEXT_NODE);
+  assert_equals(clone.nodeValue, "hello world");
+  assert_equals(clone.parentNode, null);
+}, "cloneNode() clones Text data without a parent");
+
+test(function () {
+  const comment = document.createComment("a comment");
+  const clone = comment.cloneNode(false);
+
+  assert_false(comment.isSameNode(clone));
+  assert_true(clone instanceof Comment);
+  assert_equals(clone.nodeType, Node.COMMENT_NODE);
+  assert_equals(clone.nodeValue, "a comment");
+  assert_equals(clone.parentNode, null);
+}, "cloneNode(false) clones Comment data without a parent");
+
+test(function () {
+  const original = document.getElementById("fixture");
+  const clone = original.cloneNode(false);
+
+  assert_false(original.isSameNode(clone));
+  assert_true(clone instanceof HTMLDivElement);
+  assert_equals(clone.tagName, "DIV");
+  assert_equals(clone.className, "root");
+  assert_equals(clone.getAttribute("data-kind"), "sample");
+  assert_equals(clone.parentNode, null);
+  assert_false(clone.hasChildNodes());
+}, "cloneNode(false) clones element attributes but not children");
+
+test(function () {
+  const original = document.getElementById("fixture");
+  const clone = original.cloneNode(true);
+
+  assert_false(original.isSameNode(clone));
+  assert_true(clone instanceof HTMLDivElement);
+  assert_equals(clone.querySelector("#p1").textContent, "Paragraph 1");
+  assert_equals(clone.querySelector("#s1").textContent, "Some text");
+  assert_false(original.firstChild.isSameNode(clone.firstChild));
+  assert_equals(clone.parentNode, null);
+}, "cloneNode(true) deep-clones element descendants");
+
+test(function () {
+  const svg = document.getElementById("svg-fixture");
+  const shallow = svg.cloneNode(false);
+  const deep = svg.cloneNode(true);
+
+  assert_equals(shallow.tagName, "svg");
+  assert_equals(shallow.namespaceURI, "http://www.w3.org/2000/svg");
+  assert_equals(shallow.getAttribute("width"), "100");
+  assert_false(shallow.hasChildNodes());
+
+  const circle = deep.querySelector("circle");
+  assert_equals(circle.namespaceURI, "http://www.w3.org/2000/svg");
+  assert_equals(circle.getAttribute("cx"), "50");
+  assert_equals(deep.textContent.indexOf("SVG Text") >= 0, true);
+}, "cloneNode() preserves SVG namespace, attributes, and deep children");
+
+test(function () {
+  const fragment = document.createDocumentFragment();
+  const root = document.createElement("section");
+  const child = document.createElement("span");
+
+  child.textContent = "child";
+  root.appendChild(child);
+  fragment.appendChild(root);
+
+  const shallow = fragment.cloneNode(false);
+  const deep = fragment.cloneNode(true);
+
+  assert_true(shallow instanceof DocumentFragment);
+  assert_equals(shallow.childNodes.length, 0);
+  assert_true(deep instanceof DocumentFragment);
+  assert_equals(deep.childNodes.length, 1);
+  assert_equals(deep.querySelector("span").textContent, "child");
+  assert_false(fragment.firstChild.isSameNode(deep.firstChild));
+}, "cloneNode() supports shallow and deep DocumentFragment cloning");
+</script>

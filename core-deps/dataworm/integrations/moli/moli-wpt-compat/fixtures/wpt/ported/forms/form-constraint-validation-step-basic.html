@@ -1,0 +1,124 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.step = "2";
+
+  assert_equals(input.getAttribute("step"), "2", "step property should reflect to the content attribute");
+
+  input.value = "3";
+  assert_false(input.validity.stepMismatch, "value aligned to min + n * step should pass");
+  assert_true(input.checkValidity(), "aligned value should pass checkValidity");
+
+  input.value = "4";
+  assert_true(input.validity.stepMismatch, "value not aligned to min + n * step should set stepMismatch");
+  assert_false(input.validity.valid, "stepMismatch should make the control invalid");
+  assert_false(input.checkValidity(), "stepMismatch should fail checkValidity");
+  assert_true(input.validationMessage.length > 0, "stepMismatch should expose a validation message");
+
+  input.step = "any";
+  assert_false(input.validity.stepMismatch, "step=any should disable stepMismatch");
+  assert_true(input.validity.valid, "step=any should make the number valid when no other constraints fail");
+}, "number input validity reflects stepMismatch with min step base");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+
+  input.value = "1.5";
+  assert_true(input.validity.stepMismatch, "default number step should be 1 from base 0");
+
+  input.step = "0.5";
+  assert_false(input.validity.stepMismatch, "fractional step should allow aligned fractional values");
+
+  input.step = "bogus";
+  assert_true(input.validity.stepMismatch, "invalid step should fall back to the default step");
+
+  input.step = "0";
+  assert_true(input.validity.stepMismatch, "zero step should fall back to the default step");
+
+  input.step = "-2";
+  assert_true(input.validity.stepMismatch, "negative step should fall back to the default step");
+}, "number step parsing handles defaults and invalid step values");
+
+test(function () {
+  withHost(
+    `<input id="number" type="number" value="0.5" step="1">`,
+    function (host) {
+      const input = host.querySelector("#number");
+
+      assert_false(input.validity.stepMismatch, "initial content value should align to itself as step base");
+
+      input.value = "1.5";
+      assert_false(input.validity.stepMismatch, "content value should act as step base when min is absent");
+
+      input.value = "1.6";
+      assert_true(input.validity.stepMismatch, "unaligned value should fail against content value step base");
+
+      input.min = "0";
+      assert_true(input.validity.stepMismatch, "min should override content value as step base");
+
+      input.value = "2";
+      assert_false(input.validity.stepMismatch, "value aligned to min-based step should pass");
+    },
+  );
+}, "number step base uses min before content value");
+
+test(function () {
+  const text = document.createElement("input");
+  text.type = "text";
+  text.step = "2";
+  text.value = "3";
+
+  assert_false(text.validity.stepMismatch, "non-number input should ignore stepMismatch");
+  assert_true(text.validity.valid, "non-number input step should not affect validity");
+}, "non-number input ignores step constraints");
+
+test(function () {
+  withHost(
+    `<form id="form">
+       <input id="bad" type="number" min="0" step="2" value="3">
+       <input id="ok" type="number" min="0" step="2" value="4">
+     </form>`,
+    function (host) {
+      const form = host.querySelector("#form");
+      const bad = host.querySelector("#bad");
+      const ok = host.querySelector("#ok");
+      const events = [];
+
+      bad.addEventListener("invalid", function () {
+        events.push("bad");
+      });
+      ok.addEventListener("invalid", function () {
+        events.push("ok");
+      });
+
+      assert_false(form.checkValidity(), "form should fail when a number control has stepMismatch");
+      assert_array_equals(events, ["bad"], "form checkValidity should dispatch invalid only for failing step controls");
+
+      events.length = 0;
+      bad.value = "6";
+      assert_true(form.reportValidity(), "form should pass once stepMismatch is cleared");
+      assert_array_equals(events, [], "valid form reportValidity should not dispatch invalid");
+    },
+  );
+}, "form validation aggregates number stepMismatch controls");
+</script>

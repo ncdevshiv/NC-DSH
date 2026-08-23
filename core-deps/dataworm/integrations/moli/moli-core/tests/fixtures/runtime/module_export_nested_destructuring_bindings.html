@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleNestedDestructuringOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleNestedDestructuringOrder.push("dcl");
+      });
+    </script>
+    <script type="module">
+      import {
+        answer,
+        primary,
+        others,
+        title,
+        count,
+        first,
+        deep,
+        rest
+      } from "/assets/module-export-nested-destructuring-bindings.mjs";
+
+      window.moduleNestedDestructuringOrder.push("module");
+      window.moduleNestedDestructuringImmediate =
+        `${answer}:${primary}:${others.join("-")}:${title}:${count}:${first}:${deep}:${rest.join("-")}`;
+
+      setTimeout(() => {
+        window.moduleNestedDestructuringOrder.push("timeout");
+        window.moduleNestedDestructuringLater =
+          `${count}:${first}:${deep}:${rest.join("-")}`;
+        window.moduleNestedDestructuringFinalOrder =
+          window.moduleNestedDestructuringOrder.join(",");
+      }, 0);
+    </script>
+  </body>
+</html>

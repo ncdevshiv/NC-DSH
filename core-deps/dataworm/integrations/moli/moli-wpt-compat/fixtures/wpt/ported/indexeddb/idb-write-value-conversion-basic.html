@@ -1,0 +1,82 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+function wait_request(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+promise_test(async () => {
+  const dbname = "idb-write-value-conversion-" + Math.random();
+  const storeName = "store";
+
+  const openRequest = indexedDB.open(dbname, 1);
+  openRequest.onupgradeneeded = () => {
+    const store = openRequest.result.createObjectStore(storeName);
+
+    assert_throws_name(
+      "TypeError",
+      () => store.add(),
+      "add value is required"
+    );
+    assert_throws_name(
+      "TypeError",
+      () => store.put(),
+      "put value is required"
+    );
+
+    store.add("one", 1);
+    store.put("two", 2);
+  };
+
+  const db = await wait_request(openRequest);
+  const readTx = db.transaction(storeName);
+  const readStore = readTx.objectStore(storeName);
+
+  assert_equals(await wait_request(readStore.get(1)), "one", "add keeps valid value behavior");
+  assert_equals(await wait_request(readStore.get(2)), "two", "put keeps valid value behavior");
+
+  const writeTx = db.transaction(storeName, "readwrite");
+  const writeStore = writeTx.objectStore(storeName);
+  const cursor = await wait_request(writeStore.openCursor());
+  assert_true(cursor instanceof IDBCursorWithValue, "openCursor returns a value cursor");
+
+  assert_throws_name(
+    "TypeError",
+    () => cursor.update(),
+    "cursor.update value is required"
+  );
+
+  const updateRequest = cursor.update("updated-one");
+  assert_equals(await wait_request(updateRequest), 1, "cursor.update returns the primary key");
+  assert_equals(
+    await wait_request(writeStore.get(1)),
+    "updated-one",
+    "cursor.update keeps valid value behavior"
+  );
+
+  db.close();
+  await wait_request(indexedDB.deleteDatabase(dbname));
+}, "IndexedDB write operations distinguish required any value arguments from valid writes");
+</script>

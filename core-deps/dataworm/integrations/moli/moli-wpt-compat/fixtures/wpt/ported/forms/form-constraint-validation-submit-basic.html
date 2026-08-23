@@ -1,0 +1,162 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function read_frame_text(frame) {
+  return frame.contentDocument?.body?.textContent?.trim() ?? "";
+}
+
+function read_payload(frame) {
+  const text = read_frame_text(frame);
+  if (text === "") {
+    return null;
+  }
+  return JSON.parse(text);
+}
+
+function wait(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+function wait_for_payload(frame, description) {
+  return Promise.race([
+    new Promise(function (resolve, reject) {
+      const deadline = Date.now() + 1000;
+      function poll() {
+        const payload = read_payload(frame);
+        if (payload !== null) {
+          resolve(payload);
+          return;
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error("timed out waiting for " + description));
+          return;
+        }
+        setTimeout(poll, 10);
+      }
+      poll();
+    }),
+    wait(1100).then(function () {
+      throw new Error("timed out waiting for " + description);
+    }),
+  ]);
+}
+
+function append_target_frame(name) {
+  const frame = document.createElement("iframe");
+  frame.name = name;
+  document.body.appendChild(frame);
+  return frame;
+}
+
+function append_required_text(form, value) {
+  const input = document.createElement("input");
+  input.name = "field";
+  input.required = true;
+  input.value = value;
+  form.appendChild(input);
+  return input;
+}
+
+function create_required_form(target, caseName, value) {
+  const form = document.createElement("form");
+  form.target = target;
+  form.action = "/wpt/runtime/forms/submit-echo?case=" + caseName;
+  document.body.appendChild(form);
+  const input = append_required_text(form, value);
+  return { form, input };
+}
+
+test(function () {
+  const form = document.createElement("form");
+  assert_false(form.noValidate, "noValidate should default to false");
+  form.noValidate = true;
+  assert_true(form.hasAttribute("novalidate"), "noValidate=true should set the content attribute");
+
+  const submitter = document.createElement("input");
+  submitter.type = "submit";
+  assert_false(submitter.formNoValidate, "formNoValidate should default to false");
+  submitter.formNoValidate = true;
+  assert_true(
+    submitter.hasAttribute("formnovalidate"),
+    "formNoValidate=true should set the content attribute",
+  );
+}, "noValidate and formNoValidate reflect their boolean content attributes");
+
+promise_test(async function () {
+  const frame = append_target_frame("validation-required-target");
+  const controls = create_required_form("validation-required-target", "required", "");
+  let submitEventCount = 0;
+  controls.form.addEventListener("submit", function () {
+    submitEventCount += 1;
+  });
+
+  controls.form.requestSubmit();
+  assert_equals(submitEventCount, 0, "invalid requestSubmit() should not dispatch submit");
+  await wait(100);
+  assert_equals(read_frame_text(frame), "", "invalid requestSubmit() should not navigate");
+
+  controls.input.value = "filled";
+  controls.form.requestSubmit();
+  assert_equals(submitEventCount, 1, "valid requestSubmit() should dispatch submit once");
+  const payload = await wait_for_payload(frame, "valid requestSubmit submission");
+  assert_equals(payload.search, "?field=filled", "valid requestSubmit() should submit controls");
+}, "requestSubmit() runs required-value constraint validation before submit/navigation");
+
+promise_test(async function () {
+  const frame = append_target_frame("validation-novalidate-target");
+  const controls = create_required_form("validation-novalidate-target", "novalidate", "");
+  controls.form.noValidate = true;
+  let submitEventCount = 0;
+  controls.form.addEventListener("submit", function () {
+    submitEventCount += 1;
+  });
+
+  controls.form.requestSubmit();
+  assert_equals(submitEventCount, 1, "noValidate should let requestSubmit() dispatch submit");
+  const payload = await wait_for_payload(frame, "noValidate requestSubmit submission");
+  assert_equals(payload.search, "?field=", "noValidate should submit even with an empty required value");
+}, "form.noValidate skips constraint validation for requestSubmit()");
+
+promise_test(async function () {
+  const frame = append_target_frame("validation-formnovalidate-target");
+  const controls = create_required_form("validation-formnovalidate-target", "formnovalidate", "");
+  const submitter = document.createElement("button");
+  submitter.name = "submitter";
+  submitter.value = "skip";
+  submitter.formNoValidate = true;
+  controls.form.appendChild(submitter);
+  let submitEventCount = 0;
+  controls.form.addEventListener("submit", function () {
+    submitEventCount += 1;
+  });
+
+  controls.form.requestSubmit(submitter);
+  assert_equals(submitEventCount, 1, "formNoValidate submitter should let requestSubmit() dispatch submit");
+  const payload = await wait_for_payload(frame, "formNoValidate requestSubmit submission");
+  assert_equals(
+    payload.search,
+    "?field=&submitter=skip",
+    "formNoValidate submitter should skip validation and remain the active submitter",
+  );
+}, "submitter.formNoValidate skips constraint validation for requestSubmit(submitter)");
+
+promise_test(async function () {
+  const frame = append_target_frame("validation-form-submit-target");
+  const controls = create_required_form("validation-form-submit-target", "form-submit", "");
+  let submitEventCount = 0;
+  controls.form.addEventListener("submit", function () {
+    submitEventCount += 1;
+  });
+
+  controls.form.submit();
+  assert_equals(submitEventCount, 0, "form.submit() should still bypass submit events");
+  const payload = await wait_for_payload(frame, "form.submit submission");
+  assert_equals(payload.search, "?field=", "form.submit() should bypass validation and submit");
+}, "form.submit() bypasses constraint validation and submit event dispatch");
+</script>

@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function label(args) {
+  return "hasFeature(" + args.map(String).join(", ") + ")";
+}
+
+test(function () {
+  const cases = [
+    [],
+    ["Core"],
+    ["XML"],
+    ["org.w3c.svg"],
+    ["org.w3c.dom.svg"],
+    ["http://www.w3.org/TR/SVG11/feature#Script"],
+    ["Core", "1.0"],
+    ["Core", "2"],
+    ["XML", "3.0"],
+    ["core", ""],
+    ["CoRe", null],
+    [" Core", ""],
+    ["Core ", "1.0 "],
+    ["Co re", ""],
+    ["This is filler text.", ""],
+    [null, ""],
+    [undefined, ""],
+    ["Core", undefined],
+    ["XML", 100],
+  ];
+
+  cases.forEach(function (args) {
+    assert_equals(document.implementation.hasFeature.apply(document.implementation, args), true, label(args));
+  });
+}, "DOMImplementation.hasFeature returns true for legacy feature/version arguments");
+
+test(function () {
+  const detached = document.implementation.createHTMLDocument("detached");
+
+  assert_equals(detached.implementation.hasFeature("Core", "3.0"), true);
+  assert_equals(detached.implementation.hasFeature("unexpected", ""), true);
+}, "Detached document DOMImplementation.hasFeature also returns true");
+</script>

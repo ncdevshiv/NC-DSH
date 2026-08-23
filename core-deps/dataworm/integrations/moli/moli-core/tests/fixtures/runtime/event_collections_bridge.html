@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+  <body>
+    <div id="container"><span id="alpha">A</span><!--gap--><span id="beta">B</span>tail</div>
+    <script>
+      window.eventCollectionsError = null;
+
+      try {
+        const bridge = globalThis.__moliNativeBridge;
+        const bridgeWindow = bridge.window;
+        window.windowIsEventTarget = window instanceof EventTarget;
+        window.windowIsWindow = window instanceof Window;
+        window.publicWindowPrototypeIdentity =
+          Object.getPrototypeOf(globalThis) === Window.prototype;
+        window.publicWindowIdentity =
+          window === globalThis && window === self && window === window.window;
+        window.publicWindowDocumentIdentity = window.document === document;
+        window.publicWindowLocationIdentity =
+          window.location === bridgeWindow.location && window.location === globalThis.location;
+        window.publicWindowConsoleIdentity =
+          window.console === bridgeWindow.console && window.console === globalThis.console;
+        window.bridgeWindowIsEventTarget = bridgeWindow instanceof EventTarget;
+        window.bridgeWindowIsWindow = bridgeWindow instanceof Window;
+        window.bridgeWindowDocumentIdentity = bridgeWindow.document === document;
+        window.bridgeWindowResolvesToPublicWindow = bridgeWindow.window === window;
+        window.bridgeSelfResolvesToPublicWindow = bridgeWindow.self === window;
+        window.bridgeWindowSetTimeoutIdentity = bridgeWindow.setTimeout === window.setTimeout;
+        window.documentDefaultViewIdentity =
+          document.defaultView === window && bridgeWindow.document.defaultView === window;
+        window.documentParentWindowMissing =
+          !("parentWindow" in document) &&
+          document.parentWindow === undefined &&
+          !("parentWindow" in bridgeWindow.document) &&
+          bridgeWindow.document.parentWindow === undefined;
+
+        const windowCalls = [];
+        let seenWindowEventInside = false;
+        let seenBridgeWindowEventInside = false;
+        function onWindow(event) {
+          seenWindowEventInside = window.event === event;
+          seenBridgeWindowEventInside = bridgeWindow.event === event;
+          windowCalls.push(
+            `${event.type}:${event.currentTarget === window}:${event.target === window}`,
+          );
+        }
+        window.addEventListener("custom-window", onWindow);
+        window.addEventListener("custom-window", onWindow);
+        window["oncancel-window"] = (event) => {
+          event.preventDefault();
+        };
+        globalThis.__moliFakeWindowListeners = new Map();
+        window.dispatchEvent(new Event("custom-window"));
+        window.removeEventListener("custom-window", onWindow);
+        window.dispatchEvent(new Event("custom-window"));
+        const cancelWindowEvent = new Event("cancel-window", { cancelable: true });
+        window.windowCancelDispatchReturn = window.dispatchEvent(cancelWindowEvent);
+        window.windowCancelDefaultPrevented = cancelWindowEvent.defaultPrevented;
+        let plainWindowDispatchError = null;
+        try {
+          window.dispatchEvent({ type: "plain-window" });
+        } catch (error) {
+          plainWindowDispatchError = `${error && error.name}:${error instanceof TypeError}`;
+        }
+        window.plainWindowDispatchError = plainWindowDispatchError;
+        window.windowEventCalls = windowCalls.join("|");
+        window.windowEventInside = seenWindowEventInside;
+        window.bridgeWindowEventInside = seenBridgeWindowEventInside;
+        window.windowEventOutsideUndefined = window.event === undefined;
+        window.bridgeWindowEventOutsideUndefined = bridgeWindow.event === undefined;
+        const timeoutCalls = [];
+        window.windowTimeoutCalls = "";
+        window.setTimeout(() => {
+          timeoutCalls.push("window");
+          window.windowTimeoutCalls = timeoutCalls.join("|");
+        });
+        bridgeWindow.setTimeout(() => {
+          timeoutCalls.push("bridge");
+          window.windowTimeoutCalls = timeoutCalls.join("|");
+        });
+
+        const consoleCallReturns = [];
+        consoleCallReturns.push(String(window.console.log("public-window")));
+        consoleCallReturns.push(String(bridgeWindow.console.info("bridge-window")));
+        window.windowConsoleCalls = consoleCallReturns.join("|");
+
+        let documentCalls = 0;
+        function onDocument(event) {
+          if (event.target === document && event.currentTarget === document) {
+            documentCalls += 1;
+          }
+        }
+        document.addEventListener("custom-document", onDocument);
+        document["oncustom-document"] = (event) => {
+          if (event.target === document && event.currentTarget === document) {
+            documentCalls += 10;
+          }
+        };
+        document.__moliListeners = new Map();
+        document.dispatchEvent(new Event("custom-document"));
+        document.removeEventListener("custom-document", onDocument);
+        document.dispatchEvent(new Event("custom-document"));
+        window.documentEventCalls = documentCalls;
+
+        const container = document.getElementById("container");
+        const childNodes = container.childNodes;
+        window.childNodesIsNodeList = childNodes instanceof NodeList;
+        window.childNodesLength = childNodes.length;
+        window.childNodesNames = Array.from(childNodes)
+          .map((node) => node.nodeName)
+          .join("|");
+        window.childNodesEntries = Array.from(childNodes.entries())
+          .map(([index, node]) => `${index}:${node.nodeType}`)
+          .join("|");
+
+        const children = container.children;
+        window.childrenIsHtmlCollection = children instanceof HTMLCollection;
+        window.childrenLength = children.length;
+        window.childrenIds = Array.from(children)
+          .map((node) => node.id)
+          .join("|");
+        window.childrenNamedItem = children.namedItem("beta").id;
+        window.childrenNamedProperty = children["alpha"].id;
+      } catch (error) {
+        window.eventCollectionsError = String(error);
+      }
+    </script>
+  </body>
+</html>

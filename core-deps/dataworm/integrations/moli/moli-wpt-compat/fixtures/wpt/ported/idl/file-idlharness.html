@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface File : Blob {
+  constructor(sequence<object> fileBits, USVString fileName, optional object options = {});
+  readonly attribute DOMString name;
+  readonly attribute long long lastModified;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    File: ["new File(['hello'], 'note.txt', { lastModified: 12345 })"]
+  });
+});
+</script>

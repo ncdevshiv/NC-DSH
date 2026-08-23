@@ -1,0 +1,12 @@
+[package]
+license.workspace = true
+name = "moli-v8-test-util"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+moli-v8-init = { path = "../moli-v8-init" }
+v8 = "146.8.0"
+
+[lints]
+workspace = true

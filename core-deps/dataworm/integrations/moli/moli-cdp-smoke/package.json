@@ -1,0 +1,13 @@
+{
+  "name": "moli-cdp-smoke-node-clients",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "description": "Pinned Node client dependencies for the Moli CDP smoke suite",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "puppeteer-core": "24.30.0"
+  }
+}

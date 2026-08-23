@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+  <body
+    data-order=""
+    data-sync-hash=""
+    data-sync-state=""
+    data-completed-hash=""
+    data-completed-state=""
+    data-old=""
+    data-new=""
+    data-from-url=""
+    data-navigation-type=""
+  >
+    <script>
+      const order = [];
+      let awaitingForward = false;
+
+      history.pushState({ step: 1 }, "", "#one");
+      history.pushState({ step: 2 }, "", "#two");
+
+      window.addEventListener("popstate", (event) => {
+        order.push("popstate:" + String(event.state?.step ?? "null"));
+        queueMicrotask(() => {
+          order.push(
+            "popstate-microtask:" + String(history.state?.step ?? "null")
+          );
+        });
+      });
+
+      window.addEventListener("hashchange", (event) => {
+        if (!awaitingForward) {
+          awaitingForward = true;
+          order.length = 0;
+          navigation.addEventListener(
+            "currententrychange",
+            (cecEvent) => {
+              order.push(
+                "currententrychange:" +
+                  String(cecEvent.navigationType) +
+                  ":" +
+                  (cecEvent.from
+                    ? new URL(cecEvent.from.url).hash || "(none)"
+                    : "(null)")
+              );
+              queueMicrotask(() => {
+                order.push(
+                  "currententrychange-microtask:" +
+                    location.hash +
+                    ":" +
+                    String(history.state?.step ?? "null")
+                );
+              });
+              document.body.setAttribute(
+                "data-from-url",
+                cecEvent.from ? cecEvent.from.url : "null"
+              );
+              document.body.setAttribute(
+                "data-navigation-type",
+                String(cecEvent.navigationType)
+              );
+            },
+            { once: true }
+          );
+          history.forward();
+          document.body.setAttribute("data-sync-hash", location.hash);
+          document.body.setAttribute(
+            "data-sync-state",
+            String(history.state?.step ?? "null")
+          );
+          return;
+        }
+        order.push("hashchange:" + location.hash);
+        document.body.setAttribute("data-old", event.oldURL);
+        document.body.setAttribute("data-new", event.newURL);
+        queueMicrotask(() => {
+          order.push("hashchange-microtask:" + location.hash);
+          document.body.setAttribute("data-order", order.join(","));
+          document.body.setAttribute("data-completed-hash", location.hash);
+          document.body.setAttribute(
+            "data-completed-state",
+            String(history.state?.step ?? "null")
+          );
+        });
+      });
+
+      history.back();
+    </script>
+  </body>
+</html>

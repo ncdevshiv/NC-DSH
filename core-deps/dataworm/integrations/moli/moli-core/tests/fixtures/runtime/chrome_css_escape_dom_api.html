@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <body
+    data-no-arg-throws=""
+    data-symbol-throws=""
+    data-stringify-throws=""
+    data-undefined-stringify=""
+    data-null-replacement=""
+    data-leading-digit=""
+    data-leading-hyphen-digit=""
+    data-lone-hyphen=""
+    data-space-bang=""
+    data-control-chars=""
+    data-bool-stringify=""
+    data-null-stringify=""
+  >
+    <script>
+      const body = document.body;
+      try {
+        CSS.escape();
+        body.setAttribute('data-no-arg-throws', 'false');
+      } catch (error) {
+        body.setAttribute('data-no-arg-throws', String(error.name === 'TypeError'));
+      }
+      try {
+        CSS.escape(Symbol('ident'));
+        body.setAttribute('data-symbol-throws', 'false');
+      } catch (error) {
+        body.setAttribute('data-symbol-throws', String(error.name === 'TypeError'));
+      }
+      try {
+        CSS.escape({ toString() { throw new Error('boom'); } });
+        body.setAttribute('data-stringify-throws', 'false');
+      } catch (error) {
+        body.setAttribute('data-stringify-throws', String(error.name === 'Error'));
+      }
+      body.setAttribute('data-undefined-stringify', CSS.escape(undefined));
+      body.setAttribute('data-null-replacement', CSS.escape('a\0b'));
+      body.setAttribute('data-leading-digit', CSS.escape('0a'));
+      body.setAttribute('data-leading-hyphen-digit', CSS.escape('-0a'));
+      body.setAttribute('data-lone-hyphen', CSS.escape('-'));
+      body.setAttribute('data-space-bang', CSS.escape(' !xy'));
+      body.setAttribute('data-control-chars', CSS.escape('\x01\x02\x1E\x1F'));
+      body.setAttribute('data-bool-stringify', CSS.escape(true));
+      body.setAttribute('data-null-stringify', CSS.escape(null));
+    </script>
+  </body>
+</html>

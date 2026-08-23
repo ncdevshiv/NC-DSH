@@ -1,0 +1,174 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+function wait_request(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+promise_test(async () => {
+  const dbname = "idb-transaction-conversion-" + Math.random();
+  const storeName = "store-" + Math.random();
+  const undefinedStoreName = "undefined";
+  const stringifiedStoreName = {
+    toString() {
+      return storeName;
+    },
+  };
+  const stringifiedMode = {
+    toString() {
+      return "readwrite";
+    },
+  };
+  const throwingStoreName = {
+    toString() {
+      throw new RangeError("store name conversion");
+    },
+  };
+  const throwingMode = {
+    toString() {
+      throw new RangeError("mode conversion");
+    },
+  };
+
+  const request = indexedDB.open(dbname, 1);
+  request.onupgradeneeded = () => {
+    const db = request.result;
+    db.createObjectStore(storeName);
+    db.createObjectStore(undefinedStoreName);
+  };
+
+  const db = await wait_request(request);
+
+  assert_throws_name(
+    "TypeError",
+    () => db.transaction(),
+    "transaction storeNames is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => db.transaction(Symbol("store")),
+    "transaction rejects non-string/non-array storeNames"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => db.transaction([Symbol("store")]),
+    "transaction rejects Symbol array store name"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => db.transaction([throwingStoreName]),
+    "transaction propagates array store name stringification errors"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => db.transaction(new Set([Symbol("store")])),
+    "transaction rejects Symbol iterable store name"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => db.transaction({
+      [Symbol.iterator]() {
+        throw new RangeError("store names iterator");
+      },
+    }),
+    "transaction propagates storeNames iterator errors"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => db.transaction(storeName, Symbol("mode")),
+    "transaction rejects Symbol mode"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => db.transaction(storeName, throwingMode),
+    "transaction propagates mode stringification errors"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => db.transaction(storeName, "versionchange"),
+    "transaction rejects unsupported versionchange mode"
+  );
+
+  const readonlyTx = db.transaction(storeName, undefined);
+  assert_equals(readonlyTx.mode, "readonly", "present undefined mode uses readonly default");
+
+  const readwriteTx = db.transaction([stringifiedStoreName], stringifiedMode);
+  assert_equals(readwriteTx.mode, "readwrite", "mode object stringifies through DOMString");
+
+  const setTx = db.transaction(new Set([stringifiedStoreName]));
+  assert_equals(
+    setTx.objectStore(storeName).name,
+    storeName,
+    "transaction storeNames accepts iterable sequence values"
+  );
+
+  const iterableTx = db.transaction({
+    *[Symbol.iterator]() {
+      yield stringifiedStoreName;
+      yield undefined;
+    },
+  });
+  assert_equals(
+    iterableTx.objectStore(storeName).name,
+    storeName,
+    "transaction storeNames accepts custom iterable sequence values"
+  );
+  assert_equals(
+    iterableTx.objectStore(undefinedStoreName).name,
+    undefinedStoreName,
+    "transaction storeNames sequence converts undefined element to DOMString"
+  );
+
+  const objectStoreTx = db.transaction([stringifiedStoreName, undefined]);
+  assert_throws_name(
+    "TypeError",
+    () => objectStoreTx.objectStore(),
+    "objectStore name is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => objectStoreTx.objectStore(Symbol("store")),
+    "objectStore rejects Symbol name"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => objectStoreTx.objectStore(throwingStoreName),
+    "objectStore propagates name stringification errors"
+  );
+
+  const store = objectStoreTx.objectStore(stringifiedStoreName);
+  assert_equals(store.name, storeName, "objectStore name object stringifies through DOMString");
+
+  const undefinedStore = objectStoreTx.objectStore(undefined);
+  assert_equals(
+    undefinedStore.name,
+    "undefined",
+    "present undefined objectStore name converts to DOMString"
+  );
+
+  db.close();
+  await wait_request(indexedDB.deleteDatabase(dbname));
+}, "IDB transaction scalar names and mode follow WebIDL conversion");
+</script>

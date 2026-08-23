@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.documentWriteImplicitModuleOrder = ["inline"];
+      window.documentWriteImplicitModuleReplaceRan = false;
+      window.documentWriteImplicitStaleModuleRan = false;
+      window.documentWriteImplicitModuleResult = "initial";
+
+      const replacer = document.createElement("script");
+      replacer.src = "/assets/document_write_implicit_replace_async_module.js";
+      document.head.appendChild(replacer);
+    </script>
+    <script type="module" src="/assets/document_write_implicit_replace_stale_module.mjs"></script>
+  </head>
+  <body>
+    <main id="old">old</main>
+  </body>
+</html>

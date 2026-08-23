@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<div id="dropzone" style="width:200px;height:200px">drop</div>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const dropzone = document.getElementById("dropzone");
+let dropped = null;
+let resolveDrop = null;
+
+const dropPromise = new Promise(function (resolve) {
+  resolveDrop = resolve;
+});
+
+function read_entries(reader) {
+  return new Promise(function (resolve) {
+    reader.readEntries(resolve);
+  });
+}
+
+function entry_file(entry) {
+  return new Promise(function (resolve) {
+    entry.file(resolve);
+  });
+}
+
+dropzone.addEventListener("dragover", function (event) {
+  event.preventDefault();
+});
+
+dropzone.addEventListener("drop", function (event) {
+  event.preventDefault();
+  dropped = event.dataTransfer;
+  resolveDrop();
+});
+
+promise_test(async function () {
+  await dropPromise;
+
+  const root = dropped.items[0].webkitGetAsEntry();
+  assert_true(root instanceof FileSystemDirectoryEntry, "root dropped item is a directory entry");
+  assert_equals(root.name, "batch", "root directory name");
+
+  const reader = root.createReader();
+  const firstBatch = await read_entries(reader);
+  assert_equals(firstBatch.length, 100, "first readEntries returns the first 100 entries");
+  assert_equals(firstBatch[0].name, "file001.txt", "first batch starts at the first file");
+  assert_equals(firstBatch[0].fullPath, "/batch/file001.txt", "first file fullPath");
+  assert_equals(firstBatch[99].name, "file100.txt", "first batch ends at the hundredth file");
+  assert_equals(firstBatch[99].fullPath, "/batch/file100.txt", "hundredth file fullPath");
+
+  const hundredthFile = await entry_file(firstBatch[99]);
+  assert_equals(await hundredthFile.text(), "payload 100", "hundredth file bytes");
+  assert_equals(hundredthFile.lastModified, 100, "hundredth file lastModified");
+
+  const secondBatch = await read_entries(reader);
+  assert_equals(secondBatch.length, 1, "second readEntries returns the remaining entry");
+  assert_equals(secondBatch[0].name, "file101.txt", "second batch starts after the first batch");
+  assert_equals(secondBatch[0].fullPath, "/batch/file101.txt", "remaining file fullPath");
+
+  const finalBatch = await read_entries(reader);
+  assert_array_equals(finalBatch, [], "reader is exhausted after all batches are read");
+
+  const freshFirstBatch = await read_entries(root.createReader());
+  assert_equals(freshFirstBatch.length, 100, "a fresh reader has an independent cursor");
+  assert_equals(freshFirstBatch[0].name, "file001.txt", "fresh reader restarts at the first entry");
+}, "FileSystemDirectoryReader.readEntries returns directory entries in 100-entry batches");
+</script>

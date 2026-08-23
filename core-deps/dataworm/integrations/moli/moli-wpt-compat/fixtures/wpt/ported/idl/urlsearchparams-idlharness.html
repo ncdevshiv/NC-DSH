@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface URLSearchParams {
+  constructor(optional object init);
+  readonly attribute unsigned long size;
+  undefined append(USVString name, USVString value);
+  undefined delete(USVString name, optional USVString value);
+  USVString? get(USVString name);
+  sequence<USVString> getAll(USVString name);
+  boolean has(USVString name, optional USVString value);
+  undefined set(USVString name, USVString value);
+  undefined sort();
+  undefined forEach(URLSearchParamsForEachCallback callback, optional any thisArg = undefined);
+  iterator<USVString> keys();
+  iterator<USVString> values();
+  iterator<sequence<USVString>> entries();
+  stringifier;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    URLSearchParams: ["new URLSearchParams('a=1')"]
+  });
+});
+</script>

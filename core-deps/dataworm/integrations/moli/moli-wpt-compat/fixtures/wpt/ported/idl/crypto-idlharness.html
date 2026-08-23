@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface Crypto {
+  any getRandomValues(any array);
+  USVString randomUUID();
+  readonly attribute SubtleCrypto subtle;
+};
+
+interface SubtleCrypto {
+  Promise<any> encrypt(object algorithm, object key, object data);
+  Promise<any> decrypt(object algorithm, object key, object data);
+  Promise<ArrayBuffer> sign(object algorithm, object key, object data);
+  Promise<boolean> verify(object algorithm, object key, object signature, object data);
+  Promise<ArrayBuffer> digest(object algorithm, object data);
+  Promise<any> generateKey(object algorithm, boolean extractable, object keyUsages);
+  Promise<object> deriveKey(object algorithm, object baseKey, object derivedKeyType, boolean extractable, object keyUsages);
+  Promise<ArrayBuffer> deriveBits(object algorithm, object baseKey, optional unsigned long? length = null);
+  Promise<object> importKey(DOMString format, object keyData, object algorithm, boolean extractable, object keyUsages);
+  Promise<object> exportKey(DOMString format, object key);
+  Promise<any> wrapKey(DOMString format, object key, object wrappingKey, object wrapAlgorithm);
+  Promise<object> unwrapKey(DOMString format, object wrappedKey, object unwrappingKey, object unwrapAlgorithm, object unwrappedKeyAlgorithm, boolean extractable, object keyUsages);
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    Crypto: ["crypto"],
+    SubtleCrypto: ["crypto.subtle"]
+  });
+});
+
+promise_test(async function () {
+  assert_equals(Object.prototype.toString.call(crypto), "[object Crypto]");
+  assert_equals(Object.prototype.toString.call(crypto.subtle), "[object SubtleCrypto]");
+  assert_false(Object.prototype.hasOwnProperty.call(crypto, "subtle"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto, "getRandomValues"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto, "randomUUID"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "encrypt"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "decrypt"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "digest"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "generateKey"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "sign"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "verify"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "deriveKey"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "deriveBits"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "importKey"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "exportKey"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "wrapKey"));
+  assert_false(Object.prototype.hasOwnProperty.call(crypto.subtle, "unwrapKey"));
+  assert_equals(crypto.subtle, crypto.subtle);
+
+  const bytes = new Uint8Array(16);
+  assert_equals(crypto.getRandomValues(bytes), bytes);
+  assert_true(Array.from(bytes).some((value) => value !== 0));
+  assert_true(/^[-0-9a-f]{36}$/i.test(crypto.randomUUID()));
+
+  const digest = await crypto.subtle.digest("SHA-256", new Uint8Array([1, 2, 3]));
+  assert_true(digest instanceof ArrayBuffer);
+  assert_equals(digest.byteLength, 32);
+}, "Crypto idlharness sample operations expose random values, UUIDs, and SHA-256 digest");
+</script>

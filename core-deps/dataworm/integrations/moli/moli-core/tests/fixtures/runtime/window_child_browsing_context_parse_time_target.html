@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <body data-after-parse-time-click="">
+    <iframe id="frame1" name="frame-a"></iframe>
+    <a
+      id="to-name"
+      target="frame-a"
+      href="/compat/window-child-browsing-context-target-name-a"
+    ></a>
+    <script>
+      document.getElementById('to-name').click();
+      const frame = document.getElementById('frame1');
+      const text = frame.contentDocument?.body?.textContent?.trim() ?? 'null';
+      document.body.setAttribute('data-after-parse-time-click', text);
+    </script>
+  </body>
+</html>

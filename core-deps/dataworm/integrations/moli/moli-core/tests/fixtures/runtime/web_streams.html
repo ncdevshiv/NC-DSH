@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+  <body
+    data-response-body=""
+    data-response-text=""
+    data-pipe-through=""
+    data-pipe-to=""
+    data-text-encoder-stream=""
+    data-text-decoder-stream=""
+  >
+    <script>
+      (async () => {
+        const response = new Response('hello world');
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        document.body.setAttribute(
+          'data-response-body',
+          new TextDecoder().decode(first.value),
+        );
+
+        document.body.setAttribute('data-response-text', await response.text());
+
+        const input = new ReadableStream({
+          start(controller) {
+            controller.enqueue('hello');
+            controller.close();
+          }
+        });
+        const upper = new TransformStream({
+          transform(chunk, controller) {
+            controller.enqueue(chunk.toUpperCase());
+          }
+        });
+        const transformed = input.pipeThrough(upper);
+        const transformedReader = transformed.getReader();
+        const transformedResult = await transformedReader.read();
+        document.body.setAttribute('data-pipe-through', transformedResult.value);
+
+        const chunks = [];
+        const output = new WritableStream({
+          write(chunk) {
+            chunks.push(chunk);
+          }
+        });
+        await new ReadableStream({
+          start(controller) {
+            controller.enqueue('a');
+            controller.enqueue('b');
+            controller.close();
+          }
+        }).pipeTo(output);
+        document.body.setAttribute('data-pipe-to', chunks.join(''));
+
+        const encoder = new TextEncoderStream();
+        const encoderWriter = encoder.writable.getWriter();
+        const encoderReader = encoder.readable.getReader();
+        const encodedPromise = encoderReader.read();
+        const writePromise = encoderWriter.write('hi');
+        const closePromise = encoderWriter.close();
+        const encoded = await encodedPromise;
+        await Promise.all([writePromise, closePromise]);
+        document.body.setAttribute(
+          'data-text-encoder-stream',
+          String(encoded.value[0]) + ',' + String(encoded.value[1]),
+        );
+
+        const bytes = new Uint8Array([104, 101, 108, 108, 111]);
+        const decodedReadable = new ReadableStream({
+          start(controller) {
+            controller.enqueue(bytes);
+            controller.close();
+          }
+        }).pipeThrough(new TextDecoderStream());
+        const decodedReader = decodedReadable.getReader();
+        const decoded = await decodedReader.read();
+        document.body.setAttribute('data-text-decoder-stream', decoded.value);
+      })();
+    </script>
+  </body>
+</html>

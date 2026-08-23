@@ -1,0 +1,102 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+test(function () {
+  const button = document.createElement("button");
+  button.type = "submit";
+
+  const first = new SubmitEvent("submit");
+  const second = new SubmitEvent("submit", {
+    bubbles: true,
+    cancelable: true,
+    submitter: button,
+  });
+  const descriptor = Object.getOwnPropertyDescriptor(SubmitEvent.prototype, "submitter");
+  const created = document.createEvent("SubmitEvent");
+
+  assert_equals(typeof SubmitEvent, "function", "SubmitEvent should be exposed");
+  assert_equals(SubmitEvent.length, 1, "SubmitEvent.length should match the constructor signature");
+  assert_true(
+    SubmitEvent.prototype.constructor === SubmitEvent,
+    "SubmitEvent.prototype.constructor should point back to SubmitEvent",
+  );
+
+  assert_true(first instanceof SubmitEvent, "new SubmitEvent() should create a SubmitEvent");
+  assert_true(first instanceof Event, "SubmitEvent should inherit from Event");
+  assert_equals(first.type, "submit", "SubmitEvent should preserve the event type");
+  assert_false(first.bubbles, "SubmitEvent should default bubbles to false");
+  assert_false(first.cancelable, "SubmitEvent should default cancelable to false");
+  assert_equals(first.submitter, null, "SubmitEvent should default submitter to null");
+
+  assert_true(second.bubbles, "SubmitEvent init should accept bubbles");
+  assert_true(second.cancelable, "SubmitEvent init should accept cancelable");
+  assert_equals(second.submitter, button, "SubmitEvent init should preserve submitter");
+  assert_equals(
+    Object.prototype.toString.call(second),
+    "[object SubmitEvent]",
+    "SubmitEvent should install the correct toStringTag",
+  );
+
+  assert_true(!!descriptor, "SubmitEvent.prototype should expose a submitter descriptor");
+  assert_equals(typeof descriptor.get, "function", "submitter should be a getter");
+  assert_equals(descriptor.set, undefined, "submitter should not expose a setter");
+
+  assert_true(created instanceof SubmitEvent, "document.createEvent('SubmitEvent') should use SubmitEvent");
+  assert_equals(created.submitter, null, "document.createEvent('SubmitEvent') should default submitter to null");
+}, "SubmitEvent constructor and prototype getter surface");
+
+test(function () {
+  const form = document.createElement("form");
+  const button = document.createElement("button");
+  button.type = "submit";
+  form.appendChild(button);
+  document.body.appendChild(form);
+
+  let seen = null;
+  form.addEventListener(
+    "submit",
+    function (event) {
+      seen = event;
+      event.preventDefault();
+    },
+    { once: true },
+  );
+
+  form.requestSubmit(button);
+
+  assert_true(seen !== null, "requestSubmit(submitter) should synchronously dispatch submit");
+  assert_true(seen instanceof SubmitEvent, "requestSubmit(submitter) should dispatch SubmitEvent");
+  assert_true(seen instanceof Event, "SubmitEvent should still inherit Event");
+  assert_equals(seen.type, "submit", "requestSubmit(submitter) should dispatch submit");
+  assert_true(seen.bubbles, "submit events should bubble");
+  assert_true(seen.cancelable, "submit events should be cancelable");
+  assert_equals(seen.submitter, button, "requestSubmit(submitter) should preserve the submitter");
+  assert_equals(seen.target, form, "submit event target should remain the form");
+}, "requestSubmit(submitter) dispatches SubmitEvent with the active submitter");
+
+test(function () {
+  const form = document.createElement("form");
+  document.body.appendChild(form);
+
+  let seen = null;
+  form.addEventListener(
+    "submit",
+    function (event) {
+      seen = event;
+      event.preventDefault();
+    },
+    { once: true },
+  );
+
+  form.requestSubmit();
+
+  assert_true(seen !== null, "requestSubmit() should synchronously dispatch submit");
+  assert_true(seen instanceof SubmitEvent, "requestSubmit() should dispatch SubmitEvent");
+  assert_equals(seen.submitter, null, "requestSubmit() without an explicit submitter should expose null");
+  assert_equals(seen.target, form, "submit event target should remain the form");
+}, "requestSubmit() without an explicit submitter dispatches SubmitEvent with null submitter");
+</script>

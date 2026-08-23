@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface PerformanceEntry {
+  readonly attribute DOMString name;
+  readonly attribute DOMString entryType;
+  readonly attribute DOMHighResTimeStamp startTime;
+  readonly attribute DOMHighResTimeStamp duration;
+};
+
+interface PerformanceMark : PerformanceEntry {
+  readonly attribute any detail;
+};
+
+interface PerformanceMeasure : PerformanceEntry {
+  readonly attribute any detail;
+};
+`], [], function (idlArray) {
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.add_objects({
+    PerformanceEntry: ["performance.mark('moli-performance-entry-idl-entry')"],
+    PerformanceMark: ["performance.mark('moli-performance-entry-idl-mark')"],
+    PerformanceMeasure: ["performance.measure('moli-performance-entry-idl-measure')"]
+  });
+});
+
+test(function () {
+  const mark = performance.mark("moli-performance-entry-idl-sample-mark");
+  assert_true(mark instanceof PerformanceEntry);
+  assert_true(mark instanceof PerformanceMark);
+  assert_equals(Object.prototype.toString.call(mark), "[object PerformanceMark]");
+  assert_false(Object.prototype.hasOwnProperty.call(mark, "name"));
+  assert_false(Object.prototype.hasOwnProperty.call(mark, "entryType"));
+  assert_false(Object.prototype.hasOwnProperty.call(mark, "startTime"));
+  assert_false(Object.prototype.hasOwnProperty.call(mark, "duration"));
+  assert_false(Object.prototype.hasOwnProperty.call(mark, "detail"));
+  assert_equals(mark.name, "moli-performance-entry-idl-sample-mark");
+  assert_equals(mark.entryType, "mark");
+  assert_equals(mark.detail, null);
+
+  const measure = performance.measure("moli-performance-entry-idl-sample-measure", { detail: "measure-detail" });
+  assert_true(measure instanceof PerformanceEntry);
+  assert_true(measure instanceof PerformanceMeasure);
+  assert_equals(Object.prototype.toString.call(measure), "[object PerformanceMeasure]");
+  assert_false(Object.prototype.hasOwnProperty.call(measure, "detail"));
+  assert_equals(measure.name, "moli-performance-entry-idl-sample-measure");
+  assert_equals(measure.entryType, "measure");
+  assert_equals(measure.detail, "measure-detail");
+}, "PerformanceEntry subclasses expose inherited entry fields and subclass detail");
+</script>

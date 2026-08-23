@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      try {
+        setTimeout(() => {
+          try {
+            document.open();
+            document.write(
+              '<section id="outer"><div id="parent"><span id="inner">lazy</span><em id="tail"></em></div></section>',
+            );
+            document.close();
+
+            const inner = document.getElementById("inner");
+            const parent = inner.parentNode;
+            const outer = parent.parentNode;
+            const owner = inner.ownerDocument;
+            const first = parent.firstChild;
+            const last = parent.lastChild;
+            const next = first.nextSibling;
+            const previous = last.previousSibling;
+
+            window.rustDomLazyHydrationError = null;
+            window.rustDomLazyHydrationParentTag = parent.tagName;
+            window.rustDomLazyHydrationOuterTag = outer.tagName;
+            window.rustDomLazyHydrationOwnerDocument = owner === document;
+            window.rustDomLazyHydrationFirstChildIsInner = first === inner;
+            window.rustDomLazyHydrationLastChildId = last.id;
+            window.rustDomLazyHydrationNextSiblingId = next.id;
+            window.rustDomLazyHydrationPreviousSiblingId = previous.id;
+            window.rustDomLazyHydrationChildOrder = Array.from(
+              parent.childNodes,
+              (node) => node.id ?? node.nodeName,
+            ).join("|");
+          } catch (error) {
+            window.rustDomLazyHydrationError = String(error);
+          }
+        }, 0);
+      } catch (error) {
+        window.rustDomLazyHydrationError = String(error);
+      }
+    </script>
+  </body>
+</html>

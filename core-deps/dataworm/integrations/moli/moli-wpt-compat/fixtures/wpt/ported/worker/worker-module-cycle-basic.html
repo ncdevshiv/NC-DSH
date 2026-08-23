@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-cycle-main.js",
+    location.href
+  ).href;
+  const worker = new Worker(workerUrl, { type: "module" });
+
+  try {
+    const message = await new Promise(function (resolve, reject) {
+      worker.addEventListener("message", resolve, { once: true });
+      worker.addEventListener("error", function (event) {
+        reject(new Error(event.message || "worker error"));
+      }, { once: true });
+    });
+    assert_equals(message.data, "cycle-ok", "side-effect-only static cycles should evaluate");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers evaluate side-effect-only cyclic static import graphs");
+</script>

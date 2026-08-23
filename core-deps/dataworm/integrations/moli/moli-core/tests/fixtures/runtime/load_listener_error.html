@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="before">before</main>
+    <script>
+      window.addEventListener("load", () => {
+        document.body.setAttribute("data-load-first", "before-throw");
+        throw new Error("load boom");
+      });
+      window.addEventListener("load", () => {
+        document.body.setAttribute("data-load-second", "after-throw");
+      });
+    </script>
+    <main id="after">after</main>
+  </body>
+</html>

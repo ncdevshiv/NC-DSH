@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <style></style>
+  </head>
+  <body data-span-count="" data-rule-count="" data-ok="">
+    <div id="container"></div>
+    <script>
+      const container = document.getElementById('container');
+      const body = document.body;
+      const fontUrl = 'slow-ahem-loading.cgi?delay=5000';
+
+      function makeSpan(family) {
+        document.styleSheets[0].insertRule(
+          '@font-face { font-family: ' + family + '; src: url(' + fontUrl + '); }',
+          document.styleSheets[0].cssRules.length
+        );
+        const span = document.createElement('span');
+        span.style.fontFamily = family;
+        span.textContent = family;
+        container.appendChild(span);
+      }
+
+      let ok = true;
+      try {
+        makeSpan('ahem-1');
+        makeSpan('ahem-2');
+      } catch (error) {
+        ok = false;
+      }
+
+      body.setAttribute('data-span-count', String(container.children.length));
+      body.setAttribute(
+        'data-rule-count',
+        String(document.styleSheets[0].cssRules.length)
+      );
+      body.setAttribute('data-ok', String(ok));
+    </script>
+  </body>
+</html>

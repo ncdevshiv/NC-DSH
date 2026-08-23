@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body data-order="" data-count="" data-ready-status="">
+    <script>
+      const body = document.body;
+      const events = [];
+
+      document.fonts.onloading = (event) => events.push(event.type);
+      document.fonts.onloadingdone = (event) => events.push(event.type);
+      document.fonts.onloadingerror = (event) => events.push(event.type);
+
+      document.fonts
+        .load('10px sans-serif')
+        .then(() => document.fonts.ready)
+        .then(() => {
+          body.setAttribute('data-order', events.join(','));
+          body.setAttribute('data-count', String(events.length));
+          body.setAttribute('data-ready-status', document.fonts.status);
+        });
+    </script>
+  </body>
+</html>

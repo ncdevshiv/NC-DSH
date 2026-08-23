@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/runtime/fixture-server-config.js"></script>
+<script>
+function current_origin() {
+  return location.protocol + "//" + location.host;
+}
+
+function alternate_origin() {
+  return location.protocol + "//" + location.hostname + ":" + __lmFixtureServerConfig.alternatePort;
+}
+
+function support_url(origin, token) {
+  return origin + "/wpt/ported/sharedworker/resources/dataurl-origin-iframe.html?token=" + encodeURIComponent(token);
+}
+
+function collect_counts(test, token, urls) {
+  return new Promise(function (resolve, reject) {
+    const frames = [];
+    const counts = [];
+    let settled = false;
+
+    function cleanup() {
+      window.removeEventListener("message", on_message);
+      for (const frame of frames) {
+        frame.remove();
+      }
+    }
+
+    function on_message(event) {
+      if (settled) {
+        return;
+      }
+      if (!event.data || event.data.token !== token) {
+        return;
+      }
+      counts.push(event.data.count);
+      if (counts.length === urls.length) {
+        settled = true;
+        cleanup();
+        counts.sort(function (left, right) {
+          return left - right;
+        });
+        resolve(counts);
+      }
+    }
+
+    window.addEventListener("message", on_message);
+    test.add_cleanup(cleanup);
+    const container = document.body || document.documentElement;
+    for (const url of urls) {
+      const frame = document.createElement("iframe");
+      frame.src = url;
+      frames.push(frame);
+      container.appendChild(frame);
+    }
+  });
+}
+
+promise_test(async function (test) {
+  const token = "cross-origin-data-url";
+  const counts = await collect_counts(test, token, [
+    support_url(current_origin(), token),
+    support_url(alternate_origin(), token),
+  ]);
+  assert_array_equals(counts, [1, 1]);
+}, "Data URL SharedWorkers are not shared by different origins");
+
+promise_test(async function (test) {
+  const token = "same-origin-data-url";
+  const counts = await collect_counts(test, token, [
+    support_url(current_origin(), token),
+    support_url(current_origin(), token),
+  ]);
+  assert_array_equals(counts, [1, 2]);
+}, "Data URL SharedWorkers are shared by the same origin");
+</script>

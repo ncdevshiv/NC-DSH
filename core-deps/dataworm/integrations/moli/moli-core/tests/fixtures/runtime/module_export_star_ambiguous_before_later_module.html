@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleExportStarAmbiguousOrder = [];
+      window.addEventListener("error", () => {
+        window.moduleExportStarAmbiguousOrder.push("error");
+        window.moduleExportStarAmbiguousError = "ambiguous";
+      });
+    </script>
+    <script type="module">
+      import { shared } from "/assets/module-export-star-ambiguous-barrel.mjs";
+      window.moduleExportStarAmbiguousValue = shared;
+    </script>
+    <script type="module">
+      window.moduleExportStarAmbiguousOrder.push("later-module");
+      window.moduleExportStarAmbiguousContinuation = true;
+      window.moduleExportStarAmbiguousOrderResult =
+        window.moduleExportStarAmbiguousOrder.join(",");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<body
+  data-sync-committed=""
+  data-sync-finished=""
+  data-sync-result-keys=""
+  data-sync-result-props=""
+  data-completed-hash=""
+  data-completed-committed=""
+  data-completed-finished=""
+  data-completed-committed-type=""
+  data-completed-finished-type=""
+  data-completed-committed-url=""
+  data-completed-finished-url=""
+  data-completed-current-same-committed=""
+  data-completed-current-same-finished=""
+  data-sync-current-same-before=""
+  data-completed-before-same-committed=""
+  data-completed-before-same-finished=""
+  data-order=""
+></body>
+<script>
+window.addEventListener("load", () => {
+  history.pushState({ n: 1 }, "", "#one");
+  history.pushState({ n: 2 }, "", "#two");
+
+  const order = [];
+  let committedSettled = false;
+  let finishedSettled = false;
+  let committedValue = null;
+  let finishedValue = null;
+  const beforeEntry = navigation.currentEntry;
+
+  navigation.addEventListener("currententrychange", (event) => {
+    order.push(
+      "cec:" +
+        String(event.navigationType) +
+        ":" +
+        (event.from ? new URL(event.from.url).hash || "(none)" : "(null)")
+    );
+    queueMicrotask(() => {
+      order.push(
+        "cec-micro:" +
+          (new URL(location.href).hash || "(none)") +
+          ":" +
+          String(history.state?.n ?? "null")
+      );
+    });
+  });
+
+  window.addEventListener("popstate", (event) => {
+    order.push("popstate:" + String(event.state?.n ?? "null"));
+    queueMicrotask(() => {
+      order.push("popstate-micro:" + String(history.state?.n ?? "null"));
+    });
+  });
+
+  window.addEventListener("hashchange", () => {
+    order.push("hashchange:" + (new URL(location.href).hash || "(none)"));
+    queueMicrotask(() => {
+      order.push("hashchange-micro:" + (new URL(location.href).hash || "(none)"));
+      document.body.setAttribute("data-completed-hash", location.hash);
+      document.body.setAttribute("data-completed-committed", String(committedSettled));
+      document.body.setAttribute("data-completed-finished", String(finishedSettled));
+      document.body.setAttribute("data-completed-committed-type", Object.prototype.toString.call(committedValue));
+      document.body.setAttribute("data-completed-finished-type", Object.prototype.toString.call(finishedValue));
+      document.body.setAttribute("data-completed-committed-url", committedValue?.url ?? "");
+      document.body.setAttribute("data-completed-finished-url", finishedValue?.url ?? "");
+      document.body.setAttribute("data-completed-current-same-committed", String(committedValue === navigation.currentEntry));
+      document.body.setAttribute("data-completed-current-same-finished", String(finishedValue === navigation.currentEntry));
+      document.body.setAttribute("data-completed-before-same-committed", String(committedValue === beforeEntry));
+      document.body.setAttribute("data-completed-before-same-finished", String(finishedValue === beforeEntry));
+      document.body.setAttribute("data-order", order.join(","));
+    });
+  });
+
+  const result = navigation.back();
+  result.committed.then((entry) => {
+    committedSettled = true;
+    committedValue = entry;
+    order.push(
+      "committed:" +
+        (new URL(entry.url).hash || "(none)") +
+        ":" +
+        String(entry === navigation.currentEntry) +
+        ":" +
+        String(entry === beforeEntry)
+    );
+  });
+  result.finished.then((entry) => {
+    finishedSettled = true;
+    finishedValue = entry;
+    order.push(
+      "finished:" +
+        (new URL(entry.url).hash || "(none)") +
+        ":" +
+        String(entry === navigation.currentEntry) +
+        ":" +
+        String(entry === beforeEntry)
+    );
+  });
+
+  document.body.setAttribute("data-sync-committed", String(committedSettled));
+  document.body.setAttribute("data-sync-finished", String(finishedSettled));
+  document.body.setAttribute("data-sync-result-keys", Object.keys(result).join(","));
+  document.body.setAttribute("data-sync-result-props", Object.getOwnPropertyNames(result).join(","));
+  document.body.setAttribute("data-sync-current-same-before", String(navigation.currentEntry === beforeEntry));
+
+});
+</script>
+</html>

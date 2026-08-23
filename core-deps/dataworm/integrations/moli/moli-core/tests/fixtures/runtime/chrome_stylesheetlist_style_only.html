@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <style id="s1">#e1 { color: red; }</style>
+    <style id="s2">#e2 { color: red; }</style>
+  </head>
+  <body
+    data-initial-length=""
+    data-disabled-length=""
+    data-owner-ids=""
+  >
+    <div style="color: green">
+      <span id="e1">This</span>
+      <span id="e2">works</span>
+    </div>
+    <script>
+      const body = document.body;
+      body.setAttribute('data-initial-length', String(document.styleSheets.length));
+      document.getElementById('s1').disabled = true;
+      document.getElementById('s2').disabled = true;
+      body.setAttribute('data-disabled-length', String(document.styleSheets.length));
+      body.setAttribute(
+        'data-owner-ids',
+        Array.from(document.styleSheets)
+          .map((sheet) => sheet.ownerNode && sheet.ownerNode.id)
+          .join(',')
+      );
+    </script>
+  </body>
+</html>

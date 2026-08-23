@@ -1,0 +1,125 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    worker.addEventListener("message", resolve, { once: true });
+    worker.addEventListener("error", function (event) {
+      reject(new Error("Worker error: " + event.message));
+    }, { once: true });
+  });
+}
+
+promise_test(async function () {
+  const dynamicDepUrl = worker_url([
+    "export const answer = 42;",
+    "export const label = 'dynamic';",
+    "export default 'dynamic-default';",
+  ].join("\n"));
+  const promisedDepUrl = worker_url([
+    "export const answer = 7;",
+    "export default 'promise-default';",
+  ].join("\n"));
+  const fragmentDepUrl = worker_url([
+    "export let counter = 0;",
+    "export const moduleUrl = import.meta.url;",
+    "export function bump() {",
+    "  counter += 1;",
+    "  return counter;",
+    "}",
+  ].join("\n"));
+  const fragmentOneUrl = fragmentDepUrl + "#dynamic-one";
+  const fragmentTwoUrl = fragmentDepUrl + "#dynamic-two";
+  const splitIndex = Math.floor(dynamicDepUrl.length / 2);
+  const dynamicDepPrefix = dynamicDepUrl.slice(0, splitIndex);
+  const dynamicDepSuffix = dynamicDepUrl.slice(splitIndex);
+  const source = [
+    "async function run() {",
+    "  const awaited = await import(" + JSON.stringify(dynamicDepUrl) + ");",
+    "  const promise = import(" + JSON.stringify(promisedDepUrl) + ");",
+    "  const promised = await promise;",
+    "  const template = await import(`" + dynamicDepUrl + "`);",
+    "  const concatenated = await import(" + JSON.stringify(dynamicDepPrefix) + " + " + JSON.stringify(dynamicDepSuffix) + ");",
+    "  const withOptions = await import(" + JSON.stringify(promisedDepUrl) + ", {});",
+    "  const fragmentOne = await import(" + JSON.stringify(fragmentOneUrl) + ");",
+    "  const sameFragmentOne = await import(" + JSON.stringify(fragmentOneUrl) + ");",
+    "  const fragmentTwo = await import(" + JSON.stringify(fragmentTwoUrl) + ");",
+    "  const fragmentOneFirst = fragmentOne.bump();",
+    "  const fragmentOneSecond = sameFragmentOne.bump();",
+    "  const fragmentTwoFirst = fragmentTwo.bump();",
+    "  postMessage({",
+    "    awaitedAnswer: awaited.answer,",
+    "    awaitedDefault: awaited.default,",
+    "    awaitedLabel: awaited.label,",
+    "    promisedAnswer: promised.answer,",
+    "    promisedDefault: promised.default,",
+    "    templateAnswer: template.answer,",
+    "    concatenatedDefault: concatenated.default,",
+    "    optionsAnswer: withOptions.answer,",
+    "    templateNamespaceObjectSame: template === awaited,",
+    "    concatenatedNamespaceObjectSame: concatenated === awaited,",
+    "    optionsNamespaceObjectSame: withOptions === promised,",
+    "    fragmentOneUrl: fragmentOne.moduleUrl,",
+    "    sameFragmentOneUrl: sameFragmentOne.moduleUrl,",
+    "    fragmentTwoUrl: fragmentTwo.moduleUrl,",
+    "    fragmentOneFirst,",
+    "    fragmentOneSecond,",
+    "    sameFragmentOneCounter: sameFragmentOne.counter,",
+    "    fragmentTwoFirst,",
+    "    fragmentTwoCounter: fragmentTwo.counter,",
+    "    resolved: import.meta.resolve(" + JSON.stringify(dynamicDepUrl) + "),",
+    "    resolvedTemplate: import.meta.resolve(`" + dynamicDepUrl + "`),",
+    "    resolvedConcatenated: import.meta.resolve(" + JSON.stringify(dynamicDepPrefix) + " + " + JSON.stringify(dynamicDepSuffix) + "),",
+    "    resolvedFragmentOne: import.meta.resolve(" + JSON.stringify(fragmentOneUrl) + "),",
+    "    resolvedFragmentTwo: import.meta.resolve(" + JSON.stringify(fragmentTwoUrl) + "),",
+    "    metaUrl: import.meta.url,",
+    "    importScriptsType: typeof importScripts",
+    "  });",
+    "}",
+    "run().catch(function (error) {",
+    "  postMessage({ error: String(error && error.message || error) });",
+    "});",
+  ].join("\n");
+  const worker = new Worker(worker_url(source), { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.error, undefined, "dynamic import module worker should not fail");
+    assert_equals(message.data.awaitedAnswer, 42, "await import() should expose named exports");
+    assert_equals(message.data.awaitedDefault, "dynamic-default", "await import() should expose default exports");
+    assert_equals(message.data.awaitedLabel, "dynamic", "await import() should expose all dependency exports");
+    assert_equals(message.data.promisedAnswer, 7, "bare import() should resolve to a namespace promise");
+    assert_equals(message.data.promisedDefault, "promise-default", "bare import() should resolve default exports");
+    assert_equals(message.data.templateAnswer, 42, "template-literal import() should expose named exports");
+    assert_equals(message.data.concatenatedDefault, "dynamic-default", "static-concat import() should expose default exports");
+    assert_equals(message.data.optionsAnswer, 7, "import() with an options bag should resolve named exports");
+    assert_equals(message.data.templateNamespaceObjectSame, true, "template-literal import() should reuse the same module namespace object");
+    assert_equals(message.data.concatenatedNamespaceObjectSame, true, "static-concat import() should reuse the same module namespace object");
+    assert_equals(message.data.optionsNamespaceObjectSame, true, "import() with an options bag should reuse the same module namespace object");
+    assert_equals(message.data.fragmentOneUrl, fragmentOneUrl, "first data fragment dynamic import should preserve its URL");
+    assert_equals(message.data.sameFragmentOneUrl, fragmentOneUrl, "duplicate data fragment dynamic import should share the same module URL");
+    assert_equals(message.data.fragmentTwoUrl, fragmentTwoUrl, "different data fragment dynamic import should preserve its URL");
+    assert_equals(message.data.fragmentOneFirst, 1, "first data fragment dynamic import should start at its own counter");
+    assert_equals(message.data.fragmentOneSecond, 2, "same data fragment dynamic import should reuse the first module record");
+    assert_equals(message.data.sameFragmentOneCounter, 2, "duplicate data fragment dynamic import namespace should observe the shared live binding");
+    assert_equals(message.data.fragmentTwoFirst, 1, "different data fragment dynamic import should get an independent module record");
+    assert_equals(message.data.fragmentTwoCounter, 1, "different data fragment dynamic import state should stay independent");
+    assert_equals(message.data.resolved, dynamicDepUrl, "import.meta.resolve() should resolve static specifiers against the module URL");
+    assert_equals(message.data.resolvedTemplate, dynamicDepUrl, "template-literal import.meta.resolve() should resolve static specifiers");
+    assert_equals(message.data.resolvedConcatenated, dynamicDepUrl, "static-concat import.meta.resolve() should resolve static specifiers");
+    assert_equals(message.data.resolvedFragmentOne, fragmentOneUrl, "import.meta.resolve() should preserve data URL fragments for dynamic import dependencies");
+    assert_equals(message.data.resolvedFragmentTwo, fragmentTwoUrl, "import.meta.resolve() should distinguish data URL fragments for dynamic import dependencies");
+    assert_true(message.data.metaUrl.indexOf("data:text/javascript,") === 0, "import.meta.url should remain available");
+    assert_equals(message.data.importScriptsType, "function", "module workers should expose WorkerGlobalScope.importScripts");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers support static-string dynamic import and import.meta.resolve");
+</script>

@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface Performance : EventTarget {
+  readonly attribute DOMHighResTimeStamp timeOrigin;
+  readonly attribute PerformanceTiming timing;
+  readonly attribute PerformanceNavigation navigation;
+  DOMHighResTimeStamp now();
+  sequence<PerformanceEntry> getEntries();
+  sequence<PerformanceEntry> getEntriesByType(DOMString entryType);
+  sequence<PerformanceEntry> getEntriesByName(DOMString name, optional DOMString entryType);
+  PerformanceMark mark(DOMString markName, optional object markOptions = {});
+  undefined clearMarks(optional DOMString markName);
+  PerformanceMeasure measure(DOMString measureName, optional object startOrMeasureOptions = {}, optional DOMString endMark);
+  undefined clearMeasures(optional DOMString measureName);
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    Performance: ["performance"]
+  });
+});
+
+test(function () {
+  assert_false(Object.prototype.hasOwnProperty.call(performance, "now"));
+  assert_false(Object.prototype.hasOwnProperty.call(performance, "timeOrigin"));
+  assert_false(Object.prototype.hasOwnProperty.call(performance, "timing"));
+  assert_false(Object.prototype.hasOwnProperty.call(performance, "navigation"));
+  assert_equals(Object.getPrototypeOf(performance), Performance.prototype);
+  assert_true(performance.timing === performance.timing);
+  assert_true(performance.navigation === performance.navigation);
+  const mark = performance.mark("moli-performance-idl-mark");
+  assert_equals(mark.entryType, "mark");
+  assert_equals(performance.getEntriesByName("moli-performance-idl-mark", "mark").length, 1);
+  performance.clearMarks("moli-performance-idl-mark");
+}, "Performance operations are inherited from Performance.prototype and operate on window.performance");
+</script>

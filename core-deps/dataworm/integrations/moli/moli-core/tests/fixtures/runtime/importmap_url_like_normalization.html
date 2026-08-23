@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "/compat/canonical-source.mjs": "/assets/importmap-canonical-target.mjs"
+        }
+      }
+    </script>
+    <script type="module">
+      import { label } from "./nested/../canonical-source.mjs";
+      window.importMapUrlLikeNormalizationResult = label;
+    </script>
+  </body>
+</html>

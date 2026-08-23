@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function websocket_url(path) {
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return scheme + "//" + location.host + path;
+}
+
+function next_message_or_error(socket) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      socket.removeEventListener("message", onmessage);
+      socket.removeEventListener("error", onerror);
+    }
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+    function onerror(event) {
+      cleanup();
+      reject(new Error("WebSocket error before message: " + event.type));
+    }
+    socket.addEventListener("message", onmessage);
+    socket.addEventListener("error", onerror);
+  });
+}
+
+function wait_for_close(socket) {
+  return new Promise(function (resolve) {
+    socket.addEventListener("close", resolve, { once: true });
+  });
+}
+
+promise_test(async function () {
+  const response = await fetch("/wpt/runtime/websocket/cookie-set");
+  assert_equals(await response.text(), "websocket-cookie=set", "cookie setup route should load");
+
+  const socket = new WebSocket(websocket_url("/wpt/runtime/websocket/cookie-echo"));
+  const message = await next_message_or_error(socket);
+  assert_true(
+    message.data.split(";").map(function (cookie) { return cookie.trim(); }).includes("wpt_ws_cookie=handshake"),
+    "same-origin WebSocket handshake should include cookies visible to the mapped HTTP URL"
+  );
+
+  const close = await wait_for_close(socket);
+  assert_equals(close.code, 1000, "server should close the cookie echo socket cleanly");
+}, "WebSocket handshakes carry same-origin cookies for the mapped HTTP URL");
+</script>

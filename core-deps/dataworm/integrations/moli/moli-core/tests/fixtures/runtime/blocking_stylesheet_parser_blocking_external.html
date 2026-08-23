@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      window.blockingStylesheetStart = Date.now();
+      window.blockingStylesheetOrder = [];
+      window.blockingStylesheetDclSeen = false;
+      document.addEventListener("DOMContentLoaded", () => {
+        window.blockingStylesheetDclSeen = true;
+        window.blockingStylesheetOrder.push("dcl");
+      });
+    </script>
+    <link rel="stylesheet" href="/assets/blocking_stylesheet_slow.css">
+    <script src="/assets/blocking_stylesheet_parser_blocking.js"></script>
+  </head>
+  <body>
+    <div id="late">late</div>
+  </body>
+</html>

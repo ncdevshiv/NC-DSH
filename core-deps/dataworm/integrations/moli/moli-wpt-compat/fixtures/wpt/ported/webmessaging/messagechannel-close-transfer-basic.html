@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  let error = null;
+  try {
+    callback();
+  } catch (thrown) {
+    error = thrown;
+  }
+  assert_true(error !== null, (description || "assert_throws_name") + ": expected an exception");
+  assert_equals(error.name, expectedName, (description || "assert_throws_name") + ": unexpected exception name");
+}
+
+promise_test(async function () {
+  const channel = new MessageChannel();
+  const messages = [];
+  const complete = new Promise(function (resolve) {
+    channel.port1.onmessage = function (event) {
+      messages.push(event.data);
+      if (event.data === "first") {
+        channel.port1.close();
+      }
+      if (event.data === "second") {
+        resolve();
+      }
+    };
+  });
+
+  channel.port2.postMessage("first");
+  channel.port2.postMessage("second");
+
+  await complete;
+  assert_array_equals(messages, ["first", "second"]);
+}, "MessagePort.close during dispatch does not cancel already queued messages");
+
+test(function () {
+  const closedPair = new MessageChannel();
+  const transferPair = new MessageChannel();
+
+  try {
+    closedPair.port1.close();
+
+    assert_throws_name("DataCloneError", function () {
+      transferPair.port1.postMessage("closed", [closedPair.port1]);
+    }, "closed MessagePort endpoint should be detached");
+
+    transferPair.port1.postMessage("peer", [closedPair.port2]);
+  } finally {
+    closedPair.port2.close();
+    transferPair.port1.close();
+    transferPair.port2.close();
+  }
+}, "MessagePort.close detaches the closed endpoint but leaves its peer transferable");
+</script>

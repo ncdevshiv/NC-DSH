@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "fixture": "/assets/importmap-initial-target.mjs"
+        }
+      }
+    </script>
+    <script type="module">
+      import { greeting } from "fixture";
+      window.importMapAcquisitionFirstModule = greeting;
+
+      const lateMap = document.createElement("script");
+      lateMap.type = "importmap";
+      lateMap.textContent = '{"imports":{"late":"/assets/importmap-extra-target.mjs"}}';
+      document.body.appendChild(lateMap);
+
+      const lateModule = document.createElement("script");
+      lateModule.type = "module";
+      lateModule.textContent = 'import { label } from "late"; window.importMapAcquisitionLateModule = label;';
+      document.body.appendChild(lateModule);
+
+      window.importMapAcquisitionMutationDone = true;
+    </script>
+  </body>
+</html>

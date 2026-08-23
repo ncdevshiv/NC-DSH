@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<body>
+  <div id="root">
+    <div id="inside"></div>
+  </div>
+  <div id="outside"></div>
+  <script>
+    const root = document.getElementById('root');
+    const inside = document.getElementById('inside');
+    const outside = document.getElementById('outside');
+
+    let seen = [];
+    const observer = new IntersectionObserver((entries) => {
+      seen = seen.concat(entries.map((entry) => entry.target.id));
+    }, { root });
+
+    observer.observe(outside);
+    observer.observe(inside);
+
+    setTimeout(() => {
+      window.intersectionObserverRootScopedIds = seen.join(',');
+      window.intersectionObserverRootScopedCount = seen.length;
+    }, 0);
+  </script>
+</body>
+</html>

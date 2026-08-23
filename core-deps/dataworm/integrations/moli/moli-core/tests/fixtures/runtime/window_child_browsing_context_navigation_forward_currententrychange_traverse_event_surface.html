@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+  <body
+    data-top-currententrychange="0"
+    data-child-oncurrententrychange-fired="false"
+    data-child-order=""
+    data-child-sync-hash=""
+    data-child-sync-state=""
+    data-child-timeout-hash=""
+    data-child-timeout-state=""
+    data-child-from-url=""
+    data-child-navigation-type=""
+  >
+    <iframe id="child" src="/compat/window-child-browsing-context-target-name-a"></iframe>
+    <script>
+      const iframe = document.getElementById("child");
+      let topChanges = 0;
+
+      window.navigation.addEventListener("currententrychange", () => {
+        topChanges += 1;
+      });
+
+      iframe.addEventListener(
+        "load",
+        () => {
+          const childWindow = iframe.contentWindow;
+
+          childWindow.history.pushState({ n: 1 }, "", "#one");
+          childWindow.history.pushState({ n: 2 }, "", "#two");
+
+          setTimeout(() => {
+            topChanges = 0;
+
+            childWindow.addEventListener(
+              "hashchange",
+              function onHashchange() {
+                if (childWindow.location.hash !== "#one") {
+                  return;
+                }
+
+                const order = [];
+                childWindow.navigation.oncurrententrychange = (event) => {
+                  document.body.setAttribute(
+                    "data-child-oncurrententrychange-fired",
+                    "true"
+                  );
+                  document.body.setAttribute(
+                    "data-child-from-url",
+                    event.from ? event.from.url : "null"
+                  );
+                  document.body.setAttribute(
+                    "data-child-navigation-type",
+                    String(event.navigationType)
+                  );
+                  order.push("currententrychange");
+                  queueMicrotask(() => {
+                    order.push(
+                      "currententrychange-microtask:" + childWindow.location.hash
+                    );
+                  });
+                  setTimeout(() => {
+                    document.body.setAttribute(
+                      "data-top-currententrychange",
+                      String(topChanges)
+                    );
+                    document.body.setAttribute(
+                      "data-child-order",
+                      order.join(",")
+                    );
+                    document.body.setAttribute(
+                      "data-child-timeout-hash",
+                      childWindow.location.hash
+                    );
+                    document.body.setAttribute(
+                      "data-child-timeout-state",
+                      JSON.stringify(childWindow.history.state)
+                    );
+                  }, 0);
+                };
+
+                childWindow.navigation.forward();
+                document.body.setAttribute(
+                  "data-child-sync-hash",
+                  childWindow.location.hash
+                );
+                document.body.setAttribute(
+                  "data-child-sync-state",
+                  JSON.stringify(childWindow.history.state)
+                );
+                childWindow.removeEventListener("hashchange", onHashchange);
+              },
+              { once: false }
+            );
+
+            childWindow.history.back();
+          }, 50);
+        },
+        { once: true }
+      );
+    </script>
+  </body>
+</html>

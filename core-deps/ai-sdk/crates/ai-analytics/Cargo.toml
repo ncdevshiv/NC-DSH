@@ -1,0 +1,20 @@
+[package]
+name = "ai-analytics"
+description = "Analytics: metrics aggregation, cost estimation, per-provider/model/agent breakdowns"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-observability = { path = "../ai-observability" }
+ai-errors = { path = "../ai-errors" }
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+tracing.workspace = true
+thiserror.workspace = true

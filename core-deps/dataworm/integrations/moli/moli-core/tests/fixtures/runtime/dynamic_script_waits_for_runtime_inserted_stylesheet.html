@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script>
+      window.dynamicBlockingStylesheetOrder = [];
+      document.addEventListener('DOMContentLoaded', () => {
+        window.dynamicBlockingStylesheetOrder.push('dcl');
+        window.dynamicBlockingStylesheetFinalOrder =
+          window.dynamicBlockingStylesheetOrder.join(',');
+        fetch('/assets/dynamic_blocking_stylesheet_dcl', { cache: 'no-store' });
+      });
+      window.addEventListener('load', () => {
+        window.dynamicBlockingStylesheetOrder.push('load');
+        window.dynamicBlockingStylesheetFinalOrder =
+          window.dynamicBlockingStylesheetOrder.join(',');
+      });
+
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/assets/dynamic_blocking_stylesheet_gated.css';
+      link.onload = () => {
+        window.dynamicBlockingStylesheetStyleLoaded = true;
+      };
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.async = false;
+      script.src = '/assets/dynamic_blocking_stylesheet_runtime.js';
+      document.head.appendChild(script);
+    </script>
+  </head>
+  <body>
+    <main id="late">late</main>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const REQUEST_HEADERS_URL = "/wpt/runtime/xhr/request-headers";
+const ECHO_BODY_URL = "/wpt/runtime/xhr/echo-body";
+
+promise_test(async function () {
+  const xhr = new XMLHttpRequest();
+
+  await new Promise(function (resolve) {
+    xhr.onload = resolve;
+    xhr.open("GET", REQUEST_HEADERS_URL);
+    xhr.responseType = "json";
+    xhr.setRequestHeader("X-Test", "xhr");
+    xhr.send();
+  });
+
+  assert_equals(xhr.status, 200, "request-headers status");
+  assert_equals(xhr.response.x_test, "xhr", "custom request header should reach the server");
+  assert_equals(xhr.response.accept, "*/*", "XHR should send the browser-style Accept header");
+  assert_true(
+    xhr.response.referer.indexOf("/wpt/ported/xhr/xmlhttprequest-request-headers-basic.html") !== -1,
+    "XHR should send a referer for same-origin subresource requests",
+  );
+  assert_equals(xhr.response.sec_fetch_site, "same-origin", "sec-fetch-site");
+  assert_equals(xhr.response.sec_fetch_mode, "cors", "sec-fetch-mode");
+  assert_equals(xhr.response.sec_fetch_dest, "empty", "sec-fetch-dest");
+  assert_true(xhr.response.sec_ch_ua_present, "sec-ch-ua should be present");
+  assert_equals(xhr.response.sec_ch_ua_mobile, "?0", "sec-ch-ua-mobile");
+  assert_equals(typeof xhr.response.sec_ch_ua_platform, "string", "sec-ch-ua-platform type");
+}, "XMLHttpRequest emits browser-style subresource request headers on the wire");
+
+promise_test(async function () {
+  const xhr = new XMLHttpRequest();
+  const payload = "alpha=beta&count=2";
+
+  await new Promise(function (resolve) {
+    xhr.onload = resolve;
+    xhr.open("POST", ECHO_BODY_URL);
+    xhr.responseType = "json";
+    xhr.setRequestHeader("Content-Type", "text/plain;charset=utf-8");
+    xhr.setRequestHeader("X-Body-Test", "present");
+    xhr.send(payload);
+  });
+
+  assert_equals(xhr.status, 200, "echo-body status");
+  assert_equals(xhr.response.body, payload, "XHR should send the exact string body bytes");
+  assert_equals(xhr.response.x_body_test, "present", "custom POST header should reach the server");
+  assert_equals(
+    xhr.response.content_type,
+    "text/plain;charset=utf-8",
+    "explicit Content-Type should reach the server unchanged",
+  );
+}, "XMLHttpRequest sends explicit request bodies and headers to the server");
+</script>

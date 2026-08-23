@@ -1,0 +1,95 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+test(() => {
+  assert_throws_name(
+    "TypeError",
+    () => IDBVersionChangeEvent("versionchange"),
+    "IDBVersionChangeEvent requires new"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => new IDBVersionChangeEvent(),
+    "IDBVersionChangeEvent type is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => new IDBVersionChangeEvent(Symbol("type")),
+    "IDBVersionChangeEvent rejects Symbol type"
+  );
+
+  const throwingType = {
+    toString() {
+      throw new RangeError("versionchange type conversion");
+    },
+  };
+  assert_throws_name(
+    "RangeError",
+    () => new IDBVersionChangeEvent(throwingType),
+    "IDBVersionChangeEvent propagates type stringification errors"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => new IDBVersionChangeEvent("versionchange", Symbol("init")),
+    "IDBVersionChangeEvent rejects non-object init dictionaries"
+  );
+
+  const throwingOldVersion = {
+    get oldVersion() {
+      throw new RangeError("oldVersion conversion");
+    },
+  };
+  assert_throws_name(
+    "RangeError",
+    () => new IDBVersionChangeEvent("versionchange", throwingOldVersion),
+    "IDBVersionChangeEvent propagates init getter errors"
+  );
+
+  const defaultEvent = new IDBVersionChangeEvent(undefined);
+  assert_equals(defaultEvent.type, "undefined", "present undefined type converts to DOMString");
+  assert_equals(defaultEvent.oldVersion, 0, "missing oldVersion defaults to 0");
+  assert_equals(defaultEvent.newVersion, null, "missing newVersion defaults to null");
+
+  const nullInitEvent = new IDBVersionChangeEvent("versionchange", null);
+  assert_equals(nullInitEvent.oldVersion, 0, "null init defaults oldVersion");
+  assert_equals(nullInitEvent.newVersion, null, "null init defaults newVersion");
+
+  const convertedEvent = new IDBVersionChangeEvent("versionchange", {
+    oldVersion: "7",
+    newVersion: {
+      valueOf() {
+        return 9;
+      },
+    },
+  });
+  assert_equals(convertedEvent.type, "versionchange", "type is retained");
+  assert_equals(convertedEvent.oldVersion, 7, "oldVersion uses unsigned long long conversion");
+  assert_equals(convertedEvent.newVersion, 9, "newVersion uses nullable unsigned long long conversion");
+
+  const nullNewVersion = new IDBVersionChangeEvent("versionchange", {
+    oldVersion: 1,
+    newVersion: null,
+  });
+  assert_equals(nullNewVersion.oldVersion, 1, "oldVersion is read with null newVersion");
+  assert_equals(nullNewVersion.newVersion, null, "newVersion accepts null");
+}, "IDBVersionChangeEvent constructor arguments follow WebIDL conversion");
+</script>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <body
+    data-basic=""
+    data-derived=""
+    data-mutated=""
+    data-negative-derived=""
+  >
+    <script>
+      const body = document.body;
+      const rect = new DOMRect(1, 2, 3, 4);
+      body.setAttribute(
+        "data-basic",
+        String(rect.x === 1 && rect.y === 2 && rect.width === 3 && rect.height === 4),
+      );
+      body.setAttribute(
+        "data-derived",
+        String(rect.top === 2 && rect.right === 4 && rect.bottom === 6 && rect.left === 1),
+      );
+      rect.x = 10;
+      rect.y = 20;
+      rect.width = 30;
+      rect.height = 40;
+      body.setAttribute(
+        "data-mutated",
+        String(rect.top === 20 && rect.right === 40 && rect.bottom === 60 && rect.left === 10),
+      );
+      const negative = new DOMRect(10, 20, -5, -7);
+      body.setAttribute(
+        "data-negative-derived",
+        String(
+          negative.left === 5 &&
+            negative.right === 10 &&
+            negative.top === 13 &&
+            negative.bottom === 20,
+        ),
+      );
+    </script>
+  </body>
+</html>

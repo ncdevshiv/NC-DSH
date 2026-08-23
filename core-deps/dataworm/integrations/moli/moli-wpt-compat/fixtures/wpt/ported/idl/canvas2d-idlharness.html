@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+interface HTMLCanvasElement : HTMLElement {
+  attribute unsigned long width;
+  attribute unsigned long height;
+  RenderingContext? getContext(DOMString contextId, optional any options = null);
+  DOMString toDataURL(optional DOMString type = "image/png", optional any quality);
+  OffscreenCanvas transferControlToOffscreen();
+};
+
+interface CanvasRenderingContext2D {
+  attribute DOMString fillStyle;
+  attribute DOMString font;
+  undefined clearRect(unrestricted double x, unrestricted double y, unrestricted double w, unrestricted double h);
+  undefined fillRect(unrestricted double x, unrestricted double y, unrestricted double w, unrestricted double h);
+  undefined strokeRect(unrestricted double x, unrestricted double y, unrestricted double w, unrestricted double h);
+  undefined fillText(DOMString text, unrestricted double x, unrestricted double y, optional unrestricted double maxWidth);
+  undefined strokeText(DOMString text, unrestricted double x, unrestricted double y, optional unrestricted double maxWidth);
+  object measureText(DOMString text);
+  ImageData createImageData(long sw, long sh);
+  undefined putImageData(ImageData imagedata, unrestricted double dx, unrestricted double dy);
+  ImageData getImageData(long sx, long sy, long sw, long sh);
+};
+
+typedef (CanvasRenderingContext2D or WebGLRenderingContext) RenderingContext;
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    HTMLCanvasElement: ["document.createElement('canvas')"],
+    CanvasRenderingContext2D: ["document.createElement('canvas').getContext('2d')"]
+  });
+});
+
+test(function () {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  assert_true(canvas instanceof HTMLCanvasElement);
+  assert_true(context instanceof CanvasRenderingContext2D);
+  // Moli currently installs native reflected accessors on the wrapper
+  // object template. Keep this smoke slice focused on canvas behavior rather
+  // than prototype descriptor placement.
+  assert_false(Object.prototype.hasOwnProperty.call(context, "fillStyle"));
+  assert_false(Object.prototype.hasOwnProperty.call(context, "font"));
+  assert_equals(canvas.width, 300);
+  assert_equals(canvas.height, 150);
+  assert_equals(canvas.getContext("2d"), context);
+  assert_true(canvas.toDataURL().startsWith("data:image/png;base64,"));
+  assert_true(canvas.transferControlToOffscreen() instanceof OffscreenCanvas);
+
+  context.fillStyle = "red";
+  assert_equals(context.fillStyle, "#ff0000");
+  const defaultWidth = context.measureText("abc").width;
+  context.font = "bold 48px serif";
+  assert_equals(context.font, "bold 48px serif");
+  assert_true(defaultWidth > 0);
+  assert_true(context.measureText("abc").width > defaultWidth);
+  assert_true(context.createImageData(2, 3) instanceof ImageData);
+  assert_true(context.getImageData(0, 0, 2, 3) instanceof ImageData);
+}, "Canvas idlharness sample covers 2D context and serialization surfaces");
+</script>

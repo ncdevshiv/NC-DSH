@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+async function assert_rejects_name(expectedName, promise, description) {
+  try {
+    await promise;
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected rejection");
+}
+
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+promise_test(async function () {
+  const request = new Request("https://example.test/api", {
+    method: "post",
+    headers: [["X-Test", "one"]],
+    body: "payload",
+  });
+  assert_equals(request.url, "https://example.test/api");
+  assert_equals(request.method, "POST");
+  assert_equals(request.headers.get("x-test"), "one");
+  assert_equals(request.cache, "default");
+  assert_equals(request.credentials, "same-origin");
+  assert_equals(request.mode, "cors");
+  assert_equals(request.redirect, "follow");
+  assert_equals(request.referrer, "about:client");
+  assert_true(request.signal instanceof AbortSignal);
+  assert_false(request.bodyUsed);
+  assert_equals(await request.text(), "payload");
+  assert_true(request.bodyUsed);
+  await assert_rejects_name("TypeError", request.text(), "Request body should only be consumed once");
+  assert_throws_name("TypeError", function () {
+    request.clone();
+  }, "Request.clone() should reject a consumed body");
+}, "Request constructor stores method, headers, defaults, signal, and body");
+
+test(function () {
+  assert_throws_name("TypeError", function () {
+    new Request();
+  }, "Request constructor requires an input argument");
+
+  assert_throws_name("TypeError", function () {
+    new Request(Symbol("url"));
+  }, "Request constructor rejects Symbol input through USVString conversion");
+
+  const request = new Request({
+    href: "https://example.test/href-should-not-win",
+    toString() {
+      return "https://example.test/stringifier";
+    },
+  });
+  assert_equals(request.url, "https://example.test/stringifier");
+}, "Request constructor parses non-Request object input through WebIDL USVString");
+
+test(function () {
+  const original = new Request("https://example.test/clone", {
+    method: "PUT",
+    headers: [["X-Test", "clone"]],
+    body: "body",
+  });
+  const clone = original.clone();
+  assert_true(clone instanceof Request);
+  assert_equals(clone.url, original.url);
+  assert_equals(clone.method, "PUT");
+  assert_equals(clone.headers.get("x-test"), "clone");
+}, "Request.clone creates a Request with the same core request fields");
+</script>

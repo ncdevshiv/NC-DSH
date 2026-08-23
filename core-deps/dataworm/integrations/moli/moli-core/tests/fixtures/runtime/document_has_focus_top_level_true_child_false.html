@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <body data-top-has-focus="" data-child-has-focus="">
+    <iframe
+      id="child"
+      srcdoc="<!doctype html><html><body><main id='child-main'>child</main></body></html>"
+    ></iframe>
+    <script>
+      window.addEventListener("load", () => {
+        const frame = document.getElementById("child");
+        document.body.setAttribute("data-top-has-focus", String(document.hasFocus()));
+        document.body.setAttribute(
+          "data-child-has-focus",
+          String(frame.contentDocument.hasFocus()),
+        );
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.documentWriteNestedWriterOrder = [];
+      window.documentWriteNestedWriterResult = "initial";
+      document.write(`<script>
+window.documentWriteNestedWriterOrder.push("outer-start");
+document.write("<script>window.documentWriteNestedWriterOrder.push('inner');<\\/script>");
+document.write('<span id="after-inner">after</span>');
+window.documentWriteNestedWriterOrder.push(document.getElementById("after-inner") ? "after-visible" : "after-missing");
+<\/script>`);
+    </script>
+    <script>
+      const afterInner = document.getElementById("after-inner");
+      window.documentWriteNestedWriterResult =
+        (afterInner ? afterInner.textContent : "missing") +
+        "|" +
+        window.documentWriteNestedWriterOrder.join(",");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,129 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<section id="root" class="container" data-kind="fixture">
+  <article id="article" class="card featured" data-state="active">
+    <p id="p1" class="text lead">First <span id="s1" class="mark">span</span></p>
+    <p id="p2" class="text">Second</p>
+  </article>
+  <div id="sibling" class="card"><span id="s2" class="mark secondary">Other</span></div>
+</section>
+<script>
+function ids(nodes) {
+  return Array.from(nodes).map((node) => node.id);
+}
+
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+test(function () {
+  assert_equals(document.querySelector("#root").id, "root");
+  assert_equals(document.querySelector(".card").id, "article");
+  assert_equals(document.querySelector("article > p.text").id, "p1");
+  assert_equals(document.querySelector("[data-state='active']").id, "article");
+  assert_equals(document.querySelector("article p + p").id, "p2");
+  assert_equals(document.querySelector(".missing"), null);
+}, "Document querySelector() returns the first matching element in document order");
+
+test(function () {
+  assert_array_equals(ids(document.querySelectorAll(".card")), ["article", "sibling"]);
+  assert_array_equals(ids(document.querySelectorAll("article .text")), ["p1", "p2"]);
+  assert_array_equals(ids(document.querySelectorAll(".card .mark")), ["s1", "s2"]);
+  assert_array_equals(ids(document.querySelectorAll("[data-kind='fixture'] .secondary")), ["s2"]);
+  assert_equals(document.querySelectorAll(".missing").length, 0);
+}, "Document querySelectorAll() returns a static ordered NodeList");
+
+test(function () {
+  const list = document.querySelectorAll(".card");
+  const root = document.getElementById("root");
+  const added = document.createElement("div");
+
+  assert_true(list instanceof NodeList);
+  assert_equals(list.length, 2);
+  added.className = "card";
+  added.id = "added";
+  root.appendChild(added);
+  assert_equals(list.length, 2);
+  assert_equals(document.querySelectorAll(".card").length, 3);
+  added.remove();
+}, "querySelectorAll() results are static");
+
+test(function () {
+  const list = document.querySelectorAll(".card");
+  const article = document.getElementById("article");
+  const sibling = document.getElementById("sibling");
+
+  assert_equals(list.length, 2);
+  assert_equals(list.item(0), article);
+  assert_equals(list.item(1), sibling);
+  assert_equals(list.item(2), null, "out-of-range item() should return null");
+  assert_equals(list.item(-1), null, "wrapped negative index should return null when out of range");
+  assert_throws_name("TypeError", () => list.item(), "item() should require its index argument");
+  assert_equals(list.item(undefined), article, "explicit undefined should convert to zero");
+  assert_equals(list.item(null), article, "null should convert to zero");
+  assert_equals(list.item("1.9"), sibling, "string decimals should truncate through unsigned long conversion");
+  assert_equals(list.item(NaN), article, "NaN should convert to zero");
+  assert_equals(list.item(Infinity), article, "Infinity should convert to zero");
+  assert_equals(list.item(-4294967295), sibling, "negative values should wrap through unsigned long conversion");
+  assert_equals(list.item(4294967297), sibling, "large values should wrap through unsigned long conversion");
+  assert_equals(
+    list.item({
+      valueOf() { return {}; },
+      toString() { return "1"; },
+    }),
+    sibling,
+    "object values should fall back to toString during unsigned long conversion",
+  );
+  assert_throws_name("Error", () => {
+    list.item({ valueOf() { throw new Error("item conversion failed"); } });
+  }, "item() should propagate object conversion exceptions");
+  assert_throws_name("TypeError", () => list.item(Symbol("index")), "item() should reject Symbol conversion");
+  assert_throws_name("TypeError", () => list.item(1n), "item() should reject BigInt conversion");
+}, "Static NodeList item() uses WebIDL unsigned long conversion");
+
+test(function () {
+  const root = document.getElementById("root");
+
+  assert_equals(root.querySelector(".card").id, "article");
+  assert_equals(root.querySelector("#root"), null);
+  assert_array_equals(ids(root.querySelectorAll(":scope > .card")), ["article", "sibling"]);
+  assert_array_equals(ids(root.querySelectorAll(":scope .mark")), ["s1", "s2"]);
+  assert_equals(document.getElementById("article").querySelector(":scope > .lead").id, "p1");
+}, "Element querySelector(All) is scoped to descendants and supports :scope");
+
+test(function () {
+  const article = document.getElementById("article");
+  const p1 = document.getElementById("p1");
+  const s1 = document.getElementById("s1");
+
+  assert_true(article.matches("article.card.featured"));
+  assert_true(article.matches("[data-state='active']"));
+  assert_false(article.matches(".secondary"));
+  assert_true(p1.matches("p.text.lead"));
+  assert_false(p1.matches("article"));
+  assert_equals(s1.closest(".lead"), p1);
+  assert_equals(s1.closest("article.card"), article);
+  assert_equals(s1.closest("#root"), document.getElementById("root"));
+  assert_equals(s1.closest(".missing"), null);
+}, "matches() and closest() evaluate element selectors");
+
+test(function () {
+  const root = document.getElementById("root");
+  const p1 = document.getElementById("p1");
+
+  assert_throws_name("SyntaxError", () => document.querySelector(""));
+  assert_throws_name("SyntaxError", () => document.querySelector("[data-state"));
+  assert_throws_name("SyntaxError", () => root.querySelectorAll(""));
+  assert_throws_name("SyntaxError", () => p1.matches(""));
+  assert_throws_name("SyntaxError", () => p1.closest(""));
+}, "Selector APIs throw SyntaxError for invalid selectors");
+</script>

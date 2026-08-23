@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="child" src="/compat/window-child-browsing-context-target-name-a"></iframe>
+    <script>
+      const iframe = document.getElementById("child");
+      const topOrder = [];
+
+      window.addEventListener("popstate", () => topOrder.push("top-popstate"));
+      window.addEventListener("hashchange", () => topOrder.push("top-hashchange"));
+
+      iframe.addEventListener(
+        "load",
+        () => {
+          const childWindow = iframe.contentWindow;
+          const childOrder = [];
+
+          childWindow.history.pushState({ step: 1 }, "", "#one");
+          childWindow.history.pushState({ step: 2 }, "", "#two");
+
+          setTimeout(() => {
+            topOrder.length = 0;
+            childOrder.length = 0;
+
+            childWindow.addEventListener(
+              "hashchange",
+              function onHashchange() {
+                if (childWindow.location.hash !== "#one") {
+                  return;
+                }
+                childOrder.length = 0;
+                let committedSettled = false;
+                let finishedSettled = false;
+                let committedValue = null;
+                let finishedValue = null;
+                const result = childWindow.navigation.forward();
+                result.committed.then((entry) => {
+                  committedSettled = true;
+                  committedValue = entry;
+                  childOrder.push("child-committed:" + childWindow.location.hash);
+                });
+                result.finished.then((entry) => {
+                  finishedSettled = true;
+                  finishedValue = entry;
+                  childOrder.push("child-finished:" + childWindow.location.hash);
+                });
+                document.body.setAttribute(
+                  "data-child-sync-hash",
+                  childWindow.location.hash
+                );
+                document.body.setAttribute(
+                  "data-child-sync-state",
+                  String(childWindow.history.state?.step ?? "null")
+                );
+                document.body.setAttribute(
+                  "data-child-sync-committed",
+                  String(committedSettled)
+                );
+                document.body.setAttribute(
+                  "data-child-sync-finished",
+                  String(finishedSettled)
+                );
+                document.body.setAttribute(
+                  "data-child-sync-result-keys",
+                  Object.keys(result).join(",")
+                );
+                document.body.setAttribute(
+                  "data-child-sync-result-props",
+                  Object.getOwnPropertyNames(result).join(",")
+                );
+                childWindow.removeEventListener("hashchange", onHashchange);
+                setTimeout(() => {
+                  document.body.setAttribute("data-top-order", topOrder.join(","));
+                  document.body.setAttribute("data-child-order", childOrder.join(","));
+                  document.body.setAttribute(
+                    "data-child-timeout-hash",
+                    childWindow.location.hash
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-state",
+                    String(childWindow.history.state?.step ?? "null")
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-committed",
+                    String(committedSettled)
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-finished",
+                    String(finishedSettled)
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-committed-type",
+                    Object.prototype.toString.call(committedValue)
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-finished-type",
+                    Object.prototype.toString.call(finishedValue)
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-committed-url",
+                    committedValue?.url ?? ""
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-finished-url",
+                    finishedValue?.url ?? ""
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-current-same-committed",
+                    String(committedValue === childWindow.navigation.currentEntry)
+                  );
+                  document.body.setAttribute(
+                    "data-child-timeout-current-same-finished",
+                    String(finishedValue === childWindow.navigation.currentEntry)
+                  );
+                }, 50);
+              },
+              { once: false }
+            );
+
+            childWindow.history.back();
+          }, 50);
+        },
+        { once: true }
+      );
+    </script>
+  </body>
+</html>

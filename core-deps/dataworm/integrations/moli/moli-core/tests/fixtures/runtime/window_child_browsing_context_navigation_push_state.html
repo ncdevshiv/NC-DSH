@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="child" src="/compat/window-child-browsing-context-target-name-a"></iframe>
+    <script>
+      const iframe = document.getElementById('child');
+      const topHrefBefore = window.location.href;
+      const topHistoryBefore = window.history.length;
+      let loadCount = 0;
+      let listenerCount = 0;
+      let propertyCount = 0;
+      let committedSettled = false;
+      let finishedSettled = false;
+
+      iframe.addEventListener('load', () => {
+        loadCount += 1;
+        const childWindow = iframe.contentWindow;
+
+        if (loadCount === 1) {
+          const childHistoryBefore = childWindow.history.length;
+
+          childWindow.navigation.addEventListener('currententrychange', () => {
+            listenerCount += 1;
+          });
+
+          childWindow.navigation.oncurrententrychange = () => {
+            propertyCount += 1;
+          };
+
+          const result = childWindow.navigation.navigate(
+            '/compat/window-child-browsing-context-target-name-b',
+            { history: 'push', state: { from: 'parent-push' } }
+          );
+          result.committed.then(() => {
+            committedSettled = true;
+          });
+          result.finished.then(() => {
+            finishedSettled = true;
+          });
+
+          document.body.setAttribute(
+            'data-top-location-unchanged',
+            String(window.location.href === topHrefBefore)
+          );
+          document.body.setAttribute(
+            'data-top-history-unchanged',
+            String(window.history.length === topHistoryBefore)
+          );
+          document.body.setAttribute(
+            'data-child-history-unchanged-sync',
+            String(childWindow.history.length === childHistoryBefore)
+          );
+          document.body.setAttribute(
+            'data-child-location-href-sync',
+            childWindow.location.href
+          );
+          document.body.setAttribute(
+            'data-child-current-entry-url-sync',
+            childWindow.navigation.currentEntry?.url ?? 'null'
+          );
+          document.body.setAttribute(
+            'data-child-current-entry-index-sync',
+            String(childWindow.navigation.currentEntry?.index ?? -1)
+          );
+          document.body.setAttribute(
+            'data-child-current-entry-state-sync',
+            String(childWindow.navigation.currentEntry?.getState?.() ?? 'null')
+          );
+          document.body.setAttribute(
+            'data-child-document-location-href-sync',
+            childWindow.document.location.href
+          );
+          document.body.setAttribute(
+            'data-child-currententrychange-count-sync',
+            String(listenerCount)
+          );
+          document.body.setAttribute(
+            'data-child-property-currententrychange-count-sync',
+            String(propertyCount)
+          );
+          document.body.setAttribute(
+            'data-result-sync-shape',
+            [
+              typeof result,
+              String(!!result.committed),
+              String(!!result.finished),
+            ].join('|')
+          );
+
+          setTimeout(() => {
+            document.body.setAttribute(
+              'data-child-location-href-timeout',
+              childWindow.location.href
+            );
+            document.body.setAttribute(
+              'data-child-current-entry-url-timeout',
+              childWindow.navigation.currentEntry?.url ?? 'null'
+            );
+            document.body.setAttribute(
+              'data-child-current-entry-index-timeout',
+              String(childWindow.navigation.currentEntry?.index ?? -1)
+            );
+            document.body.setAttribute(
+              'data-child-result-settled-timeout',
+              `${committedSettled}|${finishedSettled}`
+            );
+            document.body.setAttribute(
+              'data-child-currententrychange-count-timeout',
+              String(listenerCount)
+            );
+            document.body.setAttribute(
+              'data-child-property-currententrychange-count-timeout',
+              String(propertyCount)
+            );
+          }, 0);
+          return;
+        }
+
+        document.body.setAttribute(
+          'data-child-history-length-after-load',
+          String(childWindow.history.length)
+        );
+        document.body.setAttribute(
+          'data-child-location-href-after-load',
+          childWindow.location.href
+        );
+        document.body.setAttribute(
+          'data-child-current-entry-url-after-load',
+          childWindow.navigation.currentEntry?.url ?? 'null'
+        );
+        document.body.setAttribute(
+          'data-child-current-entry-index-after-load',
+          String(childWindow.navigation.currentEntry?.index ?? -1)
+        );
+        document.body.setAttribute(
+          'data-child-current-entry-state-after-load',
+          String(childWindow.navigation.currentEntry?.getState?.() ?? 'null')
+        );
+        document.body.setAttribute(
+          'data-child-history-state-after-load',
+          String(childWindow.history.state)
+        );
+        document.body.setAttribute(
+          'data-child-current-entry-state-type-after-load',
+          typeof childWindow.navigation.currentEntry?.getState?.()
+        );
+        document.body.setAttribute(
+          'data-child-activation-after-load',
+          [
+            String(childWindow.navigation.activation?.entry?.url ?? ''),
+            String(childWindow.navigation.activation?.from?.url ?? ''),
+            String(childWindow.navigation.activation?.navigationType ?? ''),
+          ].join('|')
+        );
+        document.body.setAttribute(
+          'data-child-currententrychange-count-after-load',
+          String(listenerCount)
+        );
+        document.body.setAttribute(
+          'data-child-property-currententrychange-count-after-load',
+          String(propertyCount)
+        );
+        document.body.setAttribute(
+          'data-child-document-location-href-after-load',
+          childWindow.document.location.href
+        );
+        const entries = childWindow.navigation.entries?.() ?? [];
+        document.body.setAttribute(
+          'data-child-entries-meta-after-load',
+          [
+            String(entries.length),
+            String(
+              entries[childWindow.navigation.currentEntry?.index ?? -1] ===
+                childWindow.navigation.currentEntry
+            ),
+            String(childWindow.navigation.currentEntry?.sameDocument ?? 'null'),
+            String(entries.map((entry) => entry.url).join(',')),
+          ].join('|')
+        );
+      });
+    </script>
+  </body>
+</html>

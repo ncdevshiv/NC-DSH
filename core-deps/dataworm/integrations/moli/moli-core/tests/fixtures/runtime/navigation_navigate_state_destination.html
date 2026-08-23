@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      const state = navigation.currentEntry?.getState?.() ?? null;
+      document.body.setAttribute(
+        "data-state-nav-test-in-progress",
+        String(state?.navTestInProgress === true)
+      );
+      document.body.setAttribute(
+        "data-current-entry-index",
+        String(navigation.currentEntry?.index ?? -1)
+      );
+      document.body.setAttribute(
+        "data-index-advanced",
+        String((navigation.currentEntry?.index ?? -1) === ((state?.currentIndex ?? -2) + 1))
+      );
+      document.body.setAttribute(
+        "data-history-state",
+        JSON.stringify(history.state)
+      );
+      document.body.setAttribute(
+        "data-navigation-state",
+        JSON.stringify(state)
+      );
+      document.body.setAttribute(
+        "data-current-entry-url",
+        navigation.currentEntry?.url ?? "null"
+      );
+    </script>
+  </body>
+</html>

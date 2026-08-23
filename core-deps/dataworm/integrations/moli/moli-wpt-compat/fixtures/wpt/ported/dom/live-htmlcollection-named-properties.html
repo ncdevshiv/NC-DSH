@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+test(() => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const byId = host.appendChild(document.createElement("pre"));
+  byId.id = "byId";
+  const byName = host.appendChild(document.createElement("pre"));
+  byName.setAttribute("name", "byName");
+  const foreignById = host.appendChild(document.createElementNS("", "pre"));
+  foreignById.setAttribute("id", "foreignById");
+  const foreignByName = host.appendChild(document.createElementNS("", "pre"));
+  foreignByName.setAttribute("name", "foreignByName");
+
+  const list = host.getElementsByTagName("pre");
+  assert_equals(list.byId, byId, "HTMLCollection exposes id named property");
+  assert_equals(list.byName, byName, "HTML namespace name attribute is exposed");
+  assert_equals(list.foreignById, foreignById, "foreign namespace id is exposed");
+  assert_equals(list.foreignByName, undefined, "foreign namespace name is not exposed");
+  assert_equals(list.namedItem("foreignByName"), null);
+  assert_true(Object.prototype.hasOwnProperty.call(list, "byId"));
+  assert_true(Object.prototype.hasOwnProperty.call(list, "byName"));
+  assert_true(Object.prototype.hasOwnProperty.call(list, "foreignById"));
+  assert_false(Object.prototype.hasOwnProperty.call(list, "foreignByName"));
+  const names = Object.getOwnPropertyNames(list);
+  assert_true(names.includes("byId"));
+  assert_true(names.includes("byName"));
+  assert_true(names.includes("foreignById"));
+  assert_false(names.includes("foreignByName"));
+
+  byName.removeAttribute("name");
+  assert_equals(list.byName, undefined, "named properties update with live collection state");
+  assert_false(Object.getOwnPropertyNames(list).includes("byName"));
+  host.remove();
+}, "live HTMLCollection exposes dynamic named properties with namespace-aware name matching");
+</script>

@@ -1,0 +1,449 @@
+use std::borrow::Cow;
+
+use encoding_rs::Encoding;
+
+use super::*;
+use moli_charset_parser::HTML_META_CHARSET_PRESCAN_LIMIT;
+
+fn gbk_bytes(input: &str) -> Vec<u8> {
+    encoding_rs::GBK.encode(input).0.into_owned()
+}
+
+#[test]
+fn content_type_charset_is_selected() {
+    let headers = vec![(
+        "Content-Type".to_owned(),
+        "text/html; charset=gbk".to_owned(),
+    )];
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    assert_eq!(decoder.push(&gbk_bytes("太平洋")), vec!["太平洋"]);
+    assert_eq!(decoder.selected_encoding_name(), Some("GBK"));
+}
+
+#[test]
+fn meta_charset_is_selected_without_header_charset() {
+    let headers = vec![("Content-Type".to_owned(), "text/html".to_owned())];
+    let mut input = b"<!doctype html><meta charset=\"gbk\"><p>".to_vec();
+    input.extend_from_slice(&gbk_bytes("家居"));
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    assert_eq!(
+        decoder.push(&input),
+        vec!["<!doctype html><meta charset=\"gbk\"><p>家居"]
+    );
+    assert_eq!(decoder.selected_encoding_name(), Some("GBK"));
+}
+
+#[test]
+fn meta_charset_can_be_split_across_chunks() {
+    let headers = vec![("Content-Type".to_owned(), "text/html".to_owned())];
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    assert_eq!(
+        decoder.push(b"<!doctype html><meta char"),
+        vec!["<!doctype html><meta char"]
+    );
+    let mut tail = b"set=\"gbk\"><p>".to_vec();
+    tail.extend_from_slice(&gbk_bytes("装修"));
+
+    assert_eq!(decoder.push(&tail), vec!["set=\"gbk\"><p>装修"]);
+    assert_eq!(decoder.selected_encoding_name(), Some("GBK"));
+}
+
+#[test]
+fn ascii_prefix_streams_while_charset_sniffing_continues() {
+    let headers = vec![("Content-Type".to_owned(), "text/html".to_owned())];
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    assert_eq!(
+        decoder.push(b"<!doctype html><script src=\"/gate.js\"></script>"),
+        vec!["<!doctype html><script src=\"/gate.js\"></script>"]
+    );
+    assert_eq!(decoder.selected_encoding_name(), None);
+    assert_eq!(decoder.finish(), None);
+    assert_eq!(decoder.selected_encoding_name(), Some("windows-1252"));
+}
+
+#[test]
+fn later_meta_charset_decodes_unemitted_non_ascii_after_ascii_prefix() {
+    let headers = vec![("Content-Type".to_owned(), "text/html".to_owned())];
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+    let mut tail = b"<meta charset=\"gbk\"><p>".to_vec();
+    tail.extend_from_slice(&gbk_bytes("家居"));
+
+    assert_eq!(decoder.push(b"<!doctype html>"), vec!["<!doctype html>"]);
+    assert_eq!(decoder.push(&tail), vec!["<meta charset=\"gbk\"><p>家居"]);
+    assert_eq!(decoder.selected_encoding_name(), Some("GBK"));
+}
+
+#[test]
+fn meta_charset_after_1024_bytes_still_in_head_is_ignored() {
+    let headers = vec![("Content-Type".to_owned(), "text/html".to_owned())];
+    let mut input = vec![b' '; HTML_META_CHARSET_PRESCAN_LIMIT];
+    input.extend_from_slice(b"<meta charset=\"gbk\"><p>");
+    input.extend_from_slice(&gbk_bytes("家居"));
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    let decoded = decoder.push(&input).join("");
+
+    assert_eq!(decoder.selected_encoding_name(), Some("windows-1252"));
+    assert!(!decoded.contains("家居"));
+}
+
+#[test]
+fn meta_charset_crossing_1024_byte_boundary_is_ignored() {
+    let headers = vec![("Content-Type".to_owned(), "text/html".to_owned())];
+    let partial_meta = b"<meta char";
+    let mut input = vec![b' '; HTML_META_CHARSET_PRESCAN_LIMIT - partial_meta.len()];
+    input.extend_from_slice(partial_meta);
+    input.extend_from_slice(b"set=\"gbk\"><p>");
+    input.extend_from_slice(&gbk_bytes("家居"));
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    let decoded = decoder.push(&input).join("");
+
+    assert_eq!(decoder.selected_encoding_name(), Some("windows-1252"));
+    assert!(!decoded.contains("家居"));
+}
+
+#[test]
+fn meta_charset_after_1024_bytes_after_head_is_ignored() {
+    let headers = vec![("Content-Type".to_owned(), "text/html".to_owned())];
+    let mut input = b"<body>".to_vec();
+    input.extend(vec![b' '; HTML_META_CHARSET_PRESCAN_LIMIT - input.len()]);
+    input.extend_from_slice(b"<meta charset=\"gbk\"><p>");
+    input.extend_from_slice(&gbk_bytes("家居"));
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    let decoded = decoder.push(&input).join("");
+
+    assert_eq!(decoder.selected_encoding_name(), Some("windows-1252"));
+    assert!(!decoded.contains("家居"));
+}
+
+#[test]
+fn meta_charset_prescan_matches_real_meta_start_tags_only() {
+    use moli_charset_parser::sniff_html_meta_charset;
+
+    assert_eq!(
+        sniff_html_meta_charset(br#"<metadata charset="gbk"><meta charset="utf-8">"#)
+            .map(Encoding::name),
+        Some("UTF-8")
+    );
+    assert_eq!(
+        sniff_html_meta_charset(br#"<metaverse charset="gbk"><p>ok</p>"#),
+        None
+    );
+}
+
+#[test]
+fn meta_charset_prescan_ignores_script_text_and_requires_pragma_for_content() {
+    use moli_charset_parser::sniff_html_meta_charset;
+
+    assert_eq!(
+        sniff_html_meta_charset(
+            br#"<script>document.write('<meta charset="gbk">')</script><meta charset="utf-8">"#
+        )
+        .map(Encoding::name),
+        Some("UTF-8")
+    );
+    assert_eq!(
+        sniff_html_meta_charset(br#"<meta content="text/html; charset=gbk">"#),
+        None
+    );
+    assert_eq!(
+        sniff_html_meta_charset(
+            br#"<meta http-equiv="content-type" content="text/html; charset=gbk">"#
+        ),
+        Some(encoding_rs::GBK)
+    );
+}
+
+#[test]
+fn gbk_multibyte_can_be_split_across_chunks() {
+    let headers = vec![(
+        "Content-Type".to_owned(),
+        "text/html; charset=gbk".to_owned(),
+    )];
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    assert!(decoder.push(&[0xCC]).is_empty());
+    assert_eq!(decoder.push(&[0xAB]), vec!["太"]);
+}
+
+#[test]
+fn bom_wins_over_header_charset() {
+    let headers = vec![(
+        "Content-Type".to_owned(),
+        "text/html; charset=gbk".to_owned(),
+    )];
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    assert_eq!(decoder.push(&[0xEF]), Vec::<String>::new());
+    assert_eq!(decoder.push(&[0xBB]), Vec::<String>::new());
+    assert_eq!(decoder.push(&[0xBF, b'o', b'k']), vec!["ok"]);
+    assert_eq!(decoder.selected_encoding_name(), Some("UTF-8"));
+}
+
+#[test]
+fn unknown_charset_falls_back_to_html_default_on_finish() {
+    let headers = vec![(
+        "Content-Type".to_owned(),
+        "text/html; charset=x-unknown".to_owned(),
+    )];
+    let mut decoder = HtmlDocumentStreamingDecoder::new(&headers);
+
+    assert_eq!(decoder.push(b"<p>ok"), vec!["<p>ok"]);
+    assert_eq!(decoder.finish(), None);
+    assert_eq!(decoder.selected_encoding_name(), Some("windows-1252"));
+}
+
+#[test]
+fn no_label_html_document_falls_back_to_windows_1252() {
+    let (text, encoding) = decode_html_document(b"\x80\x80 Hello", &[]);
+
+    assert_eq!(encoding, "windows-1252");
+    assert_eq!(text, "\u{20ac}\u{20ac} Hello");
+}
+
+#[test]
+fn no_label_html_document_can_inherit_parent_fallback() {
+    let (text, encoding) = decode_html_document_with_fallback(&gbk_bytes("家居"), &[], Some("GBK"));
+
+    assert_eq!(encoding, "GBK");
+    assert_eq!(text, "家居");
+}
+
+#[test]
+fn utf32_little_endian_bom_is_treated_as_utf16le_bom() {
+    let (text, encoding) = decode_html_document(&[0xFF, 0xFE, 0x00, 0x00, b'<', 0x00], &[]);
+
+    assert_eq!(encoding, "UTF-16LE");
+    assert!(text.starts_with('\0'));
+}
+
+#[test]
+fn document_decoding_removes_only_one_bom() {
+    let (utf8_text, utf8_encoding) =
+        decode_html_document(&[0xEF, 0xBB, 0xBF, 0xEF, 0xBB, 0xBF], &[]);
+    let (utf16le_text, utf16le_encoding) = decode_html_document(&[0xFF, 0xFE, 0xFF, 0xFE], &[]);
+    let (utf16be_text, utf16be_encoding) = decode_html_document(&[0xFE, 0xFF, 0xFE, 0xFF], &[]);
+
+    assert_eq!(utf8_encoding, "UTF-8");
+    assert_eq!(utf8_text, "\u{feff}");
+    assert_eq!(utf16le_encoding, "UTF-16LE");
+    assert_eq!(utf16le_text, "\u{feff}");
+    assert_eq!(utf16be_encoding, "UTF-16BE");
+    assert_eq!(utf16be_text, "\u{feff}");
+}
+
+#[test]
+fn form_submission_uses_first_valid_accept_charset_label() {
+    let encoding = form_submission_encoding(Some("unknown iso-8859-1 gbk"), "GBK");
+
+    assert_eq!(encoding.name(), "windows-1252");
+}
+
+#[test]
+fn form_submission_falls_back_to_document_character_set() {
+    let encoding = form_submission_encoding(None, "gbk");
+
+    assert_eq!(encoding.name(), "GBK");
+}
+
+#[test]
+fn charset_sentinel_name_matches_ascii_case_insensitively() {
+    assert!(is_charset_sentinel_name("_charset_"));
+    assert!(is_charset_sentinel_name("_CHARSET_"));
+    assert!(is_charset_sentinel_name("_Charset_"));
+    assert!(!is_charset_sentinel_name("_charſet_"));
+}
+
+#[test]
+fn form_urlencoded_serializer_uses_selected_legacy_encoding() {
+    let encoded = form_urlencoded_serialize_pairs([("q", "家居")], encoding_rs::GBK);
+
+    assert_eq!(encoded, "q=%BC%D2%BE%D3");
+}
+
+#[test]
+fn form_urlencoded_serializer_uses_numeric_references_for_unmappable_text() {
+    let encoded = form_urlencoded_serialize_pairs([("emoji", "💩")], encoding_rs::WINDOWS_1252);
+
+    assert_eq!(encoded, "emoji=%26%23128169%3B");
+}
+
+#[test]
+fn form_urlencoded_serializer_handles_iso_2022_jp_stateful_unmappables() {
+    let encoded = form_urlencoded_serialize_pairs(
+        [("utf16", "ABC~¤•★星🌟星★•¤~XYZ")],
+        encoding_rs::ISO_2022_JP,
+    );
+
+    assert_eq!(
+        encoded,
+        "utf16=ABC%7E%26%23164%3B%26%238226%3B%1B%24B%21z%401%1B%28B%26%23127775%3B%1B%24B%401%21z%1B%28B%26%238226%3B%26%23164%3B%7EXYZ"
+    );
+}
+
+#[test]
+fn text_decoder_uses_legacy_charset_label_or_utf8() {
+    assert_eq!(
+        decode_text_for_legacy_web(&gbk_bytes("家居"), Some("gbk")),
+        "家居"
+    );
+    assert_eq!(
+        decode_text_for_legacy_web("plain".as_bytes(), None),
+        "plain"
+    );
+}
+
+#[test]
+fn html_document_decoder_returns_selected_encoding() {
+    let mut bytes = b"<!doctype html><meta charset=\"shift_jis\"><p>".to_vec();
+    bytes.extend_from_slice(&encoding_rs::SHIFT_JIS.encode("目次").0);
+
+    let (text, encoding) = decode_html_document(&bytes, &[]);
+
+    assert_eq!(encoding, "Shift_JIS");
+    assert!(text.contains("目次"), "text={text}");
+}
+
+#[test]
+fn classic_script_decoding_inherits_document_character_set() {
+    let script = r#"document.body.textContent = "目次";"#;
+    let bytes = encoding_rs::SHIFT_JIS.encode(script).0.into_owned();
+
+    assert_eq!(
+        decode_classic_script_source(
+            &bytes,
+            &[(
+                "Content-Type".to_owned(),
+                "application/javascript".to_owned()
+            )],
+            None,
+            Some("shift_jis"),
+        ),
+        script
+    );
+}
+
+#[test]
+fn classic_script_header_charset_wins_over_document_character_set() {
+    let script = r#"document.body.textContent = "Привет";"#;
+    let bytes = encoding_rs::WINDOWS_1251.encode(script).0.into_owned();
+
+    assert_eq!(
+        decode_classic_script_source(
+            &bytes,
+            &[(
+                "Content-Type".to_owned(),
+                "application/javascript; charset=windows-1251".to_owned(),
+            )],
+            None,
+            Some("shift_jis"),
+        ),
+        script
+    );
+}
+
+#[test]
+fn classic_script_charset_attribute_is_fallback_before_document_character_set() {
+    let script = r#"document.body.textContent = "目次";"#;
+    let bytes = encoding_rs::SHIFT_JIS.encode(script).0.into_owned();
+
+    assert_eq!(
+        decode_classic_script_source(&bytes, &[], Some("shift_jis"), Some("gbk")),
+        script
+    );
+}
+
+#[test]
+fn classic_script_bom_wins_over_labels() {
+    let script = r#"document.body.textContent = "目次";"#;
+    let mut bytes = vec![0xEF, 0xBB, 0xBF];
+    bytes.extend_from_slice(script.as_bytes());
+
+    assert_eq!(
+        decode_classic_script_source(
+            &bytes,
+            &[(
+                "Content-Type".to_owned(),
+                "application/javascript; charset=gbk".to_owned(),
+            )],
+            Some("shift_jis"),
+            Some("gbk"),
+        ),
+        script
+    );
+}
+
+#[test]
+fn url_query_encoder_uses_selected_legacy_encoding() {
+    let encoded =
+        encode_url_query_for_legacy_web("/search?q=家居&safe=a+b%20c#frag", encoding_rs::GBK);
+
+    assert_eq!(encoded, "/search?q=%BC%D2%BE%D3&safe=a+b%20c#frag");
+}
+
+#[test]
+fn url_query_encoder_percent_encodes_unmappable_entity_fallback() {
+    let encoded = encode_url_query_for_legacy_web("/search?q=ChineseＧ", encoding_rs::WINDOWS_1252);
+
+    assert_eq!(encoded, "/search?q=Chinese%26%2365319%3B");
+}
+
+#[test]
+fn url_query_encoder_preserves_query_separators_between_components() {
+    let encoded = encode_url_query_for_legacy_web(
+        "/search?first=家居&second=💩;third=ok#frag",
+        encoding_rs::GBK,
+    );
+
+    assert_eq!(
+        encoded,
+        "/search?first=%BC%D2%BE%D3&second=%26%23128169%3B;third=ok#frag"
+    );
+}
+
+#[test]
+fn url_query_encoder_preserves_ampersand_from_encoded_bytes() {
+    let encoded = encode_url_query_for_legacy_web("/search?q=Γ", encoding_rs::ISO_2022_JP);
+
+    assert_eq!(encoded, "/search?q=%1B$B&%23%1B(B");
+}
+
+#[test]
+fn url_query_encoder_percent_encodes_iso_2022_jp_unmappables() {
+    let encoded =
+        encode_url_query_for_legacy_web("/search?q=Γ\x0E\x0F\x1Bx", encoding_rs::ISO_2022_JP);
+
+    assert_eq!(
+        encoded,
+        "/search?q=%1B$B&%23%1B(B%26%2365533%3B%26%2365533%3B%26%2365533%3Bx"
+    );
+}
+
+#[test]
+fn url_query_encoder_handles_iso_2022_jp_stateful_output() {
+    let encoded = encode_url_query_for_legacy_web("/search?q=¥‾s\\ﾐ佩", encoding_rs::ISO_2022_JP);
+
+    assert_eq!(encoded, "/search?q=%1B(J\\~s%1B(B\\%1B$B%_PP%1B(B");
+}
+
+#[test]
+fn url_query_encoder_leaves_utf8_and_queryless_inputs_borrowed() {
+    assert!(matches!(
+        encode_url_query_for_legacy_web("/search?q=家居", encoding_rs::UTF_8),
+        Cow::Borrowed(_)
+    ));
+    assert!(matches!(
+        encode_url_query_for_legacy_web("/search#家居", encoding_rs::GBK),
+        Cow::Borrowed(_)
+    ));
+    assert!(matches!(
+        encode_url_query_for_legacy_web("/search#frag?q=家居", encoding_rs::GBK),
+        Cow::Borrowed(_)
+    ));
+}

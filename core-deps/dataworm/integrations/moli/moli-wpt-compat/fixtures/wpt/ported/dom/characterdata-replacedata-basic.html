@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback) {
+  let thrown = null;
+  try {
+    callback();
+  } catch (error) {
+    thrown = error;
+  }
+  assert_true(!!thrown, "expected exception");
+  assert_equals(thrown.name, expectedName);
+}
+
+function assert_replace(create, type, offset, count, value, expected, label) {
+  test(function() {
+    const node = create();
+    node.replaceData(offset, count, value);
+    assert_equals(node.data, expected);
+  }, type + ".replaceData() " + label);
+}
+
+function test_replace_data(create, type) {
+  test(function() {
+    const node = create();
+    assert_throws_name("IndexSizeError", function() { node.replaceData(5, 1, "x"); });
+    assert_throws_name("IndexSizeError", function() { node.replaceData(-1, 0, "x"); });
+    assert_equals(node.data, "test");
+  }, type + ".replaceData() rejects invalid offset");
+
+  assert_replace(create, type, 2, 10, "yo", "teyo", "clamps count");
+  assert_replace(create, type, 2, -1, "yo", "teyo", "uses unsigned long count conversion");
+  assert_replace(create, type, 0, 0, "yo", "yotest", "inserts before start");
+  assert_replace(create, type, 0, 2, "y", "yst", "replaces at start with shorter data");
+  assert_replace(create, type, 1, 2, "yo", "tyot", "replaces in middle");
+  assert_replace(create, type, 4, 20, "yo", "testyo", "replaces at end");
+  assert_replace(create, type, 0, 4, "", "", "replaces whole string with empty string");
+
+  test(function() {
+    const node = create();
+    node.data = "This is the character data test, append \u8cc7\u6599\uff0c\u66f4\u591a\u8cc7\u6599";
+    node.replaceData(33, 6, "other");
+    assert_equals(node.data, "This is the character data test, other \u8cc7\u6599\uff0c\u66f4\u591a\u8cc7\u6599");
+    node.replaceData(44, 2, "\u6587\u5b57");
+    assert_equals(node.data, "This is the character data test, other \u8cc7\u6599\uff0c\u66f4\u591a\u6587\u5b57");
+  }, type + ".replaceData() handles non-ASCII data");
+
+  test(function() {
+    const node = create();
+    node.data = "\ud83c\udf20 test \ud83c\udf20 TEST";
+    node.replaceData(5, 8, "--");
+    assert_equals(node.data, "\ud83c\udf20 te--ST");
+  }, type + ".replaceData() counts UTF-16 code units");
+}
+
+test_replace_data(function() { return document.createTextNode("test"); }, "Text");
+test_replace_data(function() { return document.createComment("test"); }, "Comment");
+</script>

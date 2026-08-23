@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="after">after</main>
+    <script>
+      globalThis.throwingPrimitive = {
+        [Symbol.toPrimitive]() {
+          throw new Error("toPrimitive boom");
+        },
+      };
+      Object.defineProperty(globalThis, "throwingAccessor", {
+        configurable: true,
+        get() {
+          throw new Error("accessor boom");
+        },
+      });
+      const revokedArray = Proxy.revocable([], {});
+      globalThis.revokedArrayProxy = revokedArray.proxy;
+      revokedArray.revoke();
+
+      // Deliberately create names in an order that differs from BTreeMap's
+      // ordering. The renderer does not need to sort V8's own-property list;
+      // the Rust snapshot boundary provides deterministic key order.
+      globalThis.zSnapshotOrder = "z";
+      globalThis["快照键"] = "unicode";
+      globalThis.aSnapshotOrder = "a";
+      globalThis["17"] = "array-index";
+    </script>
+  </body>
+</html>

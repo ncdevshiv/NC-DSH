@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <body>
+    <div id="tree-root"><span id="alpha">alpha</span><!--gap--><span id="beta">beta</span></div>
+    <script>
+      try {
+        const root = document.getElementById("tree-root");
+        const alpha = document.getElementById("alpha");
+        const beta = document.getElementById("beta");
+        const gamma = document.createElement("span");
+        gamma.id = "gamma";
+        gamma.textContent = "gamma";
+
+        window.treeBridgeError = null;
+        window.treeBridgeOwnerDocument = alpha.ownerDocument === document;
+        window.treeBridgeDocumentOwnerNull = document.ownerDocument === null;
+        window.treeBridgeParentNode = alpha.parentNode === root;
+        window.treeBridgeFirstChild = root.firstChild?.id ?? null;
+        window.treeBridgeLastChild = root.lastChild?.id ?? root.lastChild?.nodeName ?? null;
+        window.treeBridgeAlphaNextSibling =
+          alpha.nextSibling?.id ?? alpha.nextSibling?.nodeName ?? null;
+        window.treeBridgeBetaPreviousSibling =
+          beta.previousSibling?.id ?? beta.previousSibling?.nodeName ?? null;
+        window.treeBridgeContainsSelf = root.contains(root);
+        window.treeBridgeContainsAlpha = root.contains(alpha);
+        window.treeBridgeContainsBody = alpha.contains(document.body);
+
+        const removed = root.removeChild(beta);
+        window.treeBridgeRemovedIdentity = removed === beta;
+        window.treeBridgeRemovedParentNode = beta.parentNode === null;
+        window.treeBridgeAfterRemoveLastChild =
+          root.lastChild?.id ?? root.lastChild?.nodeName ?? null;
+
+        const inserted = root.insertBefore(gamma, root.lastChild);
+        window.treeBridgeInsertedIdentity = inserted === gamma;
+        window.treeBridgeInsertedParentNode = gamma.parentNode === root;
+        window.treeBridgeInsertedPreviousSibling =
+          gamma.previousSibling?.id ?? gamma.previousSibling?.nodeName ?? null;
+        window.treeBridgeInsertedNextSibling =
+          gamma.nextSibling?.id ?? gamma.nextSibling?.nodeName ?? null;
+        window.treeBridgeChildNodeOrder = Array.from(root.childNodes, (node) =>
+          node.id ?? node.nodeName,
+        ).join("|");
+      } catch (error) {
+        window.treeBridgeError = String(error);
+      }
+    </script>
+  </body>
+</html>

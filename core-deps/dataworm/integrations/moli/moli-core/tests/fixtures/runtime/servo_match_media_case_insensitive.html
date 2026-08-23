@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    #target {
+      background-color: red;
+    }
+
+    @MeDIa aLL and (Height) and (mIN-Width:0cM) {
+      #target {
+        background-color: green;
+      }
+    }
+
+    @media all and (heİght) {
+      #target {
+        border-color: red;
+      }
+    }
+  </style>
+</head>
+<body
+  data-media-all=""
+  data-media-feature=""
+  data-media-width=""
+  data-media-combined=""
+  data-media-non-ascii=""
+  data-matches-all=""
+  data-matches-feature=""
+  data-matches-width=""
+  data-matches-combined=""
+  data-matches-non-ascii="">
+  <div id="target"></div>
+  <script>
+    const allQuery = matchMedia("aLL");
+    const featureQuery = matchMedia("(Height)");
+    const widthQuery = matchMedia("(mIN-Width:0cM)");
+    const combinedQuery = matchMedia("aLL and (Height) and (mIN-Width:0cM)");
+    const nonAsciiQuery = matchMedia("all and (heİght)");
+
+    document.body.dataset.mediaAll = allQuery.media;
+    document.body.dataset.mediaFeature = featureQuery.media;
+    document.body.dataset.mediaWidth = widthQuery.media;
+    document.body.dataset.mediaCombined = combinedQuery.media;
+    document.body.dataset.mediaNonAscii = nonAsciiQuery.media;
+    document.body.dataset.matchesAll = String(allQuery.matches);
+    document.body.dataset.matchesFeature = String(featureQuery.matches);
+    document.body.dataset.matchesWidth = String(widthQuery.matches);
+    document.body.dataset.matchesCombined = String(combinedQuery.matches);
+    document.body.dataset.matchesNonAscii = String(nonAsciiQuery.matches);
+  </script>
+</body>
+</html>

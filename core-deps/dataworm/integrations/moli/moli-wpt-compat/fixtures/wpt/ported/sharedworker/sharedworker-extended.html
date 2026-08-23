@@ -1,0 +1,283 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+let uniqueNameCounter = 0;
+
+function unique_name(prefix) {
+  uniqueNameCounter++;
+  return prefix + "-" + Date.now() + "-" + uniqueNameCounter;
+}
+
+function shared_worker_url(source) {
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+function next_port_message(port) {
+  return new Promise(function (resolve) {
+    port.addEventListener("message", resolve, { once: true });
+    port.start();
+  });
+}
+
+function request(port, data) {
+  const next = next_port_message(port);
+  port.postMessage(data);
+  return next;
+}
+
+function connect_worker_url(body) {
+  return shared_worker_url(
+    [
+      "let connections = 0;",
+      "onconnect = function (event) {",
+      "  connections++;",
+      "  const port = event.ports[0];",
+      body,
+      "};",
+    ].join("\n"),
+  );
+}
+
+test(function () {
+  const worker = new SharedWorker(
+    connect_worker_url("port.postMessage('ready');"),
+    unique_name("interface"),
+  );
+  assert_true(worker instanceof SharedWorker, "constructed object is a SharedWorker");
+  assert_equals(Object.prototype.toString.call(worker), "[object SharedWorker]");
+  assert_equals(SharedWorker.prototype.constructor, SharedWorker);
+  assert_equals(typeof worker.addEventListener, "function");
+  assert_equals(typeof worker.removeEventListener, "function");
+  assert_equals(typeof worker.dispatchEvent, "function");
+}, "SharedWorker object exposes the expected interface object shape");
+
+promise_test(async function () {
+  const worker = new SharedWorker(
+    connect_worker_url(
+      [
+        "const expected = [",
+        "  'self', 'location', 'close', 'onerror', 'importScripts', 'navigator',",
+        "  'addEventListener', 'removeEventListener', 'dispatchEvent',",
+        "  'name', 'onconnect', 'setTimeout', 'clearTimeout',",
+        "  'setInterval', 'clearInterval'",
+        "];",
+        "const missing = expected.filter(function (name) { return !(name in self); });",
+        "const unexpected = ['postMessage', 'onmessage', 'onmessageerror', 'DedicatedWorkerGlobalScope']",
+        "  .filter(function (name) { return name in self; });",
+        "port.postMessage({",
+        "  missing: missing,",
+        "  unexpected: unexpected,",
+        "  sharedCtor: typeof SharedWorkerGlobalScope,",
+        "  workerCtor: typeof WorkerGlobalScope,",
+        "  tag: Object.prototype.toString.call(self),",
+        "  isShared: self instanceof SharedWorkerGlobalScope,",
+        "  isWorkerGlobal: self instanceof WorkerGlobalScope,",
+        "  name: self.name",
+        "});",
+      ].join("\n"),
+    ),
+    unique_name("global-members"),
+  );
+  const event = await next_port_message(worker.port);
+  assert_array_equals(event.data.missing, []);
+  assert_array_equals(event.data.unexpected, []);
+  assert_equals(event.data.sharedCtor, "function");
+  assert_equals(event.data.workerCtor, "function");
+  assert_equals(event.data.tag, "[object SharedWorkerGlobalScope]");
+  assert_true(event.data.isShared);
+  assert_true(event.data.isWorkerGlobal);
+  assert_true(String(event.data.name).startsWith("global-members-"));
+}, "SharedWorkerGlobalScope exposes shared-worker globals without dedicated message globals");
+
+promise_test(async function () {
+  const worker = new SharedWorker(
+    connect_worker_url(
+      [
+        "const expected = [",
+        "  'XMLHttpRequest', 'MessageChannel', 'MessagePort', 'Worker',",
+        "  'BroadcastChannel', 'Blob', 'File', 'FileReader',",
+        "  'Headers', 'Request', 'Response', 'ReadableStream',",
+        "  'URL', 'URLSearchParams', 'WebSocket'",
+        "];",
+        "port.postMessage(expected.filter(function (name) { return !(name in self); }));",
+      ].join("\n"),
+    ),
+    unique_name("interface-objects"),
+  );
+  const event = await next_port_message(worker.port);
+  assert_array_equals(event.data, []);
+}, "SharedWorkerGlobalScope exposes worker-compatible interface objects");
+
+promise_test(async function () {
+  const worker = new SharedWorker(
+    shared_worker_url(
+      [
+        "const results = [];",
+        "try {",
+        "  self.onconnect = 1;",
+        "  results.push(String(onconnect));",
+        "} catch (error) {",
+        "  results.push(String(error));",
+        "}",
+        "try {",
+        "  self.onconnect = { handleEvent: function () {} };",
+        "  results.push(String(onconnect));",
+        "} catch (error) {",
+        "  results.push(String(error));",
+        "}",
+        "onconnect = function (event) {",
+        "  results.push(event.data);",
+        "  event.ports[0].postMessage(results);",
+        "};",
+        "results.push(typeof onconnect);",
+      ].join("\n"),
+    ),
+    unique_name("onconnect"),
+  );
+  const event = await next_port_message(worker.port);
+  assert_array_equals(event.data, ["null", "null", "function", ""]);
+}, "SharedWorkerGlobalScope.onconnect clears non-callable assignments and dispatches connect");
+
+promise_test(async function () {
+  const blobUrl = URL.createObjectURL(
+    new Blob(
+      [
+        [
+          "onconnect = function (event) {",
+          "  event.ports[0].postMessage({",
+          "    name: self.name,",
+          "    tag: Object.prototype.toString.call(self),",
+          "    blobCtor: typeof Blob,",
+          "    urlCtor: typeof URL",
+          "  });",
+          "};",
+        ].join("\n"),
+      ],
+      { type: "text/javascript" },
+    ),
+  );
+  try {
+    const worker = new SharedWorker(blobUrl, "blob-script-worker");
+    const event = await next_port_message(worker.port);
+    assert_equals(event.data.name, "blob-script-worker");
+    assert_equals(event.data.tag, "[object SharedWorkerGlobalScope]");
+    assert_equals(event.data.blobCtor, "function");
+    assert_equals(event.data.urlCtor, "function");
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}, "SharedWorker can load a blob URL script created by the document");
+
+promise_test(async function () {
+  const channelName = unique_name("sharedworker-broadcast-storage-key");
+  const pageChannel = new BroadcastChannel(channelName);
+  const received = new Promise(function (resolve) {
+    pageChannel.onmessage = resolve;
+  });
+  const blobUrl = URL.createObjectURL(
+    new Blob(
+      [
+        [
+          "const channel = new BroadcastChannel(" + JSON.stringify(channelName) + ");",
+          "onconnect = function (event) {",
+          "  const port = event.ports[0];",
+          "  port.onmessage = function (message) {",
+          "    channel.postMessage({ from: 'shared-worker', value: message.data });",
+          "    port.postMessage('posted');",
+          "  };",
+          "};",
+        ].join("\n"),
+      ],
+      { type: "text/javascript" },
+    ),
+  );
+  try {
+    const worker = new SharedWorker(blobUrl, unique_name("broadcast-storage-key"));
+    const ack = request(worker.port, "ping");
+    const event = await received;
+    assert_equals(event.data.from, "shared-worker");
+    assert_equals(event.data.value, "ping");
+    assert_equals((await ack).data, "posted");
+  } finally {
+    pageChannel.close();
+    URL.revokeObjectURL(blobUrl);
+  }
+}, "SharedWorker BroadcastChannel uses the constructor context storage key");
+
+promise_test(async function () {
+  const url = shared_worker_url(
+    [
+      "let connections = 0;",
+      "onconnect = function (event) {",
+      "  connections++;",
+      "  event.ports[0].postMessage(connections);",
+      "};",
+    ].join("\n"),
+  );
+  const first = new SharedWorker(url);
+  const second = new SharedWorker(url, "");
+  assert_equals((await next_port_message(first.port)).data, 1);
+  assert_equals((await next_port_message(second.port)).data, 2);
+}, "Omitted name and empty-string name address the same SharedWorker");
+
+promise_test(async function () {
+  const worker = new SharedWorker(
+    shared_worker_url(
+      [
+        "function generateError() {",
+        "  missingSharedWorkerFunction();",
+        "}",
+        "onconnect = function (event) {",
+        "  const port = event.ports[0];",
+        "  port.onmessage = function (message) {",
+        "    if (message.data === 'unhandledError') {",
+        "      onerror = null;",
+        "      port.postMessage('SUCCESS: unhandled error generated');",
+        "      generateError();",
+        "    } else if (message.data === 'ping') {",
+        "      port.postMessage('pong');",
+        "    } else if (message.data === 'handledError') {",
+        "      onerror = function () {",
+        "        port.postMessage('SUCCESS: error handled via onerror');",
+        "        return true;",
+        "      };",
+        "      generateError();",
+        "    }",
+        "  };",
+        "};",
+      ].join("\n"),
+    ),
+    unique_name("script-error"),
+  );
+  const workerObjectError = new Promise(function (_, reject) {
+    worker.onerror = function () {
+      reject(new Error("SharedWorker.onerror fired for a runtime script error"));
+    };
+  });
+  assert_equals(
+    await Promise.race([
+      request(worker.port, "unhandledError").then(function (event) {
+        return event.data;
+      }),
+      workerObjectError,
+    ]),
+    "SUCCESS: unhandled error generated",
+  );
+  assert_equals(
+    await Promise.race([
+      request(worker.port, "ping").then(function (event) {
+        return event.data;
+      }),
+      workerObjectError,
+    ]),
+    "pong",
+  );
+  assert_equals(
+    (await request(worker.port, "handledError")).data,
+    "SUCCESS: error handled via onerror",
+  );
+}, "SharedWorker runtime script errors do not fire SharedWorker.onerror");
+</script>

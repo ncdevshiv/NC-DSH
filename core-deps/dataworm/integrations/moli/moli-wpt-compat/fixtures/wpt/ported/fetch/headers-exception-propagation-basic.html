@@ -1,0 +1,142 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error.name, expectedName, description);
+    return;
+  }
+  throw new Error(description || "expected exception");
+}
+
+test(function () {
+  const input = {};
+  Object.defineProperty(input, Symbol.iterator, {
+    get() {
+      throw new RangeError("iterator getter failed");
+    },
+  });
+  assert_throws_name("RangeError", function () {
+    new Headers(input);
+  }, "throwing @@iterator getter should propagate");
+}, "Headers constructor propagates throwing @@iterator getter");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new Headers({
+      [Symbol.iterator]() {
+        throw new RangeError("iterator method failed");
+      },
+    });
+  }, "throwing @@iterator call should propagate");
+}, "Headers constructor propagates throwing @@iterator method");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new Headers({
+      [Symbol.iterator]() {
+        return {
+          next() {
+            throw new RangeError("next failed");
+          },
+        };
+      },
+    });
+  }, "throwing next() should propagate");
+}, "Headers constructor propagates throwing iterator next()");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new Headers({
+      [Symbol.iterator]() {
+        return {
+          next() {
+            const step = { value: ["x-test", "one"] };
+            Object.defineProperty(step, "done", {
+              get() {
+                throw new RangeError("done getter failed");
+              },
+            });
+            return step;
+          },
+        };
+      },
+    });
+  }, "throwing done getter should propagate");
+}, "Headers constructor propagates throwing iterator done getter");
+
+test(function () {
+  assert_throws_name("RangeError", function () {
+    new Headers({
+      [Symbol.iterator]() {
+        return {
+          next() {
+            const step = { done: false };
+            Object.defineProperty(step, "value", {
+              get() {
+                throw new RangeError("value getter failed");
+              },
+            });
+            return step;
+          },
+        };
+      },
+    });
+  }, "throwing value getter should propagate");
+}, "Headers constructor propagates throwing iterator value getter");
+
+test(function () {
+  const input = {};
+  Object.defineProperty(input, "x-test", {
+    enumerable: true,
+    get() {
+      throw new RangeError("record getter failed");
+    },
+  });
+  assert_throws_name("RangeError", function () {
+    new Headers(input);
+  }, "throwing record getter should propagate");
+}, "Headers constructor propagates throwing record value getter");
+
+test(function () {
+  const input = new Proxy({}, {
+    ownKeys() {
+      throw new RangeError("record ownKeys failed");
+    },
+  });
+  assert_throws_name("RangeError", function () {
+    new Headers(input);
+  }, "throwing record ownKeys should propagate");
+}, "Headers constructor propagates throwing record ownKeys trap");
+
+test(function () {
+  const request = new Request("https://example.test/headers", {
+    headers: [["x-test", "one"]],
+  });
+  Object.defineProperty(request, "headers", {
+    get() {
+      throw new RangeError("request headers getter failed");
+    },
+  });
+  assert_throws_name("RangeError", function () {
+    new Request(request);
+  }, "Request(input) should propagate a throwing input headers getter");
+}, "Request constructor propagates throwing input headers getter");
+
+test(function () {
+  const init = {};
+  Object.defineProperty(init, "headers", {
+    get() {
+      throw new RangeError("response init headers getter failed");
+    },
+  });
+  assert_throws_name("RangeError", function () {
+    Response.json({ ok: true }, init);
+  }, "Response.json init should propagate a throwing headers getter");
+}, "Response.json propagates throwing init headers getter");
+</script>

@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.parserOwnedMissingExportPayloadOrder = [];
+      window.addEventListener("error", (event) => {
+        window.parserOwnedMissingExportPayloadOrder.push("window-error");
+        window.parserOwnedMissingExportPayloadErrorMessageMatches = Boolean(
+          event.error &&
+            typeof event.error.message === "string" &&
+            event.error.message.includes("missingValue"),
+        );
+        window.parserOwnedMissingExportPayloadFilenameMatches =
+          typeof event.filename === "string" &&
+          event.filename.includes(
+            "/compat/parser-owned-module-missing-export-reports-window-error-payload-before-later-module",
+          );
+      });
+    </script>
+    <script
+      type="module"
+      onerror="window.parserOwnedMissingExportPayloadOrder.push('script-error');"
+    >
+      import { missingValue } from "/assets/module-link-exports-only-named.mjs";
+      window.parserOwnedMissingExportPayloadValue = missingValue;
+    </script>
+    <script type="module">
+      window.parserOwnedMissingExportPayloadOrder.push("later-module");
+      window.parserOwnedMissingExportPayloadContinuation = true;
+      window.parserOwnedMissingExportPayloadOrderResult =
+        window.parserOwnedMissingExportPayloadOrder.join(",");
+    </script>
+  </body>
+</html>

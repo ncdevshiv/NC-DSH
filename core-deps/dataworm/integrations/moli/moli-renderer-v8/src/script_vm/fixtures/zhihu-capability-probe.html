@@ -1,0 +1,208 @@
+<!doctype html>
+<meta charset="utf-8">
+<!--
+  Minimal Zhihu challenge capability probe.
+
+  Run with:
+    chromium --headless --disable-gpu --no-sandbox --allow-file-access-from-files --dump-dom file:///.../moli-renderer-v8/src/script_vm/fixtures/zhihu-capability-probe.html
+    target/debug/moli fetch file:///.../moli-renderer-v8/src/script_vm/fixtures/zhihu-capability-probe.html
+
+  The probes are selected from the decoded second-layer CVM constant pool.
+-->
+<pre id="out">boot</pre>
+<script>
+(async function () {
+  function safe(fn) {
+    try { return fn(); } catch (e) { return { error: String(e) }; }
+  }
+  function ctorName(v) {
+    try { return v && v.constructor && v.constructor.name || null; } catch (_) { return null; }
+  }
+  function namedCollectionShape(value) {
+    return safe(() => ({
+      type: typeof value,
+      ctor: ctorName(value),
+      tag: Object.prototype.toString.call(value),
+      length: value && typeof value.length === 'number' ? value.length : null,
+      itemType: typeof value?.item,
+      namedItemType: typeof value?.namedItem,
+      refreshType: typeof value?.refresh,
+    }));
+  }
+  const tagList = "A,ABBR,ACRONYM,ADDRESS,APPLET,AREA,ARTICLE,ASIDE,AUDIO,B,BASE,BASEFONT,BDI,BDO,BGSOUND,BIG,BLINK,BLOCKQUOTE,BODY,BR,BUTTON,CANVAS,CAPTION,CENTER,CITE,CODE,COL,COLGROUP,CONTENT,DATA,DATALIST,DD,DECORATOR,DEL,DETAILS,DFN,DIALOG,DIR,DIV,DL,DT,ELEMENT,EM,EMBED,FIELDSET,FIGCAPTION,FIGURE,FONT,FOOTER,FORM,FRAME,FRAMESET,H1,H2,H3,H4,H5,H6,HEAD,HEADER,HGROUP,HR,HTML,I,IFRAME,IMAGE,IMG,INPUT,INS,ISINDEX,KBD,KEYGEN,LABEL,LEGEND,LI,LINK,LISTING,MAIN,MAP,MARK,MARQUEE,MENU,MENUITEM,META,METER,NAV,NOBR,NOEMBED,NOFRAMES,NOSCRIPT,OBJECT,OL,OPTGROUP,OPTION,OUTPUT,P,PARAM,PLAINTEXT,PRE,PROGRESS,Q,RP,RT,RTC,RUBY,S,SAMP,SCRIPT,SECTION,SELECT,SHADOW,SLOT,SMALL,SOURCE,SPACER,SPAN,STRIKE,STRONG,STYLE,SUB,SUMMARY,SUP,TABLE,TBODY,TD,TEMPLATE,TEXTAREA,TFOOT,TH,THEAD,TIME,TITLE,TR,TRACK,TT,U,UL,VAR,VIDEO,WBR,XMP".split(',');
+  const result = {
+    userAgent: navigator.userAgent,
+    navigatorInfo: safe(() => ({
+      appVersion: navigator.appVersion,
+      platform: navigator.platform,
+      language: navigator.language,
+      languages: Array.from(navigator.languages || []),
+      vendor: navigator.vendor,
+      vendorSub: navigator.vendorSub,
+      productSub: navigator.productSub,
+      hardwareConcurrency: navigator.hardwareConcurrency,
+      maxTouchPoints: navigator.maxTouchPoints,
+      cookieEnabled: navigator.cookieEnabled,
+      onLine: navigator.onLine,
+      deviceMemory: navigator.deviceMemory,
+      pdfViewerEnabled: navigator.pdfViewerEnabled,
+      doNotTrack: navigator.doNotTrack,
+    })),
+    plugins: namedCollectionShape(navigator.plugins),
+    mimeTypes: namedCollectionShape(navigator.mimeTypes),
+    customElementsType: typeof customElements,
+    documentAllType: safe(() => typeof document.all),
+    documentAllValueType: safe(() => typeof document.all),
+    documentAllLooseUndefined: safe(() => document.all == undefined),
+    documentAllStrictUndefined: safe(() => document.all === undefined),
+    documentAllLengthType: safe(() => typeof document.all?.length),
+    documentAllCtor: safe(() => ctorName(document.all)),
+    documentAllToString: safe(() => Object.prototype.toString.call(document.all)),
+    newDocumentAllType: safe(() => typeof new Document().all()),
+    newDocumentAllLengthType: safe(() => typeof new Document().all()?.length),
+    newDocumentAllCtor: safe(() => ctorName(new Document().all())),
+    newDocumentAllString: safe(() => String(new Document().all())),
+    newDocumentAllTag: safe(() => Object.prototype.toString.call(new Document().all())),
+    htmlAllCollectionCheck: safe(() => String(new Document().all()).indexOf('HTMLAllCollection')),
+    createElementTagMismatchCount: safe(() => {
+      let c = 0;
+      for (const i of tagList) {
+        const el = document.createElement(i);
+        if (el.tagName !== i) c++;
+      }
+      return c;
+    }),
+    createElementChainLastTag: safe(() => {
+      let p = null;
+      for (const i of tagList) {
+        const e = document.createElement(i);
+        if (e.tagName === i && p) p.appendChild(e);
+        p = e;
+      }
+      while (p.parentNode) {
+        if (tagList.indexOf(p.tagName) > -1) p = p.parentNode;
+        else break;
+      }
+      return p.tagName;
+    }),
+    canvasCtor: safe(() => ctorName(document.createElement('canvas'))),
+    canvasTag: safe(() => document.createElement('canvas').tagName),
+    canvasGetContextType: safe(() => typeof document.createElement('canvas').getContext),
+    canvasContextCtor: safe(() => ctorName(document.createElement('canvas').getContext && document.createElement('canvas').getContext('2d'))),
+    canvasToDataURLType: safe(() => typeof document.createElement('canvas').toDataURL),
+    webgl: safe(() => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext && canvas.getContext('webgl');
+      return {
+        contextType: typeof gl,
+        ctor: ctorName(gl),
+        getParameterType: typeof gl?.getParameter,
+        getExtensionType: typeof gl?.getExtension,
+        getSupportedExtensionsType: typeof gl?.getSupportedExtensions,
+      };
+    }),
+    phantomFlags: safe(() => ({
+      __phantomas: typeof window.__phantomas,
+      _phantom: typeof window._phantom,
+      WebPage: typeof window.WebPage,
+      fxdriver_id: typeof window.fxdriver_id,
+      __fxdriver_unwrapped: typeof window.__fxdriver_unwrapped,
+      ubot: typeof window.ubot,
+      CasperError: typeof window.CasperError,
+      casper: typeof window.casper,
+      patchRequire: typeof window.patchRequire,
+      cdc: typeof window.$cdc_asdjflasutopfhvcZLmcfl_,
+      __webdriver_script_fn: typeof window.__webdriver_script_fn,
+      _resourceLoader: typeof window._resourceLoader,
+      _sessionHistory: typeof window._sessionHistory,
+      _virtualConsole: typeof window._virtualConsole,
+    })),
+    webdriver: safe(() => navigator.webdriver),
+    storage: safe(() => ({
+      localStorage: typeof localStorage,
+      sessionStorage: typeof sessionStorage,
+      lsGetItem: typeof localStorage?.getItem,
+      lsRemoveItem: typeof localStorage?.removeItem,
+      ssGetItem: typeof sessionStorage?.getItem,
+    })),
+    errorStackGetterTriggered: safe(() => {
+      let a = 0;
+      const b = new Error();
+      Object.defineProperty(b, 'stack', { get() { a++; return 'x'; } });
+      console.debug(b);
+      void b.stack;
+      return a;
+    }),
+    processType: safe(() => typeof process),
+    globalType: safe(() => typeof global),
+    screenInfo: safe(() => ({
+      availHeight: screen.availHeight,
+      availWidth: screen.availWidth,
+      colorDepth: screen.colorDepth,
+      pixelDepth: screen.pixelDepth,
+      availLeft: screen.availLeft,
+      devicePixelRatio: window.devicePixelRatio,
+    })),
+    timers: safe(() => ({
+      setTimeout: typeof setTimeout,
+      setInterval: typeof setInterval,
+      stop: typeof stop,
+      print: typeof print,
+      open: typeof open,
+      topEqSelf: top === self,
+    })),
+    mediaDevices: safe(() => ({
+      mediaDevicesType: typeof navigator.mediaDevices,
+      ctor: ctorName(navigator.mediaDevices),
+      enumerateDevicesType: typeof navigator.mediaDevices?.enumerateDevices,
+      getUserMediaType: typeof navigator.mediaDevices?.getUserMedia,
+    })),
+    audio: safe(() => {
+      const Ctor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      if (!Ctor) {
+        return {
+          offlineAudioContextType: typeof window.OfflineAudioContext,
+          webkitOfflineAudioContextType: typeof window.webkitOfflineAudioContext,
+          contextCtor: null,
+        };
+      }
+      const context = new Ctor(1, 44100, 44100);
+      return {
+        offlineAudioContextType: typeof window.OfflineAudioContext,
+        webkitOfflineAudioContextType: typeof window.webkitOfflineAudioContext,
+        contextCtor: ctorName(context),
+        createOscillatorType: typeof context.createOscillator,
+        createDynamicsCompressorType: typeof context.createDynamicsCompressor,
+        startRenderingType: typeof context.startRendering,
+      };
+    }),
+    touch: safe(() => ({
+      ontouchstart: typeof window.ontouchstart,
+      documentTouch: typeof window.DocumentTouch,
+      touchEvent: typeof window.TouchEvent,
+      touchCtor: typeof window.Touch,
+    })),
+    mediaSource: safe(() => ({
+      MediaSourceType: typeof window.MediaSource,
+      isTypeSupportedType: typeof window.MediaSource?.isTypeSupported,
+      avc1: window.MediaSource && window.MediaSource.isTypeSupported && window.MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"'),
+    })),
+    crypto: safe(() => {
+      const out = { cryptoType: typeof crypto, getRandomValuesType: typeof crypto?.getRandomValues };
+      if (crypto?.getRandomValues) {
+        const arr = new Uint32Array(4);
+        crypto.getRandomValues(arr);
+        out.sample = Array.from(arr);
+      }
+      return out;
+    }),
+    historyLocation: safe(() => ({
+      pushState: typeof history.pushState,
+      replaceState: typeof history.replaceState,
+      href: location.href,
+      hostname: location.hostname,
+    })),
+  };
+  document.getElementById('out').textContent = JSON.stringify(result, null, 2);
+})();
+</script>

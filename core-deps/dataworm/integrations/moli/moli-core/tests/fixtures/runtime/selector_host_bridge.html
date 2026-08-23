@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <body>
+    <section id="scope-root">
+      <div id="alpha" class="item">
+        <span class="leaf">leaf</span>
+      </div>
+      <p class="item">beta</p>
+    </section>
+    <script>
+      const alpha = document.querySelector("#alpha");
+      const items = document.querySelectorAll(".item");
+      const leaf = document.querySelector(".leaf");
+      const leafMatches = leaf.matches(".leaf");
+      const closestSection = leaf.closest("section");
+
+      const dynamic = document.createElement("div");
+      dynamic.id = "dynamic";
+      document.body.appendChild(dynamic);
+      dynamic.__moliAttributes = new Map();
+      document.body.__moliChildNodes = [];
+      const dynamicMatch = document.querySelector("#dynamic");
+      const dynamicById = document.getElementById("dynamic");
+      const selectorDebugStats = globalThis.__moliHostSelectorDebugStats?.() ?? null;
+
+      window.selectorHostAlphaId = alpha?.id ?? null;
+      window.selectorHostItemCount = items.length;
+      window.selectorHostLeafMatches = leafMatches;
+      window.selectorHostClosestId = closestSection?.id ?? null;
+      window.selectorHostDynamicId = dynamicMatch?.id ?? null;
+      window.selectorHostDynamicGetElementById = dynamicById?.id ?? null;
+      window.selectorHostUsedQuerySelector = selectorDebugStats?.querySelector ?? null;
+      window.selectorHostUsedQuerySelectorAll = selectorDebugStats?.querySelectorAll ?? null;
+      window.selectorHostUsedMatches = selectorDebugStats?.matches ?? null;
+      window.selectorHostUsedClosest = selectorDebugStats?.closest ?? null;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+[package]
+license.workspace = true
+name = "moli-webcrypto"
+version = "0.1.0"
+edition = "2024"
+description = "Renderer-neutral WebCrypto algorithms, keys, and JWK validation for Moli"
+
+[dependencies]
+base64 = "0.22"
+moli-crypto = { path = "../moli-crypto" }
+openssl = "0.10.80"
+serde = { version = "1.0.228", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
+zeroize = "1.8.2"
+
+[lints]
+workspace = true

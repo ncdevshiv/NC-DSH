@@ -1,0 +1,153 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body
+  data-length=""
+  data-activation-object-type=""
+  data-activation-is-null=""
+  data-activation-navigation-type=""
+  data-entry-url=""
+  data-from-url=""
+  data-history-state=""
+  data-navigation-state=""
+  data-currententrychange-count=""
+  data-property-currententrychange-count=""
+  data-source-log=""
+  data-result-order=""
+  data-transition-is-null=""
+  data-current-same-document=""
+  data-entry-same-document-values=""
+></body>
+<script>
+const params = new URLSearchParams(location.search);
+const mode = params.get("mode") ?? "replace";
+const sourceUrl = new URL(params.get("sourcePath") ?? "", location.href).href;
+const storagePrefix = params.get("storagePrefix") ?? "";
+const testName = params.get("testName") ?? "Cross-document navigation destination surface";
+
+function key(suffix) {
+  return storagePrefix + suffix;
+}
+
+let listenerCount = 0;
+let propertyCount = 0;
+
+navigation.addEventListener("currententrychange", function () {
+  listenerCount += 1;
+});
+
+navigation.oncurrententrychange = function () {
+  propertyCount += 1;
+};
+
+document.body.setAttribute("data-length", String(history.length));
+document.body.setAttribute("data-activation-object-type", typeof navigation.activation);
+document.body.setAttribute("data-activation-is-null", String(navigation.activation === null));
+document.body.setAttribute(
+  "data-activation-navigation-type",
+  String(navigation.activation?.navigationType ?? ""),
+);
+document.body.setAttribute("data-entry-url", String(navigation.activation?.entry?.url ?? ""));
+document.body.setAttribute("data-from-url", String(navigation.activation?.from?.url ?? ""));
+document.body.setAttribute("data-history-state", JSON.stringify(history.state));
+document.body.setAttribute(
+  "data-navigation-state",
+  JSON.stringify(navigation.currentEntry?.getState?.() ?? null),
+);
+document.body.setAttribute("data-currententrychange-count", String(listenerCount));
+document.body.setAttribute("data-property-currententrychange-count", String(propertyCount));
+document.body.setAttribute("data-source-log", sessionStorage.getItem(key("sourceLog")) ?? "null");
+document.body.setAttribute("data-result-order", sessionStorage.getItem(key("resultOrder")) ?? "null");
+document.body.setAttribute("data-transition-is-null", String(navigation.transition === null));
+document.body.setAttribute("data-current-same-document", String(navigation.currentEntry?.sameDocument));
+document.body.setAttribute(
+  "data-entry-same-document-values",
+  navigation.entries().map(function (entry) {
+    return String(entry.sameDocument);
+  }).join("|"),
+);
+
+test(function () {
+  assert_equals(
+    document.body.getAttribute("data-length"),
+    mode === "push" ? "2" : "1",
+    mode === "push"
+      ? "cross-document push should extend session history"
+      : "cross-document replace should reuse the current session history entry",
+  );
+  assert_equals(
+    document.body.getAttribute("data-activation-object-type"),
+    "object",
+    "destination activation should be exposed as an object",
+  );
+  assert_equals(
+    document.body.getAttribute("data-activation-is-null"),
+    "false",
+    "destination activation should not be null after cross-document navigation",
+  );
+  assert_equals(
+    document.body.getAttribute("data-activation-navigation-type"),
+    mode === "push" ? "push" : "replace",
+    "destination activation should report the committed navigation type",
+  );
+  assert_equals(
+    document.body.getAttribute("data-entry-url"),
+    location.href,
+    "activation entry URL should point at the destination document",
+  );
+  assert_equals(
+    document.body.getAttribute("data-from-url"),
+    sourceUrl,
+    "activation from URL should point at the source document",
+  );
+  assert_equals(
+    document.body.getAttribute("data-current-same-document"),
+    "true",
+    "destination currentEntry should be same-document relative to itself",
+  );
+  assert_equals(
+    document.body.getAttribute("data-entry-same-document-values"),
+    mode === "push" ? "false|true" : "true",
+    mode === "push"
+      ? "cross-document push should keep the previous entry and current entry sameDocument flags"
+      : "cross-document replace should only expose the current destination entry",
+  );
+  assert_equals(
+    document.body.getAttribute("data-source-log"),
+    "before|after-call",
+    "source currententrychange hooks should stay quiet during the cross-document navigation",
+  );
+  assert_equals(
+    document.body.getAttribute("data-result-order"),
+    "surface:true|sync:false,false",
+    "source result promises should still be pending when the destination document takes over",
+  );
+  assert_equals(
+    document.body.getAttribute("data-transition-is-null"),
+    "true",
+    "destination bootstrap should not expose a live navigation.transition object",
+  );
+  assert_equals(
+    document.body.getAttribute("data-currententrychange-count"),
+    "0",
+    "destination should not dispatch currententrychange during bootstrap",
+  );
+  assert_equals(
+    document.body.getAttribute("data-property-currententrychange-count"),
+    "0",
+    "destination oncurrententrychange should stay quiet during bootstrap",
+  );
+  assert_equals(
+    document.body.getAttribute("data-history-state"),
+    "null",
+    "cross-document navigation should not populate history.state by default",
+  );
+  assert_equals(
+    document.body.getAttribute("data-navigation-state"),
+    "null",
+    "cross-document navigation should not populate navigation.currentEntry.getState() by default",
+  );
+}, testName);
+</script>

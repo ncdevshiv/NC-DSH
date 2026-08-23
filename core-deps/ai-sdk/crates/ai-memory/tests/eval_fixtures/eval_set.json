@@ -1,0 +1,83 @@
+{
+  "description": "MINERVA eval set: 40 query/doc pairs exercising morphology, typos, loose paraphrase, and a lexical control category where exact-word overlap should favor word hashing. Pairs are written so the inflected / corrupted / paraphrased stem is the primary relevance signal; distractors include confusables sharing background vocabulary with queries. The harness reports per-category recall@5 truthfully — the lexical_control category is expected to be hard for n-gram hashing.",
+  "distractors": [
+    "the weather forecast predicts rain tomorrow afternoon",
+    "quarterly earnings exceeded analyst expectations this year",
+    "the museum opens at nine in the morning",
+    "python scripts automate repetitive tasks",
+    "public transit schedules change on weekends",
+    "the recipe calls for two cups of flour",
+    "software licenses must be renewed annually",
+    "local farmers sell fresh produce on saturday",
+    "the committee approved the budget proposal",
+    "regular exercise improves cardiovascular health",
+    "the conference keynote attracted many attendees",
+    "battery recycling programs expand nationwide",
+    "spreadsheet running totals confuse new accountants",
+    "the model evaluation benchmarks were published",
+    "she enjoys daily walks along the river",
+    "baseball runs scored in the final inning"
+  ],
+  "categories": [
+    {
+      "name": "morphology",
+      "cases": [
+        { "id": "morph-01", "query": "engine running smoothly", "relevant": "engines run smoothly after tuning" },
+        { "id": "morph-02", "query": "encoding a long video", "relevant": "the video was encoded overnight" },
+        { "id": "morph-03", "query": "workers organized a protest", "relevant": "protesters organizing against the rules" },
+        { "id": "morph-04", "query": "jumping over wooden obstacles", "relevant": "the horse jumped every obstacle" },
+        { "id": "morph-05", "query": "compiler optimizations failing", "relevant": "optimize the compiler loops" },
+        { "id": "morph-06", "query": "analyzing customer behavior", "relevant": "behavioral analysis of customers" },
+        { "id": "morph-07", "query": "deploying services quickly", "relevant": "quick deployment of services" },
+        { "id": "morph-08", "query": "the dog was barking loudly", "relevant": "dogs bark at strangers" },
+        { "id": "morph-09", "query": "translated documents arrived", "relevant": "please translate these documents" },
+        { "id": "morph-10", "query": "prices increased sharply", "relevant": "increasing prices worry shoppers" },
+        { "id": "morph-11", "query": "he finished the marathon", "relevant": "marathon finishers celebrate together" },
+        { "id": "morph-12", "query": "sorting database records faster", "relevant": "a faster database record sorter" }
+      ]
+    },
+    {
+      "name": "typo",
+      "cases": [
+        { "id": "typo-01", "query": "vector embedngs tutorial", "relevant": "tutorial on vector embeddings" },
+        { "id": "typo-02", "query": "recieve payment confirmation", "relevant": "payment received confirmation email" },
+        { "id": "typo-03", "query": "langauge model training", "relevant": "training a language model" },
+        { "id": "typo-04", "query": "occured error handling", "relevant": "handler for occurred errors" },
+        { "id": "typo-05", "query": "seperating concerns cleanly", "relevant": "clean separation of concerns" },
+        { "id": "typo-06", "query": "maintainance schedule", "relevant": "the maintenance schedule template" },
+        { "id": "typo-07", "query": "enviroment variables setup", "relevant": "setting up environment variables" },
+        { "id": "typo-08", "query": "necesary conditions theorem", "relevant": "necessary conditions of the theorem" },
+        { "id": "typo-09", "query": "accomodate user requests", "relevant": "accommodating user requests politely" },
+        { "id": "typo-10", "query": "definately worth reading", "relevant": "an article definitely worth reading" }
+      ]
+    },
+    {
+      "name": "paraphrase",
+      "cases": [
+        { "id": "para-01", "query": "how to train neural networks", "relevant": "training deep neural nets efficiently" },
+        { "id": "para-02", "query": "cheap flights to berlin", "relevant": "low cost flight deals to berlin" },
+        { "id": "para-03", "query": "fixing a leaking faucet", "relevant": "fix leaky faucets fast" },
+        { "id": "para-04", "query": "best restaurants nearby", "relevant": "top rated local restaurant guide" },
+        { "id": "para-05", "query": "car battery replacement cost", "relevant": "price of replacing car batteries" },
+        { "id": "para-06", "query": "remote work productivity tips", "relevant": "tips for working remotely productively" },
+        { "id": "para-07", "query": "learn guitar chords online", "relevant": "online lessons for guitar chords" },
+        { "id": "para-08", "query": "healthy breakfast ideas quick", "relevant": "quick and healthy breakfast recipes" },
+        { "id": "para-09", "query": "improve sleep quality naturally", "relevant": "natural ways to improve sleeping quality" }
+      ]
+    },
+    {
+      "name": "lexical_control",
+      "cases": [
+        { "id": "lex-01", "query": "kubernetes ingress controller config", "relevant": "configure kubernetes ingress controllers" },
+        { "id": "lex-02", "query": "quantum entanglement experiments", "relevant": "experiments in quantum entanglement physics" },
+        { "id": "lex-03", "query": "photosynthesis chlorophyll absorption", "relevant": "chlorophyll absorbing light during photosynthesis" },
+        { "id": "lex-04", "query": "byzantine generals problem", "relevant": "the byzantine generals problem explained" },
+        { "id": "lex-05", "query": "schwarzschild radius derivation", "relevant": "deriving the schwarzschild radius formula" },
+        { "id": "lex-06", "query": "venn diagram generator", "relevant": "generate venn diagrams online free" },
+        { "id": "lex-07", "query": "sourdough starter feeding ratio", "relevant": "feeding ratios for sourdough starters" },
+        { "id": "lex-08", "query": "medieval guild hierarchy", "relevant": "hierarchy of medieval trade guilds" },
+        { "id": "lex-09", "query": "tsunami warning systems", "relevant": "early tsunami warning system design" }
+      ]
+    }
+  ]
+}

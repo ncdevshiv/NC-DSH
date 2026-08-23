@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head></head><body>
+<script>
+  window.__testing_observations = [];
+  window.__testing_failures = [];
+  window.__testing_pending_async = 0;
+  function log(msg) {
+    console.log(msg);
+    window.__testing_observations.push(msg);
+  }
+  function fail(msg) {
+    console.error(msg);
+    window.__testing_failures.push(msg);
+  }
+  try {
+    var d = new Document();
+    log('constructor.name = ' + d.constructor.name);
+    
+    // Check prototype chain for head
+    var proto = Object.getPrototypeOf(d);
+    var depth = 0;
+    while (proto && depth < 10) {
+      var name = proto.constructor ? proto.constructor.name : '?';
+      var hasHead = Object.getOwnPropertyDescriptor(proto, 'head');
+      log('proto[' + depth + '] = ' + name + ' hasHead=' + !!hasHead);
+      if (hasHead) {
+        log('  head descriptor: ' + JSON.stringify({get: typeof hasHead.get, set: typeof hasHead.set, value: typeof hasHead.value}));
+      }
+      proto = Object.getPrototypeOf(proto);
+      depth++;
+    }
+    
+    var hasOwnHead = Object.getOwnPropertyDescriptor(d, 'head');
+    log('own head = ' + !!hasOwnHead);
+    log('typeof d.head = ' + typeof d.head);
+    
+    if (typeof d.head !== 'undefined') {
+      fail('head should be undefined but is ' + typeof d.head);
+    } else {
+      log('PASS: head is undefined');
+    }
+  } catch(e) {
+    fail('Error: ' + e.message);
+  }
+</script>
+</body></html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function next_message(worker) {
+  return new Promise(function (resolve, reject) {
+    function cleanup() {
+      worker.removeEventListener("message", onmessage);
+      worker.removeEventListener("error", onerror);
+    }
+
+    function onmessage(event) {
+      cleanup();
+      resolve(event);
+    }
+
+    function onerror(event) {
+      cleanup();
+      reject(new Error("Worker error: " + event.message));
+    }
+
+    worker.addEventListener("message", onmessage);
+    worker.addEventListener("error", onerror);
+  });
+}
+
+promise_test(async function () {
+  const workerUrl = new URL(
+    "/wpt/ported/worker/resources/worker-module-default-declaration-main.js",
+    location.href
+  ).href;
+  const worker = new Worker(workerUrl, { type: "module" });
+
+  try {
+    const message = await next_message(worker);
+    assert_equals(message.data.error, undefined, "module worker should not fail");
+    assert_equals(message.data.importedFunctionResult, "fn:imported", "default function import should work");
+    assert_equals(message.data.localFunctionResult, "fn:local", "named default function should keep its local binding inside the module");
+    assert_equals(message.data.importedClassResult, "class:imported", "default class import should work");
+    assert_equals(message.data.localClassResult, "class:local", "named default class should keep its local binding inside the module");
+    assert_equals(message.data.anonymousClassResult, "base:anonymous", "anonymous default class with extends should remain default-importable");
+    assert_equals(message.data.importedAsyncFunctionResult, "async-fn:imported", "default async function import should work after dependency await");
+    assert_equals(message.data.localAsyncFunctionResult, "async-fn:local", "named default async function should keep its local binding inside the module");
+    assert_equals(message.data.importedGeneratorResult, "gen|imported", "default generator function import should work");
+    assert_equals(message.data.localGeneratorResult, "gen|local", "named default generator should keep its local binding inside the module");
+    assert_equals(message.data.importedAsyncGeneratorResult, "async-gen|imported", "default async generator import should work after dependency await");
+    assert_equals(message.data.localAsyncGeneratorResult, "async-gen|local", "named default async generator should keep its local binding inside the module");
+  } finally {
+    worker.terminate();
+  }
+}, "Dedicated module workers preserve default declaration local bindings");
+</script>

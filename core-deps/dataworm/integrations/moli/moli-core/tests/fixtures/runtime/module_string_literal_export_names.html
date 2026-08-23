@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleStringLiteralExportNamesOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleStringLiteralExportNamesOrder.push("dcl");
+        window.moduleStringLiteralExportNamesFinalOrder =
+          window.moduleStringLiteralExportNamesOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      import {
+        "value" as importedValue,
+        "meta:label" as importedLabel,
+      } from "/assets/module-string-literal-export-names-barrel.mjs";
+
+      window.moduleStringLiteralExportNamesOrder.push("module");
+      window.moduleStringLiteralExportNamesResult =
+        `${importedValue}:${importedLabel}`;
+    </script>
+  </body>
+</html>

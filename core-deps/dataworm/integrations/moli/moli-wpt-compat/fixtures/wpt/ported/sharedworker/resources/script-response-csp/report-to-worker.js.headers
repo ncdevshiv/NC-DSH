@@ -1,0 +1,2 @@
+Reporting-Endpoints: csp="/wpt/runtime/csp/reporting/collect?token=sharedworker-report-to-report-only"
+Content-Security-Policy-Report-Only: connect-src 'none'; report-to csp

@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleSharedUnsupportedOrder = [];
+      const sharedUnsupportedIds = [
+        "module-shared-unsupported-a",
+        "module-shared-unsupported-b",
+      ];
+      window.addEventListener("error", () => {
+        const id = sharedUnsupportedIds.shift();
+        if (id) {
+          window.moduleSharedUnsupportedOrder.push(`${id}:error`);
+        }
+      });
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleSharedUnsupportedOrder.push("dcl");
+        window.moduleSharedUnsupportedOrderResult =
+          window.moduleSharedUnsupportedOrder.join(",");
+      });
+    </script>
+    <script
+      id="module-shared-unsupported-a"
+      type="module"
+      src="/assets/module-shared-unsupported-parent-a.mjs"
+    ></script>
+    <script
+      id="module-shared-unsupported-b"
+      type="module"
+      src="/assets/module-shared-unsupported-parent-b.mjs"
+    ></script>
+  </body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<div id="attributes-target" class="initial"></div>
+<div id="take-records-target"></div>
+<div id="disconnect-target"></div>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const target = document.getElementById("attributes-target");
+  let deliveredRecords = null;
+  let deliveredObserver = null;
+
+  const observer = new MutationObserver(function (records, callbackObserver) {
+    deliveredRecords = records;
+    deliveredObserver = callbackObserver;
+    observer.disconnect();
+  });
+
+  assert_true(observer instanceof MutationObserver);
+  observer.observe(target, { attributes: true, attributeOldValue: true });
+  target.setAttribute("data-test", "one");
+  target.setAttribute("data-test", "two");
+  target.removeAttribute("data-test");
+
+  await Promise.resolve();
+
+  assert_equals(deliveredObserver, observer);
+  assert_equals(deliveredRecords.length, 3);
+  assert_equals(deliveredRecords[0].type, "attributes");
+  assert_equals(deliveredRecords[0].target, target);
+  assert_equals(deliveredRecords[0].attributeName, "data-test");
+  assert_equals(deliveredRecords[0].oldValue, null);
+  assert_equals(deliveredRecords[1].oldValue, "one");
+  assert_equals(deliveredRecords[2].oldValue, "two");
+}, "MutationObserver delivers attribute mutation records with old values");
+
+test(function () {
+  const target = document.getElementById("take-records-target");
+  let callbackCalled = false;
+  const observer = new MutationObserver(function () {
+    callbackCalled = true;
+  });
+
+  observer.observe(target, { attributes: true });
+  target.setAttribute("data-take", "records");
+
+  const records = observer.takeRecords();
+  assert_equals(records.length, 1);
+  assert_equals(records[0].type, "attributes");
+  assert_equals(records[0].target, target);
+  assert_equals(records[0].attributeName, "data-take");
+  assert_false(callbackCalled);
+  observer.disconnect();
+}, "MutationObserver.takeRecords returns and clears queued records");
+
+promise_test(async function () {
+  const target = document.getElementById("disconnect-target");
+  let callbackCalled = false;
+  const observer = new MutationObserver(function () {
+    callbackCalled = true;
+  });
+
+  observer.observe(target, { attributes: true });
+  observer.disconnect();
+  target.setAttribute("data-disconnected", "true");
+
+  await Promise.resolve();
+
+  assert_false(callbackCalled);
+}, "MutationObserver.disconnect stops future delivery");
+</script>

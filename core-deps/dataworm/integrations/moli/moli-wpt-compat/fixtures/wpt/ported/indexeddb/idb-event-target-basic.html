@@ -1,0 +1,108 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function assert_throws_name(expectedName, callback, description) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(
+      error && error.name,
+      expectedName,
+      description || "unexpected exception name"
+    );
+    return;
+  }
+  assert_unreached(
+    (description || "assert_throws_name") + ": expected an exception"
+  );
+}
+
+function wait_request(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+promise_test(async () => {
+  const dbname = "idb-event-target-" + Math.random();
+  const request = indexedDB.open(dbname);
+  const events = [];
+  function listener() {
+    events.push("removed");
+  }
+  const throwingType = {
+    toString() {
+      throw new RangeError("type conversion");
+    },
+  };
+
+  assert_throws_name(
+    "TypeError",
+    () => request.addEventListener(),
+    "addEventListener type is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => request.removeEventListener(),
+    "removeEventListener type is required"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => request.addEventListener(Symbol("success"), listener),
+    "addEventListener rejects Symbol type"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => request.removeEventListener(Symbol("success"), listener),
+    "removeEventListener rejects Symbol type"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => request.addEventListener(throwingType, listener),
+    "addEventListener propagates type stringification errors"
+  );
+  assert_throws_name(
+    "RangeError",
+    () => request.removeEventListener(throwingType, listener),
+    "removeEventListener propagates type stringification errors"
+  );
+  assert_throws_name(
+    "TypeError",
+    () => request.dispatchEvent(),
+    "dispatchEvent event is required"
+  );
+
+  request.addEventListener("success");
+  request.removeEventListener("success");
+  request.addEventListener("success", null);
+  request.removeEventListener("success", null);
+  request.addEventListener(undefined, listener);
+  request.removeEventListener(undefined, listener);
+  request.addEventListener("manual", () => events.push("manual"));
+  assert_true(
+    request.dispatchEvent({ type: "manual" }),
+    "dispatchEvent returns true for a non-canceled event object"
+  );
+  request.addEventListener("success", listener);
+  request.removeEventListener("success", listener);
+  request.addEventListener("upgradeneeded", () => events.push("upgrade"));
+  request.onupgradeneeded = () => {
+    request.result.createObjectStore("store");
+  };
+
+  const db = await wait_request(request);
+  assert_array_equals(
+    events,
+    ["manual", "upgrade"],
+    "removed success listener should not fire"
+  );
+  db.close();
+
+  const deletion = indexedDB.deleteDatabase(dbname);
+  await wait_request(deletion);
+}, "IndexedDB EventTarget listener and dispatch arguments follow WebIDL boundaries");
+</script>

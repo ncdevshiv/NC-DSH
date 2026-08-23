@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+  <head>
+    <style id="connected-style">
+      @font-face {
+        font-family: "TamperFace";
+        src: url("resources/Rochester.otf") format("opentype");
+      }
+    </style>
+  </head>
+  <body
+    data-tampered-get-elements-by-tag-name-called="no"
+    data-tampered-is-connected-called="no"
+    data-tampered-disabled-called="no"
+    data-tampered-type-called="no"
+    data-tampered-text-content-called="no"
+  >
+    <script>
+      const body = document.body;
+      const fonts = document.fonts;
+      const connected = Array.from(fonts.values())[0];
+
+      Document.prototype.getElementsByTagName = function () {
+        body.setAttribute("data-tampered-get-elements-by-tag-name-called", "yes");
+        throw new Error("page tampered Document.prototype.getElementsByTagName");
+      };
+
+      Object.defineProperty(Node.prototype, "isConnected", {
+        configurable: true,
+        get() {
+          body.setAttribute("data-tampered-is-connected-called", "yes");
+          throw new Error("page tampered Node.prototype.isConnected");
+        },
+      });
+
+      Object.defineProperty(HTMLStyleElement.prototype, "disabled", {
+        configurable: true,
+        get() {
+          body.setAttribute("data-tampered-disabled-called", "yes");
+          throw new Error("page tampered HTMLStyleElement.prototype.disabled");
+        },
+      });
+
+      Object.defineProperty(HTMLStyleElement.prototype, "type", {
+        configurable: true,
+        get() {
+          body.setAttribute("data-tampered-type-called", "yes");
+          throw new Error("page tampered HTMLStyleElement.prototype.type");
+        },
+      });
+
+      Object.defineProperty(Node.prototype, "textContent", {
+        configurable: true,
+        get() {
+          body.setAttribute("data-tampered-text-content-called", "yes");
+          throw new Error("page tampered Node.prototype.textContent");
+        },
+      });
+
+      try {
+        body.setAttribute("data-size", String(fonts.size));
+        body.setAttribute("data-has-connected", String(fonts.has(connected)));
+        body.setAttribute("data-connected-family", connected?.family ?? "");
+      } catch (error) {
+        body.setAttribute("data-error", String(error));
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+[package]
+name = "ai-cli"
+description = "AI SDK command-line interface: doctor, providers, models, config, run, inspect, trace, benchmark"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ai-core = { path = "../ai-core" }
+ai-config = { path = "../ai-config" }
+ai-providers = { path = "../ai-providers" }
+ai-models = { path = "../ai-models" }
+ai-devtools = { path = "../ai-devtools" }
+ai-errors = { path = "../ai-errors" }
+ai-types = { path = "../ai-types" }
+ai-runtime = { path = "../ai-runtime" }
+ai-stream = { path = "../ai-stream" }
+ai-observability = { path = "../ai-observability" }
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# Time-travel trace TUI (`ai trace --tui`). Versions are declared here because
+# the workspace dependency table must not be extended from this crate.
+ratatui = "0.29"
+crossterm = "0.28"

@@ -1,0 +1,122 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const SLOW_URL = "/wpt/runtime/xhr/slow";
+const TEXT_URL = "/wpt/runtime/xhr/text";
+
+async function assert_abort_error(promise, description) {
+  try {
+    await promise;
+  } catch (error) {
+    assert_equals(error.name, "AbortError", description + " name");
+    assert_true(error instanceof DOMException, description + " should reject with DOMException");
+    assert_equals(
+      error.message,
+      "The operation was aborted.",
+      description + " should keep the AbortError message",
+    );
+    return;
+  }
+
+  throw new Error(description + " should reject");
+}
+
+async function assert_rejects_with_reason(promise, reason, description) {
+  try {
+    await promise;
+  } catch (error) {
+    assert_equals(error, reason, description + " should reject with signal.reason");
+    return;
+  }
+
+  throw new Error(description + " should reject");
+}
+
+promise_test(async function () {
+  const controller = new AbortController();
+  const events = [];
+  controller.signal.addEventListener("abort", function () {
+    events.push("listener");
+  });
+  controller.signal.onabort = function () {
+    events.push("onabort");
+  };
+
+  controller.abort();
+
+  assert_true(controller.signal.aborted, "signal should be marked aborted");
+  assert_array_equals(events, ["listener", "onabort"], "abort event listeners should run in registration order");
+  await assert_abort_error(
+    fetch(SLOW_URL, { signal: controller.signal }),
+    "pre-aborted fetch",
+  );
+}, "fetch rejects when given a pre-aborted AbortSignal");
+
+promise_test(async function () {
+  const controller = new AbortController();
+  const reason = new Error("custom preabort reason");
+  controller.abort(reason);
+
+  await assert_rejects_with_reason(
+    fetch(SLOW_URL, { signal: controller.signal }),
+    reason,
+    "pre-aborted fetch with custom reason",
+  );
+}, "fetch rejects pre-aborted custom reasons with signal.reason");
+
+promise_test(async function () {
+  const controller = new AbortController();
+  const events = [];
+  const pending = fetch(SLOW_URL, { signal: controller.signal }).then(
+    function () {
+      events.push("fulfilled");
+    },
+    function (error) {
+      events.push(
+        "error:" + error.name + ":" + (error instanceof DOMException) + ":" + error.message,
+      );
+    },
+  );
+
+  controller.abort();
+  await pending;
+
+  assert_array_equals(
+    events,
+    ["error:AbortError:true:The operation was aborted."],
+    "aborting an in-flight fetch should reject exactly once",
+  );
+
+  const response = await fetch(TEXT_URL);
+  assert_equals(response.status, 200, "later fetches should still complete");
+  assert_true((await response.text()).length > 0, "later fetches should expose the body");
+}, "fetch rejects in-flight requests when AbortSignal aborts");
+
+promise_test(async function () {
+  const controller = new AbortController();
+  const reason = { kind: "custom-inflight-reason" };
+  const pending = fetch(SLOW_URL, { signal: controller.signal });
+
+  controller.abort(reason);
+
+  await assert_rejects_with_reason(
+    pending,
+    reason,
+    "in-flight fetch aborted with custom reason",
+  );
+}, "fetch rejects in-flight custom reasons with signal.reason");
+
+promise_test(async function () {
+  const controller = new AbortController();
+  controller.abort();
+  const request = new Request(TEXT_URL, { signal: controller.signal });
+
+  const response = await fetch(request, { signal: null });
+
+  assert_equals(response.status, 200, "signal: null should clear an inherited request signal");
+  assert_true((await response.text()).length > 0, "signal: null should still allow the fetch to complete");
+}, "fetch init signal:null overrides an inherited Request signal");
+</script>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="child" src="/compat/window-child-browsing-context-target-name-a"></iframe>
+    <script>
+      const iframe = document.getElementById('child');
+      const topOrder = [];
+      const childOrder = [];
+      const topHrefBefore = window.location.href;
+      const topHistoryBefore = window.history.length;
+
+      window.addEventListener('popstate', () => topOrder.push('top-popstate'));
+      window.addEventListener('hashchange', () => topOrder.push('top-hashchange'));
+
+      iframe.addEventListener('load', () => {
+        if (document.body.hasAttribute('data-done')) {
+          return;
+        }
+        document.body.setAttribute('data-done', '1');
+
+        const childWindow = iframe.contentWindow;
+
+        childWindow.addEventListener('popstate', (event) => {
+          childOrder.push('child-popstate');
+          document.body.setAttribute(
+            'data-child-popstate-state',
+            String(event.state === null ? 'null' : JSON.stringify(event.state))
+          );
+          document.body.setAttribute(
+            'data-child-popstate-document-location-href',
+            childWindow.document.location.href
+          );
+          queueMicrotask(() => childOrder.push('child-popstate-microtask'));
+        });
+
+        childWindow.addEventListener('hashchange', (event) => {
+          childOrder.push('child-hashchange');
+          document.body.setAttribute('data-child-old', event.oldURL);
+          document.body.setAttribute('data-child-new', event.newURL);
+          queueMicrotask(() => childOrder.push('child-hashchange-microtask'));
+        });
+
+        childWindow.location.hash = 'frag';
+
+        document.body.setAttribute(
+          'data-top-location-unchanged',
+          String(window.location.href === topHrefBefore)
+        );
+        document.body.setAttribute(
+          'data-top-history-unchanged',
+          String(window.history.length === topHistoryBefore)
+        );
+        document.body.setAttribute('data-child-sync-hash', childWindow.location.hash);
+        document.body.setAttribute(
+          'data-child-sync-history-length',
+          String(childWindow.history.length)
+        );
+        document.body.setAttribute(
+          'data-child-sync-history-state',
+          String(
+            childWindow.history.state === null
+              ? 'null'
+              : JSON.stringify(childWindow.history.state)
+          )
+        );
+
+        setTimeout(() => {
+          document.body.setAttribute('data-top-order', topOrder.join(','));
+          document.body.setAttribute('data-child-order', childOrder.join(','));
+          document.body.setAttribute('data-child-timeout-hash', childWindow.location.hash);
+          document.body.setAttribute(
+            'data-child-timeout-history-length',
+            String(childWindow.history.length)
+          );
+          document.body.setAttribute(
+            'data-child-current-entry-url',
+            childWindow.navigation.currentEntry?.url ?? 'null'
+          );
+          document.body.setAttribute(
+            'data-child-document-location-href',
+            childWindow.document.location.href
+          );
+        }, 0);
+      });
+    </script>
+  </body>
+</html>

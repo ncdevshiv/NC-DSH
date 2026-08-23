@@ -1,0 +1,35 @@
+<!doctype html>
+<body></body>
+<script>
+  const when = new Date("2020-01-02T03:04:05.000Z");
+  const result = navigation.navigate(location.pathname + "#structured-clone", {
+    history: "push",
+    state: { when, values: [1, 2] },
+  });
+
+  const syncState = navigation.currentEntry.getState();
+  document.body.setAttribute(
+    "data-sync",
+    [
+      String(syncState?.when instanceof Date),
+      String(syncState?.when?.toISOString?.() ?? ""),
+      String(Array.isArray(syncState?.values)),
+      JSON.stringify(history.state),
+      String(!!result?.committed && !!result?.finished),
+    ].join("|")
+  );
+
+  setTimeout(() => {
+    const finalState = navigation.currentEntry.getState();
+    document.body.setAttribute(
+      "data-final",
+      [
+        String(finalState?.when instanceof Date),
+        String(finalState?.when?.toISOString?.() ?? ""),
+        String(Array.isArray(finalState?.values)),
+        JSON.stringify(finalState?.values ?? null),
+        JSON.stringify(history.state),
+      ].join("|")
+    );
+  }, 0);
+</script>

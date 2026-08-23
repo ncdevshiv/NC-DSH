@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <body
+    data-source-sync=""
+    data-source-timeout=""
+    data-committed=""
+    data-finished=""
+    data-dest-activation=""
+    data-dest-current=""
+    data-dest-events=""
+    data-child-location-href=""
+  >
+    <iframe
+      id="child"
+      src="/compat/window-child-browsing-context-navigation-push-result-surface-source"
+    ></iframe>
+    <script>
+      const iframe = document.getElementById("child");
+      iframe.addEventListener(
+        "load",
+        () => {
+          document.body.setAttribute(
+            "data-child-location-href",
+            iframe.contentWindow.location.href
+          );
+        },
+        { once: false }
+      );
+    </script>
+  </body>
+</html>

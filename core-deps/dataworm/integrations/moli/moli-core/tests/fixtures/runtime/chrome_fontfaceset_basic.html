@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <body
+    data-initial-size=""
+    data-add-returns-self=""
+    data-size-after-add=""
+    data-has-after-add=""
+    data-second-add-size=""
+    data-delete-added=""
+    data-size-after-delete=""
+    data-delete-again=""
+    data-has-after-delete=""
+    data-clear-size=""
+    data-invalid-add=""
+    data-invalid-has=""
+    data-invalid-delete=""
+  >
+    <script>
+      const body = document.body;
+      const face = new FontFace('ChromeFace', 'url(chrome.woff)');
+      body.setAttribute('data-initial-size', String(document.fonts.size));
+      body.setAttribute(
+        'data-add-returns-self',
+        String(document.fonts.add(face) === document.fonts)
+      );
+      body.setAttribute('data-size-after-add', String(document.fonts.size));
+      body.setAttribute('data-has-after-add', String(document.fonts.has(face)));
+      document.fonts.add(face);
+      body.setAttribute('data-second-add-size', String(document.fonts.size));
+      body.setAttribute('data-delete-added', String(document.fonts.delete(face)));
+      body.setAttribute('data-size-after-delete', String(document.fonts.size));
+      body.setAttribute('data-delete-again', String(document.fonts.delete(face)));
+      body.setAttribute(
+        'data-has-after-delete',
+        String(document.fonts.has(face))
+      );
+      document.fonts.add(face);
+      document.fonts.clear();
+      body.setAttribute('data-clear-size', String(document.fonts.size));
+      try {
+        document.fonts.add(null);
+        body.setAttribute('data-invalid-add', 'no-throw');
+      } catch (error) {
+        body.setAttribute('data-invalid-add', error.name);
+      }
+      try {
+        document.fonts.has(null);
+        body.setAttribute('data-invalid-has', 'no-throw');
+      } catch (error) {
+        body.setAttribute('data-invalid-has', error.name);
+      }
+      try {
+        document.fonts.delete(null);
+        body.setAttribute('data-invalid-delete', 'no-throw');
+      } catch (error) {
+        body.setAttribute('data-invalid-delete', error.name);
+      }
+    </script>
+  </body>
+</html>

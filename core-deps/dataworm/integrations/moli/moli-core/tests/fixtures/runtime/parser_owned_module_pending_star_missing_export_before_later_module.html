@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.parserOwnedPendingStarMissingExportOrder = [];
+      window.addEventListener("error", () => {
+        window.parserOwnedPendingStarMissingExportOrder.push("error");
+        window.parserOwnedPendingStarMissingExportError =
+          "pending-star-missing-export";
+      });
+    </script>
+    <script type="module">
+      import "/assets/module-pending-star-cycle-entry.mjs";
+    </script>
+    <script type="module">
+      window.parserOwnedPendingStarMissingExportOrder.push("later-module");
+      window.parserOwnedPendingStarMissingExportContinuation = true;
+      window.parserOwnedPendingStarMissingExportOrderResult =
+        window.parserOwnedPendingStarMissingExportOrder.join(",");
+    </script>
+  </body>
+</html>

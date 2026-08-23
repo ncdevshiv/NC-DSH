@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<body></body>
+<script>
+function withHost(markup, callback) {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  document.body.appendChild(host);
+  try {
+    callback(host);
+  } finally {
+    host.remove();
+  }
+}
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+
+  input.value = "not-a-number";
+  assert_equals(input.value, "", "invalid script-set number values should sanitize to empty");
+  assert_false(input.validity.badInput, "script-set invalid number text should not create badInput");
+  assert_true(input.validity.valid, "empty non-required number input should remain valid");
+
+  input.value = " 1";
+  assert_equals(input.value, "", "leading whitespace should not survive number value sanitization");
+
+  input.value = "Infinity";
+  assert_equals(input.value, "", "non-finite number values should sanitize to empty");
+
+  input.value = "1e2";
+  assert_equals(input.value, "1e2", "valid floating-point number values should be preserved");
+}, "number input script value setter sanitizes invalid number strings");
+
+test(function () {
+  withHost(
+    `<input id="number" type="number" value="not-a-number" min="1">`,
+    function (host) {
+      const input = host.querySelector("#number");
+
+      assert_equals(input.getAttribute("value"), "not-a-number", "content attribute should keep the original value");
+      assert_equals(input.value, "", "invalid initial number content value should sanitize to empty");
+      assert_false(input.validity.rangeUnderflow, "sanitized empty number should not underflow");
+      assert_false(input.validity.badInput, "invalid initial content value should not create badInput");
+      assert_true(input.validity.valid, "empty non-required number input should remain valid");
+
+      input.setAttribute("value", "2");
+      assert_equals(input.value, "2", "non-dirty value attribute changes should update the current value");
+
+      input.setAttribute("value", "bad");
+      assert_equals(input.value, "", "non-dirty invalid value attribute changes should sanitize the current value");
+    },
+  );
+}, "number input initial value and non-dirty value attribute sync use number sanitization");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "not-a-number";
+  assert_equals(input.value, "not-a-number", "text input should keep the script-set value");
+
+  input.type = "number";
+  assert_equals(input.value, "", "switching to number should sanitize the existing value");
+
+  input.type = "text";
+  assert_equals(input.value, "", "sanitized value should not reappear after switching back to text");
+}, "changing an input to type=number sanitizes the current value");
+
+test(function () {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.required = true;
+  input.value = "bad";
+
+  assert_equals(input.value, "", "invalid script-set required number value should sanitize to empty");
+  assert_true(input.validity.valueMissing, "required number input should report valueMissing after sanitization");
+  assert_false(input.validity.badInput, "script-set invalid number text should not create badInput");
+  assert_false(input.checkValidity(), "required sanitized-empty number input should fail validation");
+}, "sanitized invalid number strings participate in required validation as empty values");
+</script>

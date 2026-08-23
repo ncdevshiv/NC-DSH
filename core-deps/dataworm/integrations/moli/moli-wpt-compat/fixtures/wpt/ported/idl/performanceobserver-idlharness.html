@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+idl_test([`
+callback PerformanceObserverCallback = undefined (PerformanceObserverEntryList entries, PerformanceObserver observer);
+
+interface PerformanceObserver {
+  constructor(PerformanceObserverCallback callback);
+  undefined observe(object options);
+  undefined disconnect();
+  sequence<PerformanceEntry> takeRecords();
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_operation_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    PerformanceObserver: ["new PerformanceObserver(function () {})"]
+  });
+});
+
+test(function () {
+  assert_true(Array.isArray(PerformanceObserver.supportedEntryTypes));
+  assert_array_equals(PerformanceObserver.supportedEntryTypes, ["mark", "measure", "navigation", "resource"]);
+  const observer = new PerformanceObserver(function () {});
+  observer.observe({ entryTypes: ["mark"] });
+  assert_array_equals(observer.takeRecords(), []);
+  observer.disconnect();
+}, "PerformanceObserver accepts implemented entryTypes and exposes supportedEntryTypes");
+</script>

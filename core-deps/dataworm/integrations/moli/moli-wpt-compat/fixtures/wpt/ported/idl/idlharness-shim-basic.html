@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script src="/wpt/resources/WebIDLParser.js"></script>
+<script src="/wpt/resources/idlharness.js"></script>
+<script>
+const MoliIdlHarnessThingConstructor = function MoliIdlHarnessThing(value) {};
+Object.defineProperty(window, "MoliIdlHarnessThing", {
+  value: MoliIdlHarnessThingConstructor,
+  writable: true,
+  enumerable: false,
+  configurable: true,
+});
+const MoliIdlHarnessThing = window.MoliIdlHarnessThing;
+Object.defineProperty(MoliIdlHarnessThing.prototype, Symbol.toStringTag, {
+  value: "MoliIdlHarnessThing",
+});
+
+Object.defineProperty(MoliIdlHarnessThing.prototype, "value", {
+  get() { return "value"; },
+  set(_value) {},
+  enumerable: true,
+  configurable: true,
+});
+
+Object.defineProperty(MoliIdlHarnessThing.prototype, "readonlyValue", {
+  get() { return 2; },
+  enumerable: true,
+  configurable: true,
+});
+
+Object.defineProperty(MoliIdlHarnessThing.prototype, "toString", {
+  value() { return this.value; },
+  writable: true,
+  enumerable: true,
+  configurable: true,
+});
+
+idl_test([`
+interface MoliIdlHarnessThing {
+  constructor(DOMString value, optional DOMString optionalValue);
+  stringifier attribute DOMString value;
+  readonly attribute DOMString readonlyValue;
+};
+`], [], function (idlArray) {
+  idlArray.enable_function_length_assertions();
+  idlArray.enable_interface_descriptor_assertions();
+  idlArray.enable_attribute_descriptor_assertions();
+  idlArray.enable_object_brand_assertions();
+  idlArray.add_objects({
+    MoliIdlHarnessThing: ["new MoliIdlHarnessThing()"]
+  });
+});
+</script>

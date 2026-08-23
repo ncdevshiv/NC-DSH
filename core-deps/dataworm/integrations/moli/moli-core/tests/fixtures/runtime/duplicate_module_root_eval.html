@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <title>duplicate module root eval</title>
+    <script>
+      window.duplicateModuleRootOrder = ["classic-before"];
+      window.duplicateModuleRootEvalCount = 0;
+      window.duplicateModuleRootError = "";
+      window.addEventListener("error", (event) => {
+        window.duplicateModuleRootError =
+          event.message || String(event.error || "error");
+        window.duplicateModuleRootOrder.push("error");
+        window.duplicateModuleRootFinalOrder =
+          window.duplicateModuleRootOrder.join(",");
+      });
+    </script>
+    <script
+      type="module"
+      src="/assets/duplicate_module_root_eval.mjs"
+      onload="window.duplicateModuleRootOrder.push('load-a'); window.duplicateModuleRootFinalOrder = window.duplicateModuleRootOrder.join(',');"
+    ></script>
+    <script
+      type="module"
+      src="/assets/duplicate_module_root_eval.mjs"
+      onload="window.duplicateModuleRootOrder.push('load-b'); window.duplicateModuleRootFinalOrder = window.duplicateModuleRootOrder.join(',');"
+    ></script>
+    <script>
+      window.duplicateModuleRootOrder.push("classic-after");
+      window.duplicateModuleRootFinalOrder =
+        window.duplicateModuleRootOrder.join(",");
+    </script>
+  </head>
+  <body>
+    <main>duplicate module root eval</main>
+  </body>
+</html>

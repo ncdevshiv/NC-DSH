@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+  <body>
+    <main id="after">after</main>
+    <script>
+      const observer = new MutationObserver(() => {
+        throw new Error("mutation observer boom");
+      });
+      observer.observe(document.documentElement, { attributes: true });
+      document.documentElement.setAttribute("data-trigger", "1");
+    </script>
+  </body>
+</html>

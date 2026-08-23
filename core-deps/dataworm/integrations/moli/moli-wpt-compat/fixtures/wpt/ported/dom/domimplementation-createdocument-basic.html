@@ -1,0 +1,165 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+const XHTML_NS = "http://www.w3.org/1999/xhtml";
+const SVG_NS = "http://www.w3.org/2000/svg";
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
+
+function assert_throws_type_error(callback, message) {
+  try {
+    callback();
+  } catch (error) {
+    assert_true(error instanceof TypeError, message);
+    return;
+  }
+  throw new Error(message);
+}
+
+function assert_throws_dom_name(expectedName, callback, message) {
+  try {
+    callback();
+  } catch (error) {
+    assert_equals(error && error.name, expectedName, message);
+    return;
+  }
+  throw new Error(message || "Expected " + expectedName);
+}
+
+function assert_xml_document_metadata(doc, expectedContentType) {
+  assert_equals(doc.location, null, "location");
+  assert_equals(doc.compatMode, "CSS1Compat", "compatMode");
+  assert_equals(doc.characterSet, "UTF-8", "characterSet");
+  assert_equals(doc.charset, "UTF-8", "charset");
+  assert_equals(doc.inputEncoding, "UTF-8", "inputEncoding");
+  assert_equals(doc.contentType, expectedContentType, "contentType");
+  assert_equals(doc.URL, "about:blank", "URL");
+  assert_equals(doc.documentURI, "about:blank", "documentURI");
+  assert_equals(doc.baseURI, "about:blank", "baseURI");
+  assert_equals(doc.createElement("DIV").localName, "DIV", "XML createElement casing");
+}
+
+function assert_xml_document_shell(doc) {
+  assert_true(doc instanceof XMLDocument, "XMLDocument identity");
+  assert_true(doc instanceof Document, "Document identity");
+  assert_true(doc instanceof Node, "Node identity");
+  assert_equals(doc.nodeType, Node.DOCUMENT_NODE, "nodeType");
+  assert_equals(doc.nodeName, "#document", "nodeName");
+  assert_equals(doc.nodeValue, null, "nodeValue");
+}
+
+test(function () {
+  assert_equals(document.implementation.createDocument.length, 2);
+  assert_throws_type_error(function () {
+    document.implementation.createDocument();
+  }, "missing namespace and qualifiedName");
+  assert_throws_type_error(function () {
+    document.implementation.createDocument("");
+  }, "missing qualifiedName");
+  assert_throws_type_error(function () {
+    document.implementation.createDocument(null, null, false);
+  }, "doctype must be a DocumentType object");
+  assert_throws_type_error(function () {
+    document.implementation.createDocument(null, null, { nodeType: Node.DOCUMENT_TYPE_NODE });
+  }, "doctype must not be a spoofed DocumentType-like object");
+}, "createDocument() exposes WebIDL argument behavior");
+
+test(function () {
+  const doc = document.implementation.createDocument(null, "", null);
+
+  assert_xml_document_shell(doc);
+  assert_equals(doc.documentElement, null, "documentElement");
+  assert_equals(doc.doctype, null, "doctype");
+  assert_equals(doc.childNodes.length, 0, "child count");
+  assert_xml_document_metadata(doc, "application/xml");
+}, "createDocument() can create an empty XML document");
+
+test(function () {
+  const doc = document.implementation.createDocument(undefined, undefined, undefined);
+  const root = doc.documentElement;
+
+  assert_xml_document_shell(doc);
+  assert_true(root instanceof Element, "root identity");
+  assert_equals(root.ownerDocument, doc, "ownerDocument");
+  assert_equals(root.prefix, null, "prefix");
+  assert_equals(root.localName, "undefined", "localName");
+  assert_equals(root.namespaceURI, null, "namespaceURI");
+  assert_equals(doc.childNodes.length, 1, "child count");
+  assert_xml_document_metadata(doc, "application/xml");
+}, "createDocument() string-converts an explicit undefined qualifiedName");
+
+test(function () {
+  const namespace = "https://example.test/ns";
+  const doc = document.implementation.createDocument(namespace, "p:root", null);
+  const root = doc.documentElement;
+
+  assert_xml_document_shell(doc);
+  assert_equals(root.ownerDocument, doc, "ownerDocument");
+  assert_equals(root.prefix, "p", "prefix");
+  assert_equals(root.localName, "root", "localName");
+  assert_equals(root.namespaceURI, namespace, "namespaceURI");
+  assert_equals(doc.doctype, null, "doctype");
+  assert_equals(doc.childNodes.length, 1, "child count");
+}, "createDocument() creates a namespaced root element");
+
+test(function () {
+  [
+    [null, "1root", "InvalidCharacterError"],
+    [null, "bad name", "InvalidCharacterError"],
+    [null, "p:root", "NamespaceError"],
+    ["", "p:root", "NamespaceError"],
+    ["urn:not-xml", "xml:root", "NamespaceError"],
+    ["urn:not-xmlns", "xmlns:root", "NamespaceError"],
+    ["urn:not-xmlns", "xmlns", "NamespaceError"],
+    [XMLNS_NS, "x:root", "NamespaceError"],
+  ].forEach(function ([namespace, qualifiedName, expectedName]) {
+    assert_throws_dom_name(expectedName, function () {
+      document.implementation.createDocument(namespace, qualifiedName, null);
+    }, namespace + " " + qualifiedName);
+  });
+
+  const xmlDoc = document.implementation.createDocument(XML_NS, "xml:root", null);
+  assert_equals(xmlDoc.documentElement.prefix, "xml", "xml prefix");
+  assert_equals(xmlDoc.documentElement.namespaceURI, XML_NS, "xml namespace");
+
+  const xmlnsDoc = document.implementation.createDocument(XMLNS_NS, "xmlns:root", null);
+  assert_equals(xmlnsDoc.documentElement.prefix, "xmlns", "xmlns prefix");
+  assert_equals(xmlnsDoc.documentElement.namespaceURI, XMLNS_NS, "xmlns namespace");
+
+  const multiColonDoc = document.implementation.createDocument("https://example.test/ns", "p:root:tail", null);
+  assert_equals(multiColonDoc.documentElement.prefix, "p", "multi-colon prefix");
+  assert_equals(multiColonDoc.documentElement.localName, "root:tail", "multi-colon localName");
+}, "createDocument() validates root qualifiedName and namespace combinations");
+
+test(function () {
+  const xhtmlDoc = document.implementation.createDocument(XHTML_NS, "html", null);
+  const svgDoc = document.implementation.createDocument(SVG_NS, "svg:svg", null);
+
+  assert_xml_document_shell(xhtmlDoc);
+  assert_xml_document_metadata(xhtmlDoc, "application/xhtml+xml");
+  assert_equals(xhtmlDoc.documentElement.namespaceURI, XHTML_NS, "XHTML namespace");
+
+  assert_xml_document_shell(svgDoc);
+  assert_xml_document_metadata(svgDoc, "image/svg+xml");
+  assert_equals(svgDoc.documentElement.prefix, "svg", "SVG prefix");
+  assert_equals(svgDoc.documentElement.localName, "svg", "SVG localName");
+  assert_equals(svgDoc.documentElement.namespaceURI, SVG_NS, "SVG namespace");
+}, "createDocument() derives XML contentType from the root namespace");
+
+test(function () {
+  const doctype = document.implementation.createDocumentType("svg", "public", "system");
+  const doc = document.implementation.createDocument(SVG_NS, "svg", doctype);
+
+  assert_xml_document_shell(doc);
+  assert_equals(doc.doctype, doctype, "doctype");
+  assert_equals(doctype.ownerDocument, doc, "doctype ownerDocument");
+  assert_equals(doctype.parentNode, doc, "doctype parentNode");
+  assert_equals(doc.documentElement.ownerDocument, doc, "root ownerDocument");
+  assert_equals(doc.childNodes.length, 2, "child count");
+  assert_equals(doc.firstChild, doctype, "doctype order");
+  assert_equals(doc.lastChild, doc.documentElement, "root order");
+}, "createDocument() adopts a supplied DocumentType into the new XML document");
+</script>

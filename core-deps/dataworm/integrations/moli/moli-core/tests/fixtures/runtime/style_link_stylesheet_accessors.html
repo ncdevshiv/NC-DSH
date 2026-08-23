@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<body
+  data-style-accessors=""
+  data-style-sheet=""
+  data-link-accessors=""
+  data-link-sheet=""
+>
+<script>
+const style = document.createElement("style");
+const disconnectedStyleSheet = style.sheet === null;
+document.head.appendChild(style);
+const defaultType = style.type;
+style.type = "text/css";
+style.media = "screen";
+style.blocking = "render";
+style.disabled = true;
+document.body.setAttribute(
+  "data-style-accessors",
+  `${defaultType}:${style.type}:${style.media}:${style.blocking}:${style.disabled}:${style.hasAttribute("disabled")}`
+);
+document.body.setAttribute(
+  "data-style-sheet",
+  `${disconnectedStyleSheet}:${style.sheet !== null}:${style.sheet === style.sheet}:${style.sheet.ownerNode === style}`
+);
+
+const link = document.createElement("link");
+document.head.appendChild(link);
+const noRelSheet = link.sheet === null;
+link.rel = "preload stylesheet";
+link.crossOrigin = "use-credentials";
+const useCredentials = `${link.crossOrigin}:${link.getAttribute("crossorigin")}`;
+link.crossOrigin = "invalid-token";
+document.body.setAttribute(
+  "data-link-accessors",
+  `${link.rel}:${useCredentials}:${link.crossOrigin}:${link.getAttribute("crossorigin")}`
+);
+document.body.setAttribute(
+  "data-link-sheet",
+  `${noRelSheet}:${link.sheet === null}:${link.sheet === link.sheet}`
+);
+</script>
+</body>
+</html>

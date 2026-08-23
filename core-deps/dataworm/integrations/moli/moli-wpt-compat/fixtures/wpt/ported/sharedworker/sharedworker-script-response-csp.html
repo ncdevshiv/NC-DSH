@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+promise_test(async function () {
+  const worker = new SharedWorker(
+    "/wpt/ported/sharedworker/resources/script-response-csp/fetch-blocked-worker.js",
+    "response-csp-fetch-" + Date.now(),
+  );
+  const outcome = await new Promise(function (resolve) {
+    worker.onerror = function (event) {
+      resolve("worker-error:" + event.message);
+    };
+    worker.port.onmessage = function (event) {
+      resolve(event.data);
+    };
+    worker.port.start();
+  });
+
+  assert_equals(
+    outcome,
+    "blocked",
+    "SharedWorker script response CSP must apply to worker fetch() requests",
+  );
+}, "SharedWorker script response CSP controls worker subresource fetch");
+</script>

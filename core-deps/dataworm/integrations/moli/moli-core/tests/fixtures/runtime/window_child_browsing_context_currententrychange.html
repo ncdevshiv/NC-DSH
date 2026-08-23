@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <body>
+    <iframe id="child" src="/compat/window-child-browsing-context-target-name-a"></iframe>
+    <script>
+      const iframe = document.getElementById('child');
+      let loadCount = 0;
+
+      iframe.addEventListener('load', () => {
+        loadCount += 1;
+        if (loadCount !== 1) {
+          return;
+        }
+
+        const childWindow = iframe.contentWindow;
+        let topChanges = 0;
+        let childChanges = 0;
+        let childPropertyChanges = 0;
+        let childUrls = [];
+        let childPropertyUrls = [];
+        let childFromUrls = [];
+        let childPropertyFromUrls = [];
+        let childNavigationTypes = [];
+        let childPropertyNavigationTypes = [];
+
+        window.navigation.addEventListener('currententrychange', () => {
+          topChanges += 1;
+        });
+
+        childWindow.navigation.addEventListener('currententrychange', (event) => {
+          childChanges += 1;
+          childUrls.push(childWindow.navigation.currentEntry?.url ?? 'null');
+          childFromUrls.push(event.from?.url ?? 'null');
+          childNavigationTypes.push(String(event.navigationType));
+        });
+
+        childWindow.navigation.oncurrententrychange = (event) => {
+          childPropertyChanges += 1;
+          childPropertyUrls.push(childWindow.navigation.currentEntry?.url ?? 'null');
+          childPropertyFromUrls.push(event.from?.url ?? 'null');
+          childPropertyNavigationTypes.push(String(event.navigationType));
+        };
+
+        childWindow.navigation.navigate('#one', {
+          history: 'push',
+          state: { from: 'child' },
+        });
+
+        setTimeout(() => {
+          document.body.setAttribute('data-top-currententrychange', String(topChanges));
+          document.body.setAttribute('data-child-currententrychange', String(childChanges));
+          document.body.setAttribute(
+            'data-child-property-currententrychange',
+            String(childPropertyChanges)
+          );
+          document.body.setAttribute(
+            'data-child-currententrychange-urls',
+            childUrls.join('|')
+          );
+          document.body.setAttribute(
+            'data-child-property-currententrychange-urls',
+            childPropertyUrls.join('|')
+          );
+          document.body.setAttribute(
+            'data-child-currententrychange-from-urls',
+            childFromUrls.join('|')
+          );
+          document.body.setAttribute(
+            'data-child-property-currententrychange-from-urls',
+            childPropertyFromUrls.join('|')
+          );
+          document.body.setAttribute(
+            'data-child-currententrychange-navigation-types',
+            childNavigationTypes.join('|')
+          );
+          document.body.setAttribute(
+            'data-child-property-currententrychange-navigation-types',
+            childPropertyNavigationTypes.join('|')
+          );
+          document.body.setAttribute(
+            'data-child-current-entry-url',
+            childWindow.navigation.currentEntry?.url ?? 'null'
+          );
+        }, 0);
+      });
+    </script>
+  </body>
+</html>

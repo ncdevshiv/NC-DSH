@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function test_create(method, iface, nodeType, nodeName) {
+  ["\u000b", "a -- b", "a-", "-b", null, undefined].forEach(function (value) {
+    test(function () {
+      const node = document[method](value);
+      const expected = String(value);
+
+      assert_true(node instanceof iface);
+      assert_true(node instanceof CharacterData);
+      assert_true(node instanceof Node);
+      assert_equals(node.ownerDocument, document);
+      assert_equals(node.data, expected, "data");
+      assert_equals(node.nodeValue, expected, "nodeValue");
+      assert_equals(node.textContent, expected, "textContent");
+      assert_equals(node.length, expected.length);
+      assert_equals(node.nodeType, nodeType);
+      assert_equals(node.nodeName, nodeName);
+      assert_equals(node.hasChildNodes(), false);
+      assert_equals(node.childNodes.length, 0);
+      assert_equals(node.firstChild, null);
+      assert_equals(node.lastChild, null);
+    }, method + "(" + JSON.stringify(value) + ")");
+  });
+}
+
+test_create("createTextNode", Text, 3, "#text");
+test_create("createComment", Comment, 8, "#comment");
+</script>

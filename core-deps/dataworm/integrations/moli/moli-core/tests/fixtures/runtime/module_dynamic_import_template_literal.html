@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      window.moduleDynamicImportTemplateOrder = [];
+      document.addEventListener("DOMContentLoaded", () => {
+        window.moduleDynamicImportTemplateOrder.push("dcl");
+        window.moduleDynamicImportTemplateFinalOrder =
+          window.moduleDynamicImportTemplateOrder.join(",");
+      });
+    </script>
+    <script type="module">
+      const pending = import(`/assets/module-dynamic-import-template-target.mjs`);
+      window.moduleDynamicImportTemplatePromiseLike =
+        typeof pending?.then === "function";
+      const fromPromise = await pending;
+      const fromAwaited = await import(`/assets/module-dynamic-import-template-target.mjs`);
+
+      window.moduleDynamicImportTemplateOrder.push("module");
+      window.moduleDynamicImportTemplateResult =
+        `${fromPromise.value}:${fromAwaited.value}`;
+      window.moduleDynamicImportTemplateFinalOrder =
+        window.moduleDynamicImportTemplateOrder.join(",");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script>
+      window.runtimeOwnedInOrderLoadOrder = [];
+      const script = document.createElement("script");
+      script.async = false;
+      script.src = "/assets/runtime_owned_in_order_load_slow.js";
+      script.onload = () => {
+        window.runtimeOwnedInOrderLoadOrder.push("load");
+        queueMicrotask(() => {
+          window.runtimeOwnedInOrderLoadOrder.push("load-microtask");
+        });
+        window.runtimeOwnedInOrderLoadDuringLoad =
+          window.runtimeOwnedInOrderLoadOrder.join(",");
+      };
+      document.head.appendChild(script);
+      window.runtimeOwnedInOrderLoadOrder.push("after-append");
+      document.addEventListener("DOMContentLoaded", () => {
+        window.runtimeOwnedInOrderLoadOrder.push("dcl");
+        window.runtimeOwnedInOrderLoadAfterDcl =
+          window.runtimeOwnedInOrderLoadOrder.join(",");
+      });
+      window.addEventListener("load", () => {
+        window.runtimeOwnedInOrderLoadOrder.push("window-load");
+        window.runtimeOwnedInOrderLoadFinalOrder =
+          window.runtimeOwnedInOrderLoadOrder.join(",");
+      });
+    </script>
+  </head>
+  <body>
+    <main id="late">late</main>
+  </body>
+</html>

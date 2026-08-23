@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "blocked": null
+        }
+      }
+    </script>
+    <script
+      type="module"
+      onerror="window.importMapNullBlockResult = 'blocked';"
+    >
+      import { greeting } from "blocked";
+      window.importMapNullBlockResult = greeting;
+    </script>
+  </body>
+</html>

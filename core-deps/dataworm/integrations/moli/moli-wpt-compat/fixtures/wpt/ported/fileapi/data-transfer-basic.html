@@ -1,0 +1,203 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+test(function () {
+  const input = document.createElement("input");
+  input.type = "file";
+  (document.body || document.documentElement).appendChild(input);
+
+  const events = [];
+  input.addEventListener("input", function () {
+    events.push("input:" + input.files.length + ":" + input.files[0].name + ":" + input.value);
+  });
+  input.addEventListener("change", function () {
+    events.push("change:" + input.files[0].type + ":" + input.files[0].lastModified);
+  });
+
+  const transfer = new DataTransfer();
+  const file = new File([new Uint8Array([104, 105])], "note.txt", {
+    type: "text/plain",
+    lastModified: 7,
+  });
+  const item = transfer.items.add(file);
+
+  assert_true(item instanceof DataTransferItem, "add(file) returns a DataTransferItem");
+  assert_equals(item.kind, "file", "file item kind");
+  assert_equals(item.type, "text/plain", "file item type");
+  assert_equals(item.getAsFile(), file, "file item returns the original File");
+  assert_true(transfer.items instanceof DataTransferItemList, "items list interface");
+  assert_equals(transfer.items[0], item, "indexed item is stable");
+  assert_equals(transfer.items.item(0), item, "item() result is stable");
+  assert_equals(transfer.items.length, 1, "items length");
+  assert_equals(Object.prototype.toString.call(transfer.files), "[object FileList]", "files brand");
+
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+
+  assert_equals(input.files.length, 1, "input file selection length");
+  assert_equals(input.files[0].name, "note.txt", "input file name");
+  assert_equals(input.files[0].type, "text/plain", "input file type");
+  assert_equals(input.files[0].lastModified, 7, "input file lastModified");
+  assert_equals(input.value, "C:\\fakepath\\note.txt", "file input fakepath value");
+  assert_array_equals(
+    events,
+    [
+      "input:1:note.txt:C:\\fakepath\\note.txt",
+      "change:text/plain:7",
+    ],
+    "assigned files are visible during input/change listeners",
+  );
+}, "DataTransfer file items expose stable wrappers and can back input.files");
+
+test(function () {
+  const transfer = new DataTransfer();
+  const accessorNames = ["files", "items", "types", "dropEffect", "effectAllowed"];
+
+  for (const name of accessorNames) {
+    assert_equals(
+      Object.getOwnPropertyDescriptor(transfer, name),
+      undefined,
+      name + " should not be installed as an own instance accessor",
+    );
+    const descriptor = Object.getOwnPropertyDescriptor(DataTransfer.prototype, name);
+    assert_equals(typeof descriptor.get, "function", name + " prototype getter");
+    assert_true(descriptor.enumerable, name + " prototype descriptor should be enumerable");
+    assert_true(descriptor.configurable, name + " prototype descriptor should be configurable");
+  }
+
+  assert_equals(typeof Object.getOwnPropertyDescriptor(DataTransfer.prototype, "dropEffect").set, "function");
+  assert_equals(typeof Object.getOwnPropertyDescriptor(DataTransfer.prototype, "effectAllowed").set, "function");
+
+  const fileItem = transfer.items.add(new File(["x"], "x.txt", { type: "text/plain" }));
+  for (const name of ["kind", "type"]) {
+    assert_equals(
+      Object.getOwnPropertyDescriptor(fileItem, name),
+      undefined,
+      "DataTransferItem." + name + " should not be installed as an own data property",
+    );
+    const descriptor = Object.getOwnPropertyDescriptor(DataTransferItem.prototype, name);
+    assert_equals(typeof descriptor.get, "function", "DataTransferItem." + name + " prototype getter");
+    assert_equals(descriptor.set, undefined, "DataTransferItem." + name + " should be readonly");
+    assert_true(descriptor.enumerable, "DataTransferItem." + name + " prototype descriptor should be enumerable");
+    assert_true(descriptor.configurable, "DataTransferItem." + name + " prototype descriptor should be configurable");
+  }
+
+  assert_equals(
+    Object.getOwnPropertyDescriptor(transfer.items, "length"),
+    undefined,
+    "DataTransferItemList.length should not be installed as an own data property",
+  );
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(DataTransferItemList.prototype, "length");
+  assert_equals(typeof lengthDescriptor.get, "function", "DataTransferItemList.length prototype getter");
+  assert_equals(lengthDescriptor.set, undefined, "DataTransferItemList.length should be readonly");
+  assert_true(lengthDescriptor.enumerable, "DataTransferItemList.length prototype descriptor should be enumerable");
+  assert_true(lengthDescriptor.configurable, "DataTransferItemList.length prototype descriptor should be configurable");
+}, "DataTransfer attributes are prototype accessors, not per-instance descriptors");
+
+promise_test(async function () {
+  const transfer = new DataTransfer();
+  transfer.setData("text", "alpha");
+  const htmlItem = transfer.items.add("<b>beta</b>", "text/html");
+  const stringPayload = await new Promise(function (resolve) {
+    htmlItem.getAsString(resolve);
+  });
+  const event = new DragEvent("drop", {
+    dataTransfer: transfer,
+    clientX: 12,
+    clientY: 34,
+  });
+  const typesBeforeClear = Array.from(transfer.types);
+
+  transfer.clearData("text/html");
+
+  assert_equals(typeof DragEvent, "function", "DragEvent constructor is exposed");
+  assert_true(event instanceof DragEvent, "DragEvent instance");
+  assert_true(event instanceof MouseEvent, "DragEvent inherits MouseEvent");
+  assert_equals(event.dataTransfer, transfer, "DragEvent keeps the supplied DataTransfer");
+  assert_equals(transfer.getData("text/plain"), "alpha", "text alias normalizes to text/plain");
+  assert_array_equals(typesBeforeClear, ["text/plain", "text/html"], "types preserve insertion order");
+  assert_array_equals(Array.from(transfer.types), ["text/plain"], "clearData removes the requested type");
+  assert_equals(htmlItem.kind, "", "removed string item enters disabled mode");
+  assert_equals(htmlItem.type, "", "removed string item type is empty");
+  assert_equals(stringPayload, "<b>beta</b>", "getAsString returns the string payload");
+  assert_equals(transfer.dropEffect, "none", "default dropEffect");
+  assert_equals(transfer.effectAllowed, "none", "default effectAllowed");
+  assert_equals(event.clientX, 12, "DragEvent clientX");
+  assert_equals(event.clientY, 34, "DragEvent clientY");
+  assert_equals(transfer.items.length, 1, "clearData updates the item list");
+}, "DataTransfer string items and DragEvent constructor expose the basic drag data surface");
+
+test(function () {
+  const transfer = new DataTransfer();
+  const dropValues = ["none", "copy", "link", "move"];
+  const effectValues = [
+    "none",
+    "copy",
+    "copyLink",
+    "copyMove",
+    "link",
+    "linkMove",
+    "move",
+    "all",
+    "uninitialized",
+  ];
+
+  for (const value of dropValues) {
+    transfer.dropEffect = value;
+    assert_equals(transfer.dropEffect, value, "dropEffect accepts " + value);
+  }
+  transfer.dropEffect = "invalid";
+  assert_equals(transfer.dropEffect, "move", "dropEffect ignores invalid strings");
+  transfer.dropEffect = "COPY";
+  assert_equals(transfer.dropEffect, "move", "dropEffect is case-sensitive");
+
+  for (const value of effectValues) {
+    transfer.effectAllowed = value;
+    assert_equals(transfer.effectAllowed, value, "effectAllowed accepts " + value);
+  }
+  transfer.effectAllowed = "invalid";
+  assert_equals(transfer.effectAllowed, "uninitialized", "effectAllowed ignores invalid strings");
+  transfer.effectAllowed = "copylink";
+  assert_equals(transfer.effectAllowed, "uninitialized", "effectAllowed is case-sensitive");
+}, "DataTransfer dropEffect and effectAllowed preserve only valid enumerated values");
+
+test(function () {
+  const transfer = new DataTransfer();
+  const throwing = {
+    toString() {
+      throw new RangeError("format conversion");
+    },
+  };
+
+  assert_throws_js(TypeError, function () {
+    transfer.getData();
+  }, "getData should require format");
+  assert_throws_js(TypeError, function () {
+    transfer.setData("text/plain");
+  }, "setData should require data");
+  assert_throws_js(TypeError, function () {
+    transfer.getData(Symbol("text/plain"));
+  }, "getData should reject Symbol format");
+  assert_throws_js(RangeError, function () {
+    transfer.setData(throwing, "x");
+  }, "setData should propagate format conversion errors");
+
+  transfer.setData("text/plain", null);
+  assert_equals(transfer.getData("text/plain"), "null", "setData data uses DOMString conversion");
+  transfer.clearData(null);
+  assert_equals(transfer.getData("text/plain"), "null", "clearData(null) clears the literal null type only");
+  transfer.clearData("text/plain");
+  assert_equals(transfer.getData("text/plain"), "", "clearData format uses DOMString conversion");
+
+  assert_throws_js(TypeError, function () {
+    transfer.dropEffect = Symbol("copy");
+  }, "dropEffect setter should reject Symbol");
+  assert_throws_js(TypeError, function () {
+    transfer.effectAllowed = Symbol("copy");
+  }, "effectAllowed setter should reject Symbol");
+}, "DataTransfer string methods and enumerated setters follow WebIDL conversion");
+</script>

@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<body
+  data-font-order=""
+  data-font-continued="false"
+  data-font-error=""
+  data-mql-order=""
+  data-mql-continued="false"
+  data-mql-error=""
+  data-simple-order=""
+  data-simple-continued="false"
+  data-simple-error=""
+>
+<script>
+  const body = document.body;
+
+  const fontOrder = [];
+  document.fonts.addEventListener("loading", () => {
+    fontOrder.push("first");
+    throw new Error("font listener boom");
+  });
+  document.fonts.addEventListener("loading", () => {
+    fontOrder.push("second");
+  });
+  document.fonts.onloading = () => {
+    fontOrder.push("handler");
+    throw new Error("font handler boom");
+  };
+  try {
+    document.fonts.load("italic bold 16px Roboto");
+    body.setAttribute("data-font-continued", "true");
+  } catch (error) {
+    body.setAttribute("data-font-error", String(error && error.message || error));
+  }
+  body.setAttribute("data-font-order", fontOrder.join("|"));
+
+  const mql = matchMedia("(min-width: 1px)");
+  const mqlOrder = [];
+  mql.onchange = () => {
+    mqlOrder.push("handler");
+    throw new Error("mql handler boom");
+  };
+  mql.addEventListener("change", () => {
+    mqlOrder.push("first");
+    throw new Error("mql listener boom");
+  });
+  mql.addEventListener("change", () => {
+    mqlOrder.push("second");
+  });
+  try {
+    mql.dispatchEvent(new Event("change"));
+    body.setAttribute("data-mql-continued", "true");
+  } catch (error) {
+    body.setAttribute("data-mql-error", String(error && error.message || error));
+  }
+  body.setAttribute("data-mql-order", mqlOrder.join("|"));
+
+  const orientation = screen.orientation;
+  const simpleOrder = [];
+  orientation.onchange = () => {
+    simpleOrder.push("handler");
+    throw new Error("orientation handler boom");
+  };
+  orientation.addEventListener("change", () => {
+    simpleOrder.push("first");
+    throw new Error("orientation listener boom");
+  });
+  orientation.addEventListener("change", () => {
+    simpleOrder.push("second");
+  });
+  try {
+    orientation.dispatchEvent(new Event("change"));
+    body.setAttribute("data-simple-continued", "true");
+  } catch (error) {
+    body.setAttribute("data-simple-error", String(error && error.message || error));
+  }
+  body.setAttribute("data-simple-order", simpleOrder.join("|"));
+</script>
+</body>
+</html>

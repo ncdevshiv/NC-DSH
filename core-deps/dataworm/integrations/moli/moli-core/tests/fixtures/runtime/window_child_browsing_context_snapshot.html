@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<body
+  data-initial=""
+  data-after-srcdoc=""
+  data-after-remove=""
+>
+<script>
+  const frame = document.createElement('iframe');
+  document.documentElement.appendChild(frame);
+  document.body.setAttribute(
+    'data-initial',
+    frame.contentDocument.documentElement.outerHTML
+  );
+
+  frame.srcdoc = '<!DOCTYPE html><html><head></head><body><p id="child">child</p></body></html>';
+  document.body.setAttribute(
+    'data-after-srcdoc',
+    frame.contentDocument.documentElement.outerHTML
+  );
+
+  frame.remove();
+  document.body.setAttribute('data-after-remove', String(frame.contentDocument));
+</script>
+</body>
+</html>

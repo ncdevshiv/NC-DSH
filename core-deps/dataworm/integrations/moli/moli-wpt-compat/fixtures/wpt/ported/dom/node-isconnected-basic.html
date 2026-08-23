@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<body></body>
+<script src="/wpt/resources/testharness.js"></script>
+<script src="/wpt/resources/testharnessreport.js"></script>
+<script src="/wpt/resources/moli-wpt-adapter.js"></script>
+<script>
+function check_connected(connected, disconnected) {
+  connected.forEach((node) => assert_true(node.isConnected, node.nodeName + " should be connected"));
+  disconnected.forEach((node) => assert_false(node.isConnected, node.nodeName + " should be disconnected"));
+}
+
+test(function () {
+  const nodes = [
+    document.createElement("div"),
+    document.createElement("div"),
+    document.createElement("div"),
+  ];
+  check_connected([], nodes);
+
+  document.body.appendChild(nodes[0]);
+  check_connected([nodes[0]], [nodes[1], nodes[2]]);
+
+  nodes[1].appendChild(nodes[2]);
+  check_connected([nodes[0]], [nodes[1], nodes[2]]);
+
+  nodes[0].appendChild(nodes[1]);
+  check_connected(nodes, []);
+
+  nodes[2].remove();
+  check_connected([nodes[0], nodes[1]], [nodes[2]]);
+
+  nodes[0].remove();
+  check_connected([], nodes);
+}, "isConnected updates for ordinary child nodes through append and remove");
+
+test(function () {
+  assert_true(document.isConnected);
+  assert_true(document.documentElement.isConnected);
+  assert_true(document.body.isConnected);
+  assert_false(document.createElement("div").isConnected);
+}, "Document and parsed document descendants are connected, detached nodes are not");
+
+test(function () {
+  const parent = document.createElement("section");
+  const child = document.createElement("span");
+  const grandchild = document.createTextNode("text");
+
+  child.appendChild(grandchild);
+  parent.appendChild(child);
+  check_connected([], [parent, child, grandchild]);
+
+  document.body.appendChild(parent);
+  check_connected([parent, child, grandchild], []);
+
+  child.remove();
+  check_connected([parent], [child, grandchild]);
+
+  parent.remove();
+  check_connected([], [parent, child, grandchild]);
+}, "isConnected propagates through nested subtrees");
+</script>
