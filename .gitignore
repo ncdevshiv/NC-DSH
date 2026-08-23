@@ -40,3 +40,5 @@ worktrees/
 
 # Local reference checkouts that are not part of the repository.
 core-deps/
+
+*.log

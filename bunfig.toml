@@ -1,0 +1,5 @@
+# Flat install layout: the rescope, vendored-peer resolution, Wine snapshot,
+# exe staging, knip workspace attribution, and Vitest module linking all
+# assume real files beside their dependents rather than store symlinks.
+[install]
+linker = "hoisted"

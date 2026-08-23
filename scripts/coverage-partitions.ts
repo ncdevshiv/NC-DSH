@@ -211,7 +211,7 @@ export class CoveragePartitionCoordinator {
  * directly against the workspace-installed launcher (bun exec resolves PATH
  * entries only); node-backed managers launch their JavaScript entrypoint.
  */
-export function vitestInvocation(
+function vitestInvocation(
   entrypoint: string,
   root: string,
   vitestArgs: readonly string[],
