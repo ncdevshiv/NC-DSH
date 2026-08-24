@@ -113,8 +113,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   group: GroupNode
   onToggle: () => void
   onCreate: () => void
-  /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void } | undefined
+  /** Real-Workspace actions or Ungrouped bulk actions. */
+  actions?: { rename?: () => void; delete?: () => void; archiveAll?: () => void } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -123,13 +123,23 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
 }) {
   const row = group
   // The ungrouped bucket has no workspace title: its label is dictionary copy.
-  const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
+  const isUngrouped = row.workspaceId === undefined
+  const label = isUngrouped ? t('group.ungrouped') : row.label
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
-  const workspaceMenuItems = [
-    { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
-    { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
-  ]
+  const workspaceMenuItems = isUngrouped
+    ? [
+      ...actions?.archiveAll !== undefined ? [{ id: 'archiveAll', label: t('group.archiveAll'), icon: <IconArchiveOutline20 size={16} /> }] : [],
+      ...actions?.delete !== undefined ? [{ id: 'delete', label: t('group.deleteAll'), icon: <IconTrashOutline16 />, danger: true }] : [],
+    ]
+    : [
+      { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
+      ...actions?.archiveAll !== undefined ? [{ id: 'archiveAll', label: t('group.archiveAll'), icon: <IconArchiveOutline20 size={16} /> }] : [],
+      { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutline16 />, danger: true },
+    ]
+  const ariaLabel = isUngrouped
+    ? t('group.archiveAll.aria')
+    : t('actions.workspace.aria', { name: label })
   const ownRow = (
     <div
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
@@ -156,19 +166,16 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
         <span className={css.title}>{label}</span>
       </span>
       <span className={css.rowActions}>
-        {actions !== undefined && (
+        {actions !== undefined && workspaceMenuItems.length > 0 && (
           <Menu
             open={menuOpen}
             onClose={() => { setMenuOpen(false) }}
             items={workspaceMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
-              // Unknown ids leave before the dispatch: a future menu row must
-              // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- workspaceMenuItems carries exactly these two rows today. */
-              if (id !== 'rename' && id !== 'delete') return
-              if (id === 'rename') actions.rename()
-              else actions.delete()
+              if (id === 'rename') actions.rename?.()
+              else if (id === 'delete') actions.delete?.()
+              else if (id === 'archiveAll') actions.archiveAll?.()
             }}
             portal
             closeOnPointerLeave
@@ -176,7 +183,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
               <button
                 type="button"
                 className={css.iconButton}
-                aria-label={t('actions.workspace.aria', { name: label })}
+                aria-label={ariaLabel}
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
               >
                 <IconEllipsisOutline16 />
@@ -359,7 +366,7 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
-export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, drag, flat = false, t }: {
+export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork, onArchive, onDelete, drag, flat = false, t }: {
   node: SessionNode
   currentId: string | undefined
   now: number
@@ -370,6 +377,8 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
   onFork: (id: SessionNode['id']) => void
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
+  /** Delete/remove this session (row menu action). */
+  onDelete?: ((id: SessionNode['id']) => void) | undefined
   /** Present only on draggable rows (workspace-group sessions outside search). */
   drag?: RowDragProps | undefined
   /** The row is rendered without a parent Workspace header. */
@@ -391,6 +400,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
     { id: 'archive', label: t('menu.archiveSession'), icon: <IconArchiveOutline20 size={16} /> },
+    ...onDelete !== undefined ? [{ id: 'delete', label: t('delete.session'), icon: <IconTrashOutline16 />, danger: true }] : [],
   ]
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
@@ -453,6 +463,7 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id)
               if (id === 'archive') onArchive(node.id)
+              if (id === 'delete') onDelete?.(node.id)
             }}
             portal
             closeOnPointerLeave

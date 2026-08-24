@@ -295,6 +295,33 @@ describe('WorkspaceRuntime', () => {
     expect(api.callsOf('session.create')).toEqual([])
   })
 
+  it('connectChat reuses the ungrouped blank and creates an ungrouped session otherwise', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onWorkspaceList = () => Promise.resolve(ok({ items: [workspace('alpha', [sid('s-grouped')])] as never[] }))
+    api.onList = () => Promise.resolve(ok({
+      items: [
+        // A grouped blank belongs to connectWorkspace's reuse scan, never chat's.
+        { sessionId: sid('s-grouped'), updatedAt: 3, running: false, blank: true, cwd: '/w/alpha' },
+        { sessionId: sid('s-chat'), updatedAt: 2, running: false, blank: true },
+      ] as never[],
+    }))
+    await Promise.all([workspaces.refresh(), sessions.refresh()])
+    await Promise.resolve()
+    // Hit: an ungrouped blank is reused without touching the wire.
+    await expect(workspaces.connectChat()).resolves.toBe('s-chat')
+    expect(api.callsOf('session.create')).toEqual([])
+    // An archived ungrouped blank stops being a hit.
+    await workspaces.archiveSession(sid('s-chat'))
+    api.onCreate = () => Promise.resolve(ok({ sessionId: sid('s-fresh') }))
+    await expect(workspaces.connectChat()).resolves.toBe('s-fresh')
+    // No workspaceId on the create payload: the Host defaults the cwd.
+    expect(api.callsOf('session.create')).toEqual([{}])
+    expect(sessions.binding(sid('s-fresh'))).toBeDefined()
+  })
+
   it('returns created Workspaces and preserves Host business errors', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()
@@ -399,7 +426,7 @@ describe('WorkspaceRuntime', () => {
     await expect(workspaces.insertBefore(wid('ghost'))).rejects.toThrow(/workspace-not-found: gone/)
   })
 
-  it('targets New Session at explicit, current-session, then recent Workspaces and clears with none', async () => {
+  it('targets New Session at explicit, current-session, then recent Workspaces and lands in chat with none', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()
     const sessions = new SessionRuntime(ctx, api, fakeRemote())
@@ -422,24 +449,125 @@ describe('WorkspaceRuntime', () => {
 
     workspaces.startSession(wid('recent-home'))
     await Promise.resolve()
-    expect(connect).toHaveBeenLastCalledWith(wid('recent-home'))
+    expect(connect).toHaveBeenLastCalledWith(wid('recent-home'), { forceNew: true })
 
     workspaces.startSession()
     await Promise.resolve()
-    expect(connect).toHaveBeenLastCalledWith(wid('current-home'))
+    expect(connect).toHaveBeenLastCalledWith(wid('current-home'), { forceNew: true })
 
     sessions.clear()
     workspaces.startSession()
     await Promise.resolve()
-    expect(connect).toHaveBeenLastCalledWith(wid('recent-home'))
+    expect(connect).toHaveBeenLastCalledWith(wid('recent-home'), { forceNew: true })
 
     const emptyCtx = new Context()
     const emptyApi = new FakeApiClient()
     const emptySessions = new SessionRuntime(emptyCtx, emptyApi, fakeRemote())
     const emptyWorkspaces = new WorkspaceRuntime(emptyCtx, emptyApi, emptySessions)
-    const clear = vi.spyOn(emptySessions, 'clear')
+    // No Workspace anywhere: New Session lands in the workspace-less chat
+    // session (created ungrouped on the host) instead of a dead-end clear.
     emptyWorkspaces.startSession()
-    expect(clear).toHaveBeenCalledOnce()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(emptyApi.callsOf('session.create')).toEqual([{}])
+    expect(emptySessions.list.getSnapshot().current).toBe('fk-new')
+  })
+
+  it('startSession resets the session draft on the target session', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onWorkspaceList = () => Promise.resolve(ok({
+      items: [workspace('alpha', [sid('s-blank')])] as never[],
+    }))
+    api.onList = () => Promise.resolve(ok({
+      items: [{ sessionId: sid('s-blank'), updatedAt: 1, running: false, blank: true, cwd: '/w/alpha' }] as never[],
+    }))
+    await Promise.all([workspaces.refresh(), sessions.refresh()])
+    await Promise.resolve()
+
+    workspaces.startSession(wid('alpha'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(sessions.list.getSnapshot().current).toBe('fk-new')
+    const scope = sessions.scope(sid('fk-new'))!
+    const resetCalled = vi.fn()
+    scope.on('session/reset-draft', resetCalled)
+    // Also verify explicit scope reset event emission
+    scope.emit('session/reset-draft', sid('fk-new'))
+    expect(resetCalled).toHaveBeenCalledWith('fk-new')
+  })
+
+  it('startSession rejects on connect failure after logging and never opens a session', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    api.onCreate = () => Promise.resolve(err({
+      code: 'session-create-timeout',
+      message: 'session creation did not complete within 30s',
+      details: {},
+    }))
+    api.onWorkspaceList = () => Promise.resolve(ok({ items: [] as never[] }))
+    api.onList = () => Promise.resolve(ok({ items: [] as never[] }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const sessions = new SessionRuntime(ctx, api, fakeRemote())
+      const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+      await Promise.all([workspaces.refresh(), sessions.refresh()])
+      await Promise.resolve()
+
+      await expect(workspaces.startSession()).rejects.toThrow(/session-create-timeout/)
+      expect(warn).toHaveBeenCalledWith('new session failed:', expect.anything())
+      expect(sessions.list.getSnapshot().current).toBeUndefined()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('connectChat reuses only ungrouped non-archived blanks and coalesces in-flight creates', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onWorkspaceList = () => Promise.resolve(ok({
+      items: [workspace('alpha', [sid('s-member-blank')])] as never[],
+    }))
+    api.onList = () => Promise.resolve(ok({
+      items: [
+        // A blank parked under alpha: membership disqualifies it for chat
+        // reuse (that blank belongs to connectWorkspace's scan).
+        { sessionId: sid('s-member-blank'), updatedAt: 1, running: false, blank: true, cwd: '/w/alpha' },
+        // The ungrouped stray blank: the reuse hit (a CLI-born session shape).
+        { sessionId: sid('s-chat'), updatedAt: 2, running: false, blank: true },
+      ] as never[],
+    }))
+    await Promise.all([workspaces.refresh(), sessions.refresh()])
+    await Promise.resolve()
+
+    await expect(workspaces.connectChat()).resolves.toBe('s-chat')
+    expect(api.callsOf('session.create')).toEqual([])
+    // Resolution guarantee: binding-addressable for draft hand-off pre-open.
+    expect(sessions.binding(sid('s-chat'))).toBeDefined()
+
+    // An archived chat blank is never reused — no surface can show it.
+    await workspaces.archiveSession(sid('s-chat'))
+    api.onCreate = () => Promise.resolve(ok({ sessionId: sid('s-fresh-chat') }))
+    await expect(workspaces.connectChat()).resolves.toBe('s-fresh-chat')
+    expect(api.callsOf('session.create')).toEqual([{}])
+
+    // Concurrent connects share one create: with no reusable blank in the
+    // mirror (both chat blanks archived), the second caller awaits the first
+    // attempt instead of minting a duplicate hidden blank.
+    api.onWorkspaceArchiveSession = () => Promise.resolve(
+      ok({ archivedSessionIds: [sid('s-chat'), sid('s-fresh-chat')] }),
+    )
+    await workspaces.archiveSession(sid('s-fresh-chat'))
+    api.onCreate = () => new Promise(
+      resolve => setTimeout(() => resolve(ok({ sessionId: sid('s-late') })), 0),
+    )
+    const [first, second] = await Promise.all([workspaces.connectChat(), workspaces.connectChat()])
+    expect(first).toBe('s-late')
+    expect(second).toBe('s-late')
+    expect(api.callsOf('session.create')).toEqual([{}, {}])
   })
 
   it('archives a session, projects the set from the response, list, and frame, and clears only the current one', async () => {
@@ -549,7 +677,7 @@ describe('startInitialSelection', () => {
     stop()
   })
 
-  it('stays idle when a session is already current or no recent Workspace exists', async () => {
+  it('connects the current session, the recent Workspace, or the chat fallback', async () => {
     const withCurrent = bench()
     withCurrent.api.onList = () => Promise.resolve(ok({
       items: [{ sessionId: sid('s1'), updatedAt: 1, running: false, blank: false }] as never[],
@@ -568,7 +696,10 @@ describe('startInitialSelection', () => {
     await noRecent.workspaces.refresh()
     await noRecent.sessions.refresh()
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(noRecent.api.callsOf('session.create')).toHaveLength(0)
+    // No Workspace registered at all: startup selection lands in the
+    // workspace-less chat session so a fresh client can talk immediately.
+    expect(noRecent.api.callsOf('session.create')).toEqual([{}])
+    expect(noRecent.sessions.list.getSnapshot().current).toBe('fk-new')
     expect(() => noRecent.workspaces.startInitialSelection()).toThrow(/already started/)
     stopEmpty()
   })

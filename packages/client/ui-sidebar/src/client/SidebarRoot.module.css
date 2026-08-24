@@ -23,10 +23,12 @@
 }
 
 /* Rail geometry (figma rail spec): 36x36 control boxes centered in the 56px
-   rail (10px side padding), 12px vertical rhythm, 18px from the rail top to
-   the whale's box (24px to the 24-wide whale glyph itself). */
+   rail (10px side padding), 12px vertical rhythm. The top offset defers to the
+   title-bar row: both states center the row's control at the window caption
+   line (20px — half the shell's 40px title-bar height, apps/desktop), so the
+   rail drops its former 18px top inset. */
 .root.collapsed {
-  padding: 18px 10px 6px;
+  padding: 0 10px 6px;
 }
 
 /* Scrollbars in the column are a pointer affordance: the shell adds this
@@ -84,26 +86,28 @@
   from { opacity: 0; }
 }
 
-/* Logo row (figma pad (4,8,4,8)): expanded keeps the panel toggle at the
-   right edge; the rail gives every control the same base left anchor before
-   the shared entry translation is applied. */
+/* Logo row: the sidebar's segment of the window title bar (figma pad
+   (4,8,4,8), revised to a 40px row so the brand center sits on the caption
+   line). Expanded keeps the panel toggle at the right edge; the rail gives
+   every control the same base left anchor before the shared entry
+   translation is applied. */
 .logoRow {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  height: 60px;
-  padding: 8px 0 8px 4px;
+  height: 40px;
+  padding: 0 0 0 4px;
   margin-bottom: 8px;
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .collapsed .logoRow {
-  height: 36px;
+  height: 40px;
   padding: 0;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   justify-content: flex-start;
 }
 
@@ -336,4 +340,19 @@
     transition: none;
     animation: none;
   }
+}
+
+/* New Session connect failure, rendered under the trigger in both widths.
+   Two clamped lines keep the collapsed rail geometry intact while the full
+   reason stays available to assistive tech via the role="alert" text. */
+.connectError {
+  margin: 4px 10px 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

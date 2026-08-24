@@ -330,11 +330,19 @@ export interface SessionsApi {
    * an earlier turn. The child inherits the source cwd, latest logged model
    * target and `parentSessionId` lineage; the seed prefix carries the source
    * title. Reading the source uses attached state or persistence inspection
-   * without acquiring an Agent. Workspace attachment follows the source
-   * directly, or the nearest workspace-owning ancestor when the source is a
-   * subagent.
+   * without acquiring an Agent.
+   *
+   * An explicit `workspaceId` retargets the fork: the child adopts the named
+   * Workspace's path as its own cwd and joins that Workspace instead of
+   * following the source (or, for a subagent source, its nearest
+   * workspace-owning ancestor). The seeded history still references the
+   * source cwd — retention of context, not a move. An unknown id fails with
+   * `workspace-not-found`; an attachment failure after publication returns
+   * `workspace-attach-failed` with the published child id. Without
+   * `workspaceId`, Workspace attachment follows the source directly, or the
+   * nearest workspace-owning ancestor when the source is a subagent.
    */
-  fork(request: RpcRequest<{ sessionId: SessionId; atSeq?: number }>):
+  fork(request: RpcRequest<{ sessionId: SessionId; atSeq?: number; workspaceId?: WorkspaceId }>):
   Promise<RpcResponse<{ sessionId: SessionId }>>
 
   /**

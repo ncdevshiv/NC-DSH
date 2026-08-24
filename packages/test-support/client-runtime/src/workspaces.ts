@@ -54,20 +54,25 @@ export class TestWorkspaces implements IWorkspaces {
    * @param workspaceId - target workspace.
    * @returns the connected session id.
    */
-  async connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId> {
-    this.calls.push({ method: 'connectWorkspace', args: [workspaceId] })
+  async connectWorkspace(workspaceId: WorkspaceId, opts?: { forceNew?: boolean }): Promise<SessionId> {
+    this.calls.push({ method: 'connectWorkspace', args: opts === undefined ? [workspaceId] : [workspaceId, opts] })
     const stub = this.stubs.get('connectWorkspace')
-    if (stub !== undefined) return await (stub(workspaceId) as Promise<SessionId>)
+    if (stub !== undefined) return await (stub(workspaceId, opts) as Promise<SessionId>)
     return `session-of-${workspaceId}` as SessionId
   }
 
   /**
    * New-session flow (recorded; stubbed behavior runs when installed).
+   * The default resolves a synthetic blank session id, mirroring the real
+   * service's post-navigation settlement.
    * @param workspaceId - optional explicit workspace target.
+   * @returns the opened session id.
    */
-  startSession(workspaceId?: WorkspaceId): void {
+  async startSession(workspaceId?: WorkspaceId): Promise<SessionId> {
     this.calls.push({ method: 'startSession', args: [workspaceId] })
-    this.stubs.get('startSession')?.(workspaceId)
+    const stub = this.stubs.get('startSession') as ((workspaceId?: WorkspaceId) => Promise<SessionId>) | undefined
+    if (stub !== undefined) return await stub(workspaceId)
+    return `session-of-new-${this.calls.length}` as SessionId
   }
 
   /**

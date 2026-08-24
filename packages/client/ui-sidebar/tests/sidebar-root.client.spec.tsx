@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
   SidebarFooterActionOwnerProps, SidebarRootComponentProps, SidebarSectionOwnerProps,
@@ -80,17 +80,43 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
 }
 
 describe('SidebarRoot shell', () => {
-  it('routes New Session (capsule + wordmark) and the column toggle', () => {
+  it('routes New Session (capsule + wordmark) and the column toggle', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
     const b = mountShell()
+    b.startSession.mockImplementation(() => gate)
     expect(screen.getByTestId('custom-brand-mark')).toBeTruthy()
     expect(screen.getByTestId('custom-brand-name')).toBeTruthy()
     // Expanded, both the wordmark and the capsule start a session.
     const starters = screen.getAllByRole('button', { name: 'New session' })
     expect(starters).toHaveLength(2)
+    // One connect at a time: New Session mints fresh sessions, so concurrent
+    // clicks would create duplicates — every trigger shares the busy guard
+    // and the capsule announces the pending state.
     for (const button of starters) fireEvent.click(button)
+    expect(b.startSession).toHaveBeenCalledOnce()
+    expect(screen.getByText('Creating…')).toBeTruthy()
+    release()
+    await act(async () => {})
+    expect(screen.queryByText('Creating…')).toBeNull()
+    fireEvent.click(starters[1]!)
     expect(b.startSession).toHaveBeenCalledTimes(2)
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     expect(b.toggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('renders a rejected connect as an alert instead of dying silently', async () => {
+    const b = mountShell()
+    b.startSession.mockImplementation(() => Promise.reject(new Error('session-create-timeout')))
+    fireEvent.click(screen.getAllByRole('button', { name: 'New session' })[0]!)
+    const alert = await screen.findByRole('alert')
+    // The naive t stub in this file does not interpolate; assert the prefix.
+    expect(alert.textContent?.startsWith('New session failed:')).toBe(true)
+    // Recovery: a later successful click clears the alert.
+    b.startSession.mockImplementation(() => Promise.resolve('fk-ok' as never))
+    fireEvent.click(screen.getAllByRole('button', { name: 'New session' })[0]!)
+    await act(async () => {})
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('renders generic brand fallbacks when no package fills the slots', () => {

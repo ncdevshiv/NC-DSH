@@ -17,17 +17,22 @@ export interface IWorkspaces {
   /**
    * Connect a Workspace to its reusable or freshly created blank session.
    * @param workspaceId - target workspace.
+   * @param opts - optional flags; forceNew bypasses blank session reuse.
    * @returns the connected session id.
    */
-  connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
+  connectWorkspace(workspaceId: WorkspaceId, opts?: { forceNew?: boolean }): Promise<SessionId>
   /**
    * The New Session flow: connect the explicit, current-Session, or recent
-   * Workspace and open the resulting session; failures surface on the session
-   * list state.
+   * Workspace and open the resulting session; with no Workspace at all, land
+   * in the workspace-less chat session instead of a dead-end empty state.
+   * The returned promise settles only after navigation; a connect failure
+   * rejects AFTER the service logged it, so UI callers can surface the
+   * reason while programmatic callers may keep ignoring the outcome.
    * @param workspaceId - explicit target; omitted inherits the current
    * Session's Workspace before falling back to the recency projection.
+   * @returns the opened session id.
    */
-  startSession(workspaceId?: WorkspaceId): void
+  startSession(workspaceId?: WorkspaceId): Promise<SessionId>
   /**
    * Register an existing path as a Workspace.
    * @param input - the Host create payload.

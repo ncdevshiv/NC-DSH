@@ -485,6 +485,17 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+.deleteOptionLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
 .deleteStatus {
   font-size: 12px;
   line-height: 18px;
@@ -503,4 +514,19 @@
   .headerActions {
     transition: none;
   }
+}
+
+/* New Session connect failure, rendered above the list area (same role="alert"
+   idiom as the rename dialogs). Clamped so one long transport message cannot
+   push the session list out of view. */
+.connectError {
+  margin: 0 10px 6px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

@@ -13,7 +13,7 @@ import {
 export const UNGROUPED_KEY = ''
 
 /** Display label for the ungrouped bucket row. */
-export const UNGROUPED_LABEL = 'Ungrouped'
+export const UNGROUPED_LABEL = 'Chat'
 
 /** One top-level session row in a group or the flat list. */
 export interface SessionNode {
@@ -196,7 +196,7 @@ function groupByWorkspace(
   const stray = list.ids
     .map(id => list.byId[id])
     .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived))
+      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived) && !s.blank)
   if (stray.length > 0) {
     groups.push(buildGroup(
       UNGROUPED_KEY,

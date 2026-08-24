@@ -496,7 +496,10 @@ export class SessionRuntime implements ISessions {
    * @param opts - source session id, the optional event seq anchoring the
    *   cut (the boundary is the first turn/end at or after it; an in-log
    *   anchor in an open turn is unavailable rather than clipped backward),
-   *   and whether to increment an inherited durable title before resolving.
+   *   whether to increment an inherited durable title before resolving, and
+   *   an optional Workspace retarget with its display-cwd hint (the child
+   *   adopts that Workspace's path and joins it instead of following the
+   *   source).
    *   A fractional anchor floors to a real event seq: the frozen nodes of an
    *   interrupted turn carry flow-ordering seqs between two events, and the
    *   wire takes integers only.
@@ -508,6 +511,8 @@ export class SessionRuntime implements ISessions {
     sessionId: SessionId
     atSeq?: number
     increaseTitle?: boolean
+    workspaceId?: WorkspaceId
+    cwd?: string
   }): Promise<SessionId> {
     const sourceTitle = opts.increaseTitle
       ? this.list.getSnapshot().byId[opts.sessionId]?.title
@@ -518,6 +523,8 @@ export class SessionRuntime implements ISessions {
       // turn/start), so the host's first-turn/end-at-or-after cut still ends
       // on that turn — never clipped back to the previous one.
       ...(opts.atSeq === undefined ? {} : { atSeq: Math.floor(opts.atSeq) }),
+      ...(opts.workspaceId === undefined ? {} : { workspaceId: opts.workspaceId }),
+      ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
     })
     if (!result.ok) throw new SessionForkError(result.error, opts.sessionId)
     this.projectList()

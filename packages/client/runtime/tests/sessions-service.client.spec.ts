@@ -592,6 +592,25 @@ describe('fork', () => {
       .rejects.toThrow('fork child rename failed: title-invalid: rejected')
     expect(b.svc.binding(sid('child'))).toBeDefined()
   })
+
+  it('a workspace retarget sends workspaceId and labels the child row with the hinted target cwd', async () => {
+    const b = bench()
+    await feedList(b, [{ id: 'source', cwd: '/work' }])
+    b.api.onFork = () => Promise.resolve(ok({ sessionId: sid('child') }))
+
+    await expect(b.svc.fork({
+      sessionId: sid('source'), workspaceId: 'ws-1' as never, cwd: '/target',
+    })).resolves.toBe('child')
+
+    // The wire request carries only the retarget; the cwd is display hint.
+    expect(b.api.callsOf('session.fork')).toEqual([
+      { sessionId: 'source', workspaceId: 'ws-1' },
+    ])
+    expect(b.svc.list.getSnapshot().byId[sid('child')]).toMatchObject({
+      parentId: 'source',
+      cwd: '/target',
+    })
+  })
 })
 
 describe('scope lifecycle rides the list mirror (entity parity: no client-side pre-birth)', () => {

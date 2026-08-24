@@ -57,6 +57,25 @@ export function SidebarRoot({
   }, [collapsed])
   const wide = !collapsed || !settled
 
+  // New Session outcome feedback: the action can legitimately take a while
+  // (Host busy with other agents) or fail outright — without this state both
+  // looked like a dead button, because the click had no pending/error surface.
+  const [startBusy, setStartBusy] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const handleStartSession = (): void => {
+    if (startBusy) return
+    setStartBusy(true)
+    setStartError(null)
+    // Promise.resolve keeps sync test doubles (`vi.fn()`) usable.
+    void Promise.resolve(startSession()).then(
+      () => { setStartBusy(false) },
+      (reason: unknown) => {
+        setStartBusy(false)
+        setStartError(reason instanceof Error ? reason.message : String(reason))
+      },
+    )
+  }
+
   // Freeze the content at its expanded width while it fades out (collapsed
   // && wide): the sliding column then clips it instead of reflowing it. The
   // rail layout (.collapsed styles) only applies once the fade settles.
@@ -125,7 +144,10 @@ export function SidebarRoot({
       }}
       onPointerLeave={() => { armLinger() }}
     >
-      <div className={css.logoRow}>
+      {/* Title-bar row: on the desktop shell it is the window's draggable
+          left segment (base.css keys the drag region on the attribute), so
+          only its two controls opt out. */}
+      <div className={css.logoRow} data-dsh-drag-region="">
         {/* Expanded, the brand doubles as a New Session shortcut; the
             collapsed rail's logo is the expand toggle below instead. */}
         {wide && (
@@ -133,7 +155,8 @@ export function SidebarRoot({
             type="button"
             className={clsx(css.brand, css.wide)}
             aria-label={t('session.new.label')}
-            onClick={() => { startSession() }}
+            aria-busy={startBusy || undefined}
+            onClick={handleStartSession}
           >
             <span className={css.brandIdentity} aria-hidden="true">
               <span className={css.brandMark}>
@@ -180,12 +203,18 @@ export function SidebarRoot({
           type="button"
           className={css.newSession}
           aria-label={t('session.new.label')}
-          onClick={() => { startSession() }}
+          aria-busy={startBusy || undefined}
+          onClick={handleStartSession}
         >
           <IconNewChatOutline16 size={wide ? 14 : 18} />
-          {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
+          {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{startBusy ? t('session.new.connecting') : t('session.new')}</span>}
         </button>
       </Tooltip>
+      {/* Connect failures reject after the runtime logged them; without this
+          line the failure was indistinguishable from a dead button. */}
+      {startError !== null && (
+        <p className={css.connectError} role="alert">{t('session.new.failed', { message: startError })}</p>
+      )}
 
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}

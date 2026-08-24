@@ -2277,7 +2277,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
 
       async fork(request) {
-        const { sessionId, atSeq } = request.payload
+        const { sessionId, atSeq, workspaceId } = request.payload
         let source: SessionReadState
         try {
           source = await readSessionState(sessionId)
@@ -2319,15 +2319,31 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         let cut = boundary.seq + 1
         while (cut < events.length && events[cut]?.type !== 'turn/start') cut++
         let workspace: Workspace | undefined
-        try {
-          workspace = await forkWorkspace(source)
-        } catch (error: unknown) {
-          return err(request, {
-            code: 'internal',
-            message: `failed to resolve fork workspace for session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+        if (workspaceId !== undefined) {
+          // Explicit retarget (the chat→work shift): the child joins the named
+          // Workspace and adopts its path as its own cwd, so the seeded
+          // history keeps referencing the source cwd while every later turn
+          // runs — and groups — inside the target.
+          workspace = ctx.workspaceRegistry.get(brandWorkspaceId(workspaceId))
+          if (workspace === undefined) {
+            return err(request, {
+              code: 'workspace-not-found',
+              message: `workspace "${workspaceId}" not found`,
+              details: { workspaceId },
+            })
+          }
+        } else {
+          try {
+            workspace = await forkWorkspace(source)
+          } catch (error: unknown) {
+            return err(request, {
+              code: 'internal',
+              message: `failed to resolve fork workspace for session "${sessionId}": ${String(error)}`,
+              details: {},
+            })
+          }
         }
+        const childCwd = workspace?.path ?? source.header.cwd
         const childId = `session-${randomUUID()}` as SessionId
         // The child inherits the parent's composition for the same reason a
         // resumed session keeps its own: the seeded history was produced under
@@ -2340,7 +2356,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             sessionId: childId,
             seed: events.slice(0, cut),
             meta: {
-              ...source.header.cwd === undefined ? {} : { cwd: source.header.cwd },
+              ...childCwd === undefined ? {} : { cwd: childCwd },
               parentSession: source.id,
               seedLength: cut,
               ...forkComposition.agentPreset === undefined
@@ -2357,9 +2373,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
-        // An ordinary source keeps its direct Workspace. A subagent source is
-        // not listed there, so its ordinary fork joins the nearest owning
-        // ancestor instead. The child is already published if attach fails.
+        // An explicit target wins; an ordinary source keeps its direct
+        // Workspace, and a subagent source — not listed anywhere — joins the
+        // nearest owning ancestor. The child is already published if attach
+        // fails.
         if (workspace !== undefined) {
           try {
             await workspace.attachSession(childId)

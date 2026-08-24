@@ -10,7 +10,7 @@ import SessionStore from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
-import type { Workspace } from '@deepseek-ai/dsh-workspace'
+import type { Workspace, WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import type { RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
 import { createApiProxy } from '@deepseek-ai/dsh-host-apiproxy'
@@ -22,13 +22,16 @@ function request<P>(payload: P): RpcRequest<P> {
   return { rpcId: RpcId(`fork-${String(nextRpc++)}`), payload }
 }
 
-async function composed(workspaces: readonly Workspace[] = []): Promise<Context> {
+async function composed(
+  workspaces: readonly Workspace[] = [],
+  registry?: Record<string, unknown>,
+): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt, { persona: '' })
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(UserQuestionService)
-  ctx.provide('workspaceRegistry', { list: () => workspaces } as never)
+  ctx.provide('workspaceRegistry', registry ?? { list: () => workspaces } as never)
   ctx.agents.setFactory({
     createAgent: async (ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle> => {
       const session = ctx.sessions.create(options.sessionId, {
@@ -284,6 +287,82 @@ describe('sessions.fork', () => {
       model: 'inherited-model',
       reasoningEffort: 'high',
     })
+    await ctx.fiber.dispose()
+  })
+
+  it('an explicit workspaceId retargets the child cwd and attachment', async () => {
+    const attachSession = vi.fn<(sessionId: SessionId) => Promise<void>>()
+      .mockResolvedValue(undefined)
+    const workspace = {
+      id: 'ws-target',
+      path: '/target',
+      sessionIds: [],
+      attachSession,
+    } as unknown as Workspace
+    const ctx = await composed([workspace], {
+      list: () => [workspace],
+      get: (id: string) => id === 'ws-target' ? workspace : undefined,
+    })
+    // A chat-mode source at the Host cwd, accounted nowhere.
+    const source = liveAgent(ctx, 'session-chat', 1)
+
+    const response = await api(ctx).sessions.fork(
+      request({ sessionId: source.id, workspaceId: 'ws-target' as WorkspaceId }),
+    )
+
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    expect(attachSession).toHaveBeenCalledWith(response.result.value.sessionId)
+    const child = ctx.sessions.get(response.result.value.sessionId)
+    expect(child?.header.cwd).toBe('/target')
+    expect(child?.header.parentSession).toBe(source.id)
+    // Retention, not a move: the seeded history still carries the source turns.
+    expect(child?.events.some(event => event.type === 'user/message')).toBe(true)
+    await ctx.fiber.dispose()
+  })
+
+  it('an unknown explicit workspace fails with workspace-not-found', async () => {
+    const ctx = await composed([], { list: () => [], get: () => undefined })
+    const source = liveAgent(ctx, 'session-nows', 1)
+
+    const response = await api(ctx).sessions.fork(
+      request({ sessionId: source.id, workspaceId: 'ws-missing' as WorkspaceId }),
+    )
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-not-found', details: { workspaceId: 'ws-missing' } },
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('a failed retarget attachment publishes the child and reports it', async () => {
+    const attachSession = vi.fn<(sessionId: SessionId) => Promise<void>>()
+      .mockRejectedValue(new Error('ledger unavailable'))
+    const workspace = {
+      id: 'ws-late',
+      path: '/target',
+      sessionIds: [],
+      attachSession,
+    } as unknown as Workspace
+    const ctx = await composed([workspace], {
+      list: () => [workspace],
+      get: (id: string) => id === 'ws-late' ? workspace : undefined,
+    })
+    const source = liveAgent(ctx, 'session-attachfail', 1)
+
+    const response = await api(ctx).sessions.fork(
+      request({ sessionId: source.id, workspaceId: 'ws-late' as WorkspaceId }),
+    )
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-attach-failed' },
+    })
+    if (response.result.ok) return
+    const details = response.result.error.details as { sessionId: SessionId }
+    // The child exists with the target cwd even though the account slot failed.
+    expect(ctx.sessions.get(details.sessionId)?.header.cwd).toBe('/target')
     await ctx.fiber.dispose()
   })
 })

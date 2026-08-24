@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import { SessionManager } from '../src/client/sessions/manager.ts'
+import { SessionManager, SESSION_CREATE_TIMEOUT_MS } from '../src/client/sessions/manager.ts'
 import { FakeApiClient, deferred, err, fakeRemote, ok } from './fake-api.client.ts'
 import { entries, ev, plainTurn } from './event-script.client.ts'
 
@@ -188,6 +188,32 @@ describe('list lifecycle', () => {
     const result = await manager.create()
     expect(result).toMatchObject({ ok: true, value: { sessionId: S2 } })
     expect(manager.getListSnapshot().items.map(i => i.sessionId)).toEqual([S2])
+  })
+
+  it('returns session-create-timeout past the deadline and still merges a late publication', async () => {
+    vi.useFakeTimers()
+    try {
+      const api = new FakeApiClient()
+      const gate = deferred<{ result: { ok: true; value: { sessionId: SessionId } } }>()
+      api.onCreate = () => gate.promise as never
+      const manager = new SessionManager(api, fakeRemote())
+      const pending = manager.create()
+      let outcome: unknown
+      void pending.then((value) => { outcome = value })
+
+      await vi.advanceTimersByTimeAsync(SESSION_CREATE_TIMEOUT_MS - 1)
+      expect(outcome).toBeUndefined()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(outcome).toMatchObject({ ok: false, error: { code: 'session-create-timeout' } })
+      // The caller gave up; the host may still publish later — the list must
+      // learn about it even though this create's promise already settled.
+      gate.resolve({ result: { ok: true, value: { sessionId: S2 } } })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(manager.getListSnapshot().items.map(i => i.sessionId)).toEqual([S2])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('retains title projections before list arrival, keeps last-wins by seq, and clears them on removal', async () => {

@@ -39,6 +39,15 @@ export interface SessionSearchResultItem {
   snippet: string
 }
 
+/**
+ * Caller-facing deadline for `session.create`. The wire itself is unbounded
+ * (see the create JSDoc); past this point the caller gets a
+ * `session-create-timeout` error while a late settlement still lands the
+ * published session in the list. Matches the UX-scale of
+ * `streamOpenTimeoutMs` in the connection layer rather than any host contract.
+ */
+export const SESSION_CREATE_TIMEOUT_MS = 30_000
+
 /** Immutable session-list snapshot for useSessionList. */
 export interface SessionListSnapshot {
   items: readonly SessionListEntry[]
@@ -530,8 +539,15 @@ export class SessionManager {
    * Contract session.create; on success merge into summaries immediately (no
    * wait for the next refresh). A created session is blank by definition
    * (entity birth precedes the first message).
+   *
+   * The wire has no create deadline — only stream opens are bounded — and a
+   * Host busy with other agents' turns can legitimately hold a create for a
+   * long time. The caller-facing result therefore settles at
+   * {@link SESSION_CREATE_TIMEOUT_MS} with a `session-create-timeout` error;
+   * a late settlement still merges the published blank session into the list,
+   * so an eventually-created session never stays invisible.
    * @param opts - target workspace or working directory, plus an optional caller-owned id.
-   * @returns the create result.
+   * @returns the create result, or the timeout error result.
    */
   async create(
     opts: { workspaceId?: WorkspaceId; cwd?: string; sessionId?: SessionId } = {},
@@ -541,13 +557,37 @@ export class SessionManager {
       const payload = opts.workspaceId !== undefined
         ? { workspaceId: opts.workspaceId, ...shared }
         : { ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }), ...shared }
-      const { result } = await this.api.sessions.create(payload)
+      let gaveUp = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const attempt = this.api.sessions.create(payload)
+      // Late settlements merge into the list only after this caller was
+      // handed the timeout error; the winning arm records directly below.
+      void attempt.then(
+        ({ result }) => {
+          if (!gaveUp || !result.ok) return
+          this.mergeCreatedBlank(result.value.sessionId, opts.cwd, result.value.agentPreset)
+        },
+        () => { /* post-timeout transport failure: the caller already holds the timeout error */ },
+      )
+      const timedOut = await Promise.race([
+        attempt.then(() => false),
+        new Promise<true>((resolve) => { timer = setTimeout(() => resolve(true), SESSION_CREATE_TIMEOUT_MS) }),
+      ])
+      clearTimeout(timer)
+      if (timedOut) {
+        gaveUp = true
+        return {
+          ok: false,
+          error: {
+            code: 'session-create-timeout',
+            message: `session creation did not complete within ${SESSION_CREATE_TIMEOUT_MS / 1000}s`,
+            details: {},
+          },
+        }
+      }
+      const { result } = await attempt
       if (result.ok) {
-        this.recordMutation({ kind: 'upsert', summary: {
-          sessionId: result.value.sessionId, updatedAt: Date.now(), running: false, blank: true,
-          ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
-          ...(result.value.agentPreset !== undefined ? { agentPreset: result.value.agentPreset } : {}),
-        } })
+        this.mergeCreatedBlank(result.value.sessionId, opts.cwd, result.value.agentPreset)
       } else {
         const publishedSessionId = workspaceAttachSessionId(result.error)
         // Publication precedes attachment. The error's id is a real Session,
@@ -568,32 +608,51 @@ export class SessionManager {
     }
   }
 
+  /** Insert-or-enrich the locally synthesized summary of a just-created blank session. */
+  private mergeCreatedBlank(
+    sessionId: SessionId,
+    cwd: string | undefined,
+    agentPreset: string | undefined,
+  ): void {
+    this.recordMutation({ kind: 'upsert', summary: {
+      sessionId, updatedAt: Date.now(), running: false, blank: true,
+      ...(cwd !== undefined ? { cwd } : {}),
+      ...(agentPreset !== undefined ? { agentPreset } : {}),
+    } })
+  }
+
   /**
    * Contract session.fork; on success merge the child into summaries
    * immediately (same synchronous-addressability guarantee as create). The
    * child carries the source's history, so it is never blank; lineage rides
-   * parentSessionId so the list nests it under its source. A child published
-   * before Workspace attachment fails is also reconciled into the list.
-   * @param opts - source session and the optional seq anchoring the cut.
+   * parentSessionId so the list nests it under its source. A workspace-
+   * retargeted fork adopts the target's path: `opts.cwd` is the caller's
+   * display hint for that path (the wire response carries no cwd), and a
+   * published-before-attach-failure child keeps it — the host stamped the
+   * target path as the child header cwd before attaching.
+   * @param opts - source session, the optional seq anchoring the cut, an
+   *   optional Workspace retarget, and its display-cwd hint.
    * @returns the fork result (the child session id).
    */
   async fork(
-    opts: { sessionId: SessionId; atSeq?: number },
+    opts: { sessionId: SessionId; atSeq?: number; workspaceId?: WorkspaceId; cwd?: string },
   ): Promise<RpcResult<{ sessionId: SessionId }>> {
     try {
       const source = this.summaries.find(s => s.sessionId === opts.sessionId)
       const { result } = await this.api.sessions.fork({
         sessionId: opts.sessionId,
         ...opts.atSeq === undefined ? {} : { atSeq: opts.atSeq },
+        ...opts.workspaceId === undefined ? {} : { workspaceId: opts.workspaceId },
       })
       const childId = result.ok
         ? result.value.sessionId
         : workspaceAttachSessionId(result.error)
       if (childId !== undefined) {
+        const hintedCwd = opts.cwd ?? source?.cwd
         this.recordMutation({ kind: 'upsert', summary: {
           sessionId: childId, updatedAt: Date.now(), running: false, blank: false,
           parentSessionId: opts.sessionId,
-          ...(source?.cwd !== undefined ? { cwd: source.cwd } : {}),
+          ...(hintedCwd !== undefined ? { cwd: hintedCwd } : {}),
         } })
       }
       return result

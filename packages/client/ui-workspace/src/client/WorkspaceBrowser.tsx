@@ -215,9 +215,16 @@ function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }):
 
 type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
-  'useSessions' | 'startSession' | 'open' | 'forkSession'
+  'useSessions' | 'open' | 'forkSession'
   | 'insertWorkspaceBefore' | 'insertSessionBefore' | 't'
 > & {
+  /**
+   * The browser's guarded start action (busy/error state lives at the
+   * browser level so every trigger shares one re-entry guard); void from
+   * the tree's perspective — outcome feedback renders above the list.
+   */
+  startSession: (workspaceId?: WorkspaceId) => void
+} & {
   /** Host account home for POSIX hover-path abbreviation. */
   home?: string | undefined
   workspaces: readonly WorkspaceView[]
@@ -237,8 +244,8 @@ type SessionTreeProps = Pick<
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned rename dialog for a real Workspace group. */
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
-  /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
-  onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
+  /** Open the browser-owned delete-confirmation dialog for a real Workspace group or ungrouped. */
+  onDeleteRequest: (workspaceId: WorkspaceId | undefined, currentTitle: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
   /** Archive a session (row menu action; the row disappears on the state echo). */
@@ -468,14 +475,29 @@ function SessionTree({
                 }}
                 drag={workspaceDragProps}
                 actions={group.workspaceId === undefined
-                  ? undefined
+                  ? (group.sessionCount === 0 ? undefined : {
+                    archiveAll: () => {
+                      for (const sid of orderedUngroupedSessionIds) onSessionArchive(sid)
+                    },
+                    delete: () => {
+                      onDeleteRequest(undefined, t('group.ungrouped'))
+                    },
+                  })
                   : {
+                    ...group.sessionCount > 0 ? {
+                      archiveAll: () => {
+                        const target = orderedWorkspaces.find(w => w.workspaceId === group.workspaceId)
+                        if (target !== undefined) {
+                          for (const sid of target.sessionIds) onSessionArchive(sid)
+                        }
+                      },
+                    } : {},
                     rename: () => {
-                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onRenameRequest(group.workspaceId, group.label)
                     },
                     delete: () => {
-                    /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+                      /* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
                       if (group.workspaceId !== undefined) onDeleteRequest(group.workspaceId, group.label)
                     },
                   }}
@@ -519,6 +541,7 @@ function SessionTree({
                     onRename={onSessionRename}
                     onFork={forkSession}
                     onArchive={onSessionArchive}
+                    onDelete={onSessionArchive}
                     drag={dragProps}
                     t={t}
                   />
@@ -635,6 +658,7 @@ function FlatList({
               onRename={onSessionRename}
               onFork={forkSession}
               onArchive={onSessionArchive}
+              onDelete={onSessionArchive}
               flat
               drag={{
                 start: () => {
@@ -769,6 +793,7 @@ export function WorkspaceBrowser({
   const workspaces = useWorkspaces(state => state.items)
   const workspacePhase = useWorkspaces(state => state.phase)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
+  const sessionList = useSessions(state => state)
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
@@ -876,6 +901,27 @@ export function WorkspaceBrowser({
     }
   }, [normalizedQuery, searchSessions])
 
+  // New Session outcome feedback (same browser-owned pattern as the rename
+  // dialogs): the connect can take a while under Host load or fail outright,
+  // and without this state both looked like a dead button. One handler wraps
+  // every trigger — group create, workspace picker — and SessionTree receives
+  // the wrapped callback so its rows inherit the same re-entry guard.
+  const [startBusy, setStartBusy] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const handleStartSession = (workspaceId?: WorkspaceId): void => {
+    if (startBusy) return
+    setStartBusy(true)
+    setStartError(null)
+    // Promise.resolve keeps sync test doubles (`vi.fn()`) usable.
+    void Promise.resolve(startSession(workspaceId)).then(
+      () => { setStartBusy(false) },
+      (reason: unknown) => {
+        setStartBusy(false)
+        setStartError(reason instanceof Error ? reason.message : String(reason))
+      },
+    )
+  }
+
   // Rename dialog (browser-owned so it outlives row unmounts during collapse).
   const [renameTarget, setRenameTarget] = useState<{ workspaceId: WorkspaceId; currentTitle: string } | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
@@ -949,7 +995,8 @@ export function WorkspaceBrowser({
 
   // Delete dialog is separate from the row so a successful removal can
   // unmount that row without tearing down the in-flight confirmation state.
-  const [deleteTarget, setDeleteTarget] = useState<{ workspaceId: WorkspaceId; title: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ workspaceId: WorkspaceId | undefined; title: string } | null>(null)
+  const [deleteArchiveSessions, setDeleteArchiveSessions] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [deleteCommittedId, setDeleteCommittedId] = useState<WorkspaceId | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -971,11 +1018,26 @@ export function WorkspaceBrowser({
     setDeleting(true)
     setDeleteCommittedId(null)
     setDeleteError(null)
+    if (deleteTarget.workspaceId === undefined) {
+      const accounted = new Set(workspaces.flatMap(w => w.sessionIds))
+      const ungrouped = sessionList.ids.filter(id => sessionList.byId[id] !== undefined && !accounted.has(id))
+      for (const sid of ungrouped) onSessionArchive(sid)
+      setDeleting(false)
+      setDeleteTarget(null)
+      return
+    }
+    const targetWorkspace = workspaces.find(w => w.workspaceId === deleteTarget.workspaceId)
+    const sessionIdsToArchive = deleteArchiveSessions && targetWorkspace !== undefined
+      ? [...targetWorkspace.sessionIds]
+      : []
     deleteWorkspace(deleteTarget.workspaceId).then(() => {
+      if (sessionIdsToArchive.length > 0) {
+        for (const sid of sessionIdsToArchive) onSessionArchive(sid)
+      }
       // Keep the confirmation pending until this component has rendered the
       // committed list projection without the deleted id. Closing earlier
       // exposes one stale React frame to the next Create Workspace gesture.
-      setDeleteCommittedId(deleteTarget.workspaceId)
+      setDeleteCommittedId(deleteTarget.workspaceId ?? null)
     }).catch((reason: unknown) => {
       setDeleting(false)
       setDeleteError(reason instanceof Error ? reason.message : String(reason))
@@ -1089,7 +1151,7 @@ export function WorkspaceBrowser({
           side="right"
           onPick={(workspaceId) => {
             setWsPickerOpen(false)
-            startSession(workspaceId)
+            handleStartSession(workspaceId)
           }}
           onClose={() => { setWsPickerOpen(false) }}
         />
@@ -1112,6 +1174,12 @@ export function WorkspaceBrowser({
           </button>
         </Tooltip>
       </div>}
+
+      {/* Connect failures reject after the runtime logged them; without this
+          line the failure was indistinguishable from a dead button. */}
+      {startError !== null && (
+        <p className={css.connectError} role="alert">{t('actions.newSession.failed', { message: startError })}</p>
+      )}
 
       {/* Always-mounted seat keeps the region's flex slot while the list
           itself is wide-only. */}
@@ -1157,7 +1225,7 @@ export function WorkspaceBrowser({
                 syncSessionOrderAccount={actions.syncSessionOrderAccount}
                 setSessionOrder={actions.setSessionOrder}
                 archivedSessionIds={archivedSessionIds}
-                startSession={startSession}
+                startSession={handleStartSession}
                 open={open}
                 insertWorkspaceBefore={insertWorkspaceBefore}
                 insertSessionBefore={insertSessionBefore}
@@ -1171,6 +1239,7 @@ export function WorkspaceBrowser({
                 }}
                 onDeleteRequest={(workspaceId, title) => {
                   setDeleteTarget({ workspaceId, title })
+                  setDeleteArchiveSessions(true)
                   setDeleteError(null)
                 }}
               />
@@ -1247,10 +1316,14 @@ export function WorkspaceBrowser({
         open={deleteTarget !== null}
         onClose={closeDelete}
         closeLabel={t('close')}
-        title={t('delete.workspace')}
+        title={deleteTarget?.workspaceId === undefined ? t('delete.ungrouped.title') : t('delete.workspace')}
         {...deleteTarget === null
           ? {}
-          : { description: t('delete.desc', { name: deleteTarget.title }) }}
+          : {
+            description: deleteTarget.workspaceId === undefined
+              ? t('delete.ungrouped.desc')
+              : t('delete.desc', { name: deleteTarget.title }),
+          }}
         footer={(
           <>
             <Button variant="outline" disabled={deleting} onClick={closeDelete}>{t('cancel')}</Button>
@@ -1260,11 +1333,22 @@ export function WorkspaceBrowser({
               disabled={deleting}
               onClick={confirmDelete}
             >
-              {t('delete.workspace')}
+              {deleteTarget?.workspaceId === undefined ? t('group.deleteAll') : t('delete.workspace')}
             </Button>
           </>
         )}
       >
+        {deleteTarget?.workspaceId !== undefined && (
+          <label className={css.deleteOptionLabel}>
+            <input
+              type="checkbox"
+              checked={deleteArchiveSessions}
+              disabled={deleting}
+              onChange={(e) => { setDeleteArchiveSessions(e.target.checked) }}
+            />
+            <span>{t('delete.archiveSessions')}</span>
+          </label>
+        )}
         {deleting && <div className={css.deleteStatus} role="status">{t('delete.pending')}</div>}
         {deleteError !== null && <div className={css.renameError} role="alert">{deleteError}</div>}
       </Modal>

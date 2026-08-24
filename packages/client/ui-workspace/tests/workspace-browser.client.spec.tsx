@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceListState, WorkspaceView,
@@ -409,6 +409,19 @@ describe('WorkspaceBrowser', () => {
     expect(startSession).toHaveBeenCalledWith(wid('alpha'))
   })
 
+  it('surfaces a rejected New Session connect as an inline alert', async () => {
+    const startSession = vi.fn(() => Promise.reject(new Error('session-create-timeout')))
+    mount({
+      useSessions: hook(sessionState([summary('alpha-s', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['alpha-s'])])),
+      startSession,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '在“alpha”中新建会话' }))
+    // The naive dictionary in this spec does not interpolate; the alert text
+    // carries the reason through the runtime's rejection.
+    expect(await screen.findByRole('alert')).toBeTruthy()
+  })
+
   it('auto-expands the Ungrouped bucket for a loose current session; its header has no menu and its ＋ is inert', () => {
     const startSession = vi.fn()
     mount({
@@ -418,8 +431,8 @@ describe('WorkspaceBrowser', () => {
     })
     // The loose session's group is UNGROUPED_KEY: expanded by the effect.
     expect(screen.getByText('loose')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '工作区“未分组”的操作' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '在“未分组”中新建会话' }))
+    expect(screen.queryByRole('button', { name: '工作区“聊天”的操作' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '在“聊天”中新建会话' }))
     expect(startSession).not.toHaveBeenCalled()
   })
 
@@ -889,7 +902,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([])),
       insertSessionBefore,
     })
-    fireEvent.click(screen.getByText('未分组'))
+    fireEvent.click(screen.getByText('聊天'))
 
     const dragAfter = (sourceTitle: string, targetTitle: string): void => {
       const source = screen.getByText(sourceTitle).closest('[role="treeitem"]') as HTMLElement
@@ -1105,6 +1118,7 @@ describe('WorkspaceBrowser', () => {
     expect(dialog.textContent).toContain('将把“Alpha”从工作区列表中移除')
     expect(dialog.textContent).toContain('文件夹与会话记录会保留')
     expect(dialog.textContent).toContain('其会话将显示在“未分组”下')
+    expect(dialog.textContent).toContain('同时归档此工作区的会话')
 
     const confirm = screen.getByRole<HTMLButtonElement>('button', { name: '删除工作区' })
     fireEvent.click(confirm)
@@ -1124,6 +1138,83 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getByRole('dialog', { name: '删除工作区' })).toBeTruthy()
     rerender(browser, { useWorkspaces: hook(workspaceState([])) })
     expect(screen.queryByRole('dialog', { name: '删除工作区' })).toBeNull()
+  })
+
+  it('archives sessions when deleteArchiveSessions checkbox is checked and skips when unchecked', async () => {
+    const deleteWorkspace = vi.fn(async () => {})
+    const archiveSession = vi.fn(async () => {})
+    mount({
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['s-1', 's-2'], 'Alpha')])),
+      deleteWorkspace,
+      archiveSession,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除工作区' }))
+    const checkbox = screen.getByRole<HTMLInputElement>('checkbox')
+    expect(checkbox.checked).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '删除工作区' }))
+    await act(async () => {})
+    expect(deleteWorkspace).toHaveBeenCalledWith(wid('alpha'))
+    expect(archiveSession).toHaveBeenCalledWith(sid('s-1'))
+    expect(archiveSession).toHaveBeenCalledWith(sid('s-2'))
+  })
+
+  it('allows bulk archiving of all ungrouped sessions from the ungrouped section header', async () => {
+    const archiveSession = vi.fn(async () => {})
+    const sessions = sessionState([
+      summary('loose-1', 1, { displayTitle: 'Loose 1' }),
+      summary('loose-2', 2, { displayTitle: 'Loose 2' }),
+    ])
+    mount({
+      useSessions: hook(sessions),
+      useWorkspaces: hook(workspaceState([])),
+      archiveSession,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '聊天会话的操作' }))
+    expect(screen.getByRole('menuitem', { name: '归档全部会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: '归档全部会话' }))
+    expect(archiveSession).toHaveBeenCalledWith(sid('loose-1'))
+    expect(archiveSession).toHaveBeenCalledWith(sid('loose-2'))
+  })
+
+  it('allows bulk archiving of all sessions in a real workspace from its section header menu', async () => {
+    const archiveSession = vi.fn(async () => {})
+    const sessions = sessionState([
+      summary('w-1', 1, { displayTitle: 'W 1' }),
+      summary('w-2', 2, { displayTitle: 'W 2' }),
+    ])
+    mount({
+      useSessions: hook(sessions),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['w-1', 'w-2'], 'Alpha')])),
+      archiveSession,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    expect(screen.getByRole('menuitem', { name: '归档全部会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: '归档全部会话' }))
+    expect(archiveSession).toHaveBeenCalledWith(sid('w-1'))
+    expect(archiveSession).toHaveBeenCalledWith(sid('w-2'))
+  })
+
+  it('allows deleting/clearing all ungrouped sessions via confirmation dialog', async () => {
+    const archiveSession = vi.fn(async () => {})
+    const sessions = sessionState([
+      summary('loose-1', 1, { displayTitle: 'Loose 1' }),
+      summary('loose-2', 2, { displayTitle: 'Loose 2' }),
+    ])
+    mount({
+      useSessions: hook(sessions),
+      useWorkspaces: hook(workspaceState([])),
+      archiveSession,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '聊天会话的操作' }))
+    expect(screen.getByRole('menuitem', { name: '删除全部会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除全部会话' }))
+    const dialog = screen.getByRole('dialog', { name: '删除聊天会话' })
+    expect(dialog.textContent).toContain('将删除并移除所有聊天会话。')
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除全部会话' }))
+    await act(async () => {})
+    expect(archiveSession).toHaveBeenCalledWith(sid('loose-1'))
+    expect(archiveSession).toHaveBeenCalledWith(sid('loose-2'))
   })
 
   it('keeps the delete dialog open on failure and allows retry or cancellation', async () => {

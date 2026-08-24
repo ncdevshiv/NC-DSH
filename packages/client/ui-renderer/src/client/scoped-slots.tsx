@@ -314,6 +314,23 @@ function entryKeyOf(entry: StoredEntry): number {
  * only shows until that re-render lands (permanently once the cell is dry —
  * the outlet then owns the crash face).
  */
+/**
+ * Dev-channel revival signal: client-hmr dispatches `dsh:hmr-swapped` on
+ * window after each hot-swap attempt settles. A hot-swap tears services down
+ * for one async window; an entry whose inject factory rendered in that gap
+ * crashes and abdicates, and after the swap the outlet renders the FRESH
+ * registration under the SAME boundary instance — a permanently-stuck crash
+ * face hiding live content (the observed "composer vanished after HMR"
+ * failure). Boundaries therefore reset themselves on this signal.
+ */
+const hmrRevivalListeners = new Set<() => void>()
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('dsh:hmr-swapped', () => {
+    for (const fn of hmrRevivalListeners) fn()
+  })
+}
+
 class SlotErrorBoundary extends Component<
   { slotKey: string; onEntryError: (error: unknown) => void; children: ReactNode }, { failed: boolean }
 > {
@@ -322,6 +339,21 @@ class SlotErrorBoundary extends Component<
     if (error instanceof SlotAssemblyError) throw error
     return { failed: true }
   }
+
+  private readonly onHmrSwapped = (): void => {
+    // Reset only a crashed face: a healthy boundary re-running its subtree
+    // would remount live entries for nothing.
+    if (this.state.failed) this.setState({ failed: false })
+  }
+
+  override componentDidMount(): void {
+    hmrRevivalListeners.add(this.onHmrSwapped)
+  }
+
+  override componentWillUnmount(): void {
+    hmrRevivalListeners.delete(this.onHmrSwapped)
+  }
+
   override componentDidCatch(error: unknown): void {
     console.error(`slot entry crashed in '${this.props.slotKey}':`, error)
     this.props.onEntryError(error)

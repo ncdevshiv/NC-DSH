@@ -47,6 +47,9 @@ export class DirectoryBrowseError extends Error {
   }
 }
 
+/** Synthetic coalescing key for workspace-less chat connects (never a real Workspace id). */
+const CHAT_CONNECT_KEY = '::chat' as WorkspaceId
+
 /** Real Workspace object layer and Host actions. */
 export class WorkspaceRuntime implements IWorkspaces {
   /** UI-facing immutable projection; the manager remains wire truth. */
@@ -86,14 +89,14 @@ export class WorkspaceRuntime implements IWorkspaces {
    * @param workspaceId - chosen Workspace (must be in the workspace list).
    * @returns the reused or newly created session id.
    */
-  async connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId> {
+  async connectWorkspace(workspaceId: WorkspaceId, opts: { forceNew?: boolean } = {}): Promise<SessionId> {
     const workspace = this.list.getSnapshot().items.find(item => item.workspaceId === workspaceId)
     if (workspace === undefined) throw new Error(`workspaces.connectWorkspace: unknown workspace ${workspaceId}`)
     // Coalesce concurrent connects: a create's summary lands without cwd
     // until the host frame arrives, so a second call inside that window
     // would miss the reuse scan and mint another hidden blank session.
     const inflight = this.connecting.get(workspaceId)
-    if (inflight !== undefined) return inflight
+    if (inflight !== undefined && !opts.forceNew) return inflight
     // Reuse requires workspace membership (id in sessionIds AND same
     // canonical cwd — the host's own membership rule), never cwd alone:
     // a cwd match can belong to no account (sessions the CLI/TUI birthed at
@@ -103,11 +106,13 @@ export class WorkspaceRuntime implements IWorkspaces {
     // no grouping surface can show, so New Session mints a fresh one instead.
     const archived = this.list.getSnapshot().archivedSessionIds
     const sessions = this.sessions.list.getSnapshot()
-    for (const id of sessions.ids) {
-      const summary = sessions.byId[id]
-      if (summary !== undefined && summary.blank && summary.cwd === workspace.path
-        && workspace.sessionIds.includes(summary.id)
-        && !archived.includes(summary.id)) return summary.id
+    if (!opts.forceNew) {
+      for (const id of sessions.ids) {
+        const summary = sessions.byId[id]
+        if (summary !== undefined && summary.blank && summary.cwd === workspace.path
+          && workspace.sessionIds.includes(summary.id)
+          && !archived.includes(summary.id)) return summary.id
+      }
     }
     const attempt = this.sessions.create({ workspaceId })
       .finally(() => { this.connecting.delete(workspaceId) })
@@ -116,11 +121,50 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Resolve the session a workspace-less chat flow lands in: reuse the
+   * ungrouped blank session when one is in the list mirror, else create a
+   * session with no Workspace on the host (`session.create` defaults its cwd
+   * to the Host cwd). Same resolution guarantee as {@link connectWorkspace}:
+   * the returned id is in the list store and synchronously addressable.
+   * Coalesced through the same `connecting` map under a synthetic key so a
+   * boot-time and a New Session click racing each other mint one session.
+   * @param opts - optional flags; forceNew bypasses blank session reuse.
+   * @returns the reused or newly created chat session id.
+   */
+  async connectChat(opts: { forceNew?: boolean } = {}): Promise<SessionId> {
+    // Coalesce concurrent connects before the reuse scan: a create's summary
+    // lands only when the host answers, so a second call inside that window
+    // would miss the scan and mint another hidden blank session.
+    const inflight = this.connecting.get(CHAT_CONNECT_KEY)
+    if (inflight !== undefined && !opts.forceNew) return inflight
+    const archived = this.list.getSnapshot().archivedSessionIds
+    const workspaces = this.list.getSnapshot().items
+    const sessions = this.sessions.list.getSnapshot()
+    if (!opts.forceNew) {
+      for (const id of sessions.ids) {
+        const summary = sessions.byId[id]
+        if (summary === undefined || !summary.blank || archived.includes(summary.id)) continue
+        // Ungrouped only: membership anywhere makes it some Workspace's blank,
+        // which connectWorkspace owns.
+        if (workspaces.some(workspace => workspace.sessionIds.includes(summary.id))) continue
+        return summary.id
+      }
+    }
+    const attempt = this.sessions.create()
+      .finally(() => { this.connecting.delete(CHAT_CONNECT_KEY) })
+    this.connecting.set(CHAT_CONNECT_KEY, attempt)
+    return attempt
+  }
+
+  /**
    * Follow the first complete Workspace/Session baseline and select a default
    * session exactly once. A restored current session wins; otherwise the most
-   * recent Workspace is connected (reusing or creating its blank session).
-   * Later explicit clears stay cleared instead of retriggering this startup
-   * policy. A failed connect may retry on the next baseline projection.
+   * recent Workspace is connected (reusing or creating its blank session), or
+   * — with no Workspace registered at all — the workspace-less chat session
+   * is, so a fresh client can talk immediately instead of staring at a
+   * choose-a-workspace wall. Later explicit clears stay cleared instead of
+   * retriggering this startup policy. A failed connect may retry on the next
+   * baseline projection.
    * @returns disposer for the baseline subscription; late work cannot navigate after disposal.
    */
   startInitialSelection(): () => void {
@@ -136,12 +180,15 @@ export class WorkspaceRuntime implements IWorkspaces {
       if (!workspace.baselinesReady) return
       const current = this.sessions.list.getSnapshot().current
       const target = workspace.recentWorkspaceId
-      if (current !== undefined || target === undefined) {
+      if (current !== undefined) {
         state = 'done'
         return
       }
       state = 'connecting'
-      void this.connectWorkspace(target).then(
+      const connecting = target === undefined
+        ? this.connectChat()
+        : this.connectWorkspace(target)
+      void connecting.then(
         (sessionId) => {
           if (disposed) return
           if (this.sessions.list.getSnapshot().current === undefined) {
@@ -152,7 +199,7 @@ export class WorkspaceRuntime implements IWorkspaces {
         (reason: unknown) => {
           if (disposed) return
           state = 'waiting'
-          console.warn('initial workspace selection failed:', reason)
+          console.warn('initial session selection failed:', reason)
         },
       )
     }
@@ -169,26 +216,37 @@ export class WorkspaceRuntime implements IWorkspaces {
    * button, workspace browser): resolve the target Workspace — explicit wins,
    * then the current Session's Workspace, then the recent-Workspace
    * projection — connect its blank session and navigate there; with no
-   * Workspace at all, clear the selection into the New Session view state.
-   * Connect failures are non-fatal (console diagnostics; the current view
-   * stays usable).
+   * Workspace at all, land in the workspace-less chat session instead of a
+   * dead-end empty state. Connect failures are logged for diagnostics and
+   * then REJECTED to the caller: shell surfaces render the reason inline,
+   * while programmatic callers that ignore the promise keep today's
+   * fire-and-forget behavior.
    * @param workspaceId - explicit target Workspace for scoped actions.
+   * @returns the opened session id; navigation has already happened.
    */
-  startSession(workspaceId?: WorkspaceId): void {
+  async startSession(workspaceId?: WorkspaceId): Promise<SessionId> {
     const workspace = this.list.getSnapshot()
     const current = this.sessions.list.getSnapshot().current
     const currentWorkspaceId = current === undefined
       ? undefined
       : workspace.items.find(item => item.sessionIds.includes(current))?.workspaceId
     const target = workspaceId ?? currentWorkspaceId ?? workspace.recentWorkspaceId
-    if (target === undefined) {
-      this.sessions.clear()
-      return
+    try {
+      const sessionId = target === undefined
+        ? await this.connectChat({ forceNew: true })
+        : await this.connectWorkspace(target, { forceNew: true })
+      this.sessions.open(sessionId)
+      this.resetSessionDraft(sessionId)
+      return sessionId
+    } catch (reason: unknown) {
+      console.warn('new session failed:', reason)
+      throw reason instanceof Error ? reason : new Error(String(reason))
     }
-    void this.connectWorkspace(target).then(
-      (sessionId) => { this.sessions.open(sessionId) },
-      (reason: unknown) => { console.warn('new session failed:', reason) },
-    )
+  }
+
+  private resetSessionDraft(sessionId: SessionId): void {
+    const scope = this.sessions.scope?.(sessionId)
+    scope?.emit('session/reset-draft', sessionId)
   }
 
   /**

@@ -165,6 +165,12 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'connection/reset'(): void
+    /**
+     * A session was activated or reset via the New Session flow.
+     * @mode emit
+     * @param sessionId - optional targeted session id.
+     */
+    'session/reset-draft'(sessionId?: SessionId): void
   }
   interface Context {
     slots: import('./slots.ts').SlotRegistry

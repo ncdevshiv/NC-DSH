@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-24-workspace-delete-session-cleanup-and-ungrouped-archive.md
+2026-08-24-workspace-delete-session-cleanup-and-ungrouped-archive.md: 57d688dba6ea89a335edb00788aa71c68a4b66a1
+2026-08-24-workspace-delete-session-cleanup-and-ungrouped-archive.zh.md: 20be5ce4ee42938a45e2738cb4a21c33e6a14521

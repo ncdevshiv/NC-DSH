@@ -7,6 +7,7 @@
  * dependency.
  */
 
+import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ObservableSnapshot } from './store.ts'
 
@@ -32,11 +33,12 @@ export interface SessionsPort {
   /** Observable list snapshot (read face only; writes stay inside the sessions domain). */
   readonly list: ObservableSnapshot<SessionsPortList>
   /**
-   * Create a session on the host.
-   * @param opts - target workspace.
+   * Create a session on the host. With no `workspaceId` the Host defaults the
+   * session cwd to its own process cwd — the workspace-less chat session.
+   * @param opts - target workspace; omitted creates an ungrouped session.
    * @returns the new session id.
    */
-  create(opts: { workspaceId: WorkspaceId }): Promise<SessionId>
+  create(opts?: { workspaceId?: WorkspaceId }): Promise<SessionId>
   /**
    * Select a session as current.
    * @param id - session id (must exist in the list store).
@@ -44,4 +46,10 @@ export interface SessionsPort {
   open(id: SessionId): void
   /** Clear the current selection into the no-session view state. */
   clear(): void
+  /**
+   * Resolve an Agent-scoped context by session id.
+   * @param id - session id.
+   * @returns the session-scoped context, or undefined when not scoped.
+   */
+  scope?(id: SessionId): Context | undefined
 }

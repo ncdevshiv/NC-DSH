@@ -50,6 +50,13 @@ export interface RpcErrorDetailsMap {
   'agent-preset-conflict': { sessionId: SessionId; requestedPreset: string; existingPreset?: string }
   'agent-preset-not-found': { agentPreset: string; available: string[] }
   'agent-preset-invalid': { agentPreset: string; reason: string }
+  /**
+   * Client-side deadline for `session.create` (SessionManager's
+   * `SESSION_CREATE_TIMEOUT_MS`): the wire has no host-side create bound, so
+   * the caller gives up while a late settlement may still publish the
+   * session. Details are empty — the reason is timing, not host state.
+   */
+  'session-create-timeout': {}
   'agent-busy': { reason: string }
   'attachment-error': { reason: string }
   'queue-item-not-found': { itemId: MessageId }
