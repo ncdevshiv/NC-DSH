@@ -107,6 +107,9 @@ export class InputHub implements SessionInputResolver {
           shell.consumeToken(req.guard) ? true : undefined),
         actx.on('slash/input-insert-text', req =>
           shell.insertText(req.text, req.span, req.continue === true) ? true : undefined),
+        actx.on('session/reset-draft', () => {
+          shell.reset()
+        }),
       ]
       return () => {
         for (const off of offs) off()

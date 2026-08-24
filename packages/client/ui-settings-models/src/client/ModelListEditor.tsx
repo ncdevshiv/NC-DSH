@@ -18,6 +18,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { DiscoveredModelView, IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { inferModelModalities } from '@deepseek-ai/dsh-llm/capabilities'
 import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
 import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
 import { messageOf } from './store.ts'
@@ -42,6 +43,22 @@ function textOf(model: ModelDraft, key: string): string {
 function numberOf(model: ModelDraft, key: string): number | undefined {
   const value = model[key]
   return typeof value === 'number' ? value : undefined
+}
+
+/**
+ * Whether one row declares image input. An explicit `input` field is
+ * authoritative (adopted from a source that carried modalities or set by hand);
+ * when absent, infer from the model's id and name so well-known multimodal
+ * models default to checked, matching what the adapter resolves to.
+ */
+function declaresVision(model: ModelDraft): boolean {
+  const value = model['input']
+  if (Array.isArray(value)) {
+    return value.includes('image')
+  }
+  const id = typeof model['id'] === 'string' ? model['id'] : ''
+  const name = typeof model['name'] === 'string' ? model['name'] : undefined
+  return (inferModelModalities(id, name) ?? []).includes('image')
 }
 
 /** What an interrogation needs, taken from the live form. */
@@ -143,13 +160,16 @@ function capacitySpelling(value: number | undefined): string {
   return value === undefined ? '' : formatCapacity(value)
 }
 
-/** Adopt a candidate, keeping whatever capacities the provider disclosed. */
+/** Adopt a candidate, keeping whatever capacities and modalities the source disclosed. */
 function adopt(candidate: DiscoveredModelView): ModelDraft {
   return {
     id: candidate.id,
     ...candidate.name === undefined ? {} : { name: candidate.name },
     ...candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow },
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
+    ...(candidate.inputModalities === undefined || candidate.inputModalities.length === 0)
+      ? {}
+      : { input: [...candidate.inputModalities] },
   }
 }
 
@@ -210,7 +230,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     })
   }
 
-  const patch = (index: number, next: Record<string, string | number | undefined>): void => {
+  const patch = (index: number, next: Record<string, string | number | readonly string[] | undefined>): void => {
     onChange(models.map((model, at) => {
       if (at !== index) return model
       // Rebuilt rather than spread over: an emptied optional field has to leave
@@ -225,6 +245,17 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         Object.entries({ ...model, ...next }).filter(([key]) => !cleared.has(key)),
       )
     }))
+  }
+
+  /**
+   * Pin one row's image capability. Both states write the explicit
+   * declaration — checked pins `['text', 'image']`, unchecked pins
+   * `['text']` — because on a catalog route an absent field would inherit the
+   * installed entry's declaration, and "unchecked" has to mean text-only,
+   * not "whatever the catalog says".
+   */
+  const setVision = (index: number, vision: boolean): void => {
+    patch(index, { input: vision ? ['text', 'image'] : ['text'] })
   }
 
   const fetchModels = async (): Promise<void> => {
@@ -364,6 +395,16 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               disabled={disabled}
               onChange={(event) => { patch(index, { name: event.target.value === '' ? undefined : event.target.value }) }}
             />
+            <label className={styles['modelVision']} title={t('modelVisionHint')}>
+              <input
+                type="checkbox"
+                checked={declaresVision(model)}
+                disabled={disabled}
+                aria-label={`${t('modelVision')} ${index + 1}`}
+                onChange={(event) => { setVision(index, event.target.checked) }}
+              />
+              <span>{t('modelVision')}</span>
+            </label>
             <button
               type="button"
               className={styles['iconButton']}

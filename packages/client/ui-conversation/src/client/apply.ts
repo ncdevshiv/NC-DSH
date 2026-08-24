@@ -213,9 +213,12 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       hooks: { composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId) },
       selectWorkspace: async (workspaceId) => {
-        const nextId = await workspaces.connectWorkspace(workspaceId)
-        if (sessionId !== undefined && nextId !== sessionId) {
-          const from = inputHub.shell(sessionId)
+        const current = sessionId
+        // Move the in-progress draft and images from the current input shell
+        // into the target session's shell; a no-op without a current session.
+        const carryDraftInto = (nextId: SessionId): void => {
+          if (current === undefined || nextId === current) return
+          const from = inputHub.shell(current)
           const draft = from.snapshot.draft
           const imageIds = from.snapshot.imageIds
           const next = inputHub.shell(nextId)
@@ -229,7 +232,28 @@ export function apply(ctx: Context): void {
             }
           }
         }
-        sessions.open(nextId)
+        // Blank (or unresolvable) sessions take the cheap reuse-or-create
+        // path. A session with conversation history shifts instead: the
+        // retargeted fork carries the whole log into the chosen Workspace,
+        // so picking a workspace mid-chat keeps every prior message.
+        const summary = current === undefined
+          ? undefined
+          : sessions.list.getSnapshot().byId[current]
+        if (current === undefined || summary?.blank !== false) {
+          const nextId = await workspaces.connectWorkspace(workspaceId)
+          carryDraftInto(nextId)
+          sessions.open(nextId)
+          return
+        }
+        const targetPath = workspaces.list.getSnapshot().items
+          .find(workspace => workspace.workspaceId === workspaceId)?.path
+        const childId = await sessions.fork({
+          sessionId: current,
+          workspaceId,
+          ...(targetPath === undefined ? {} : { cwd: targetPath }),
+        })
+        carryDraftInto(childId)
+        sessions.open(childId)
       },
     }),
   }, ConversationRoot)

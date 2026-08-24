@@ -297,20 +297,48 @@ describe('ConversationRoot resident composer', () => {
     expect(seat('conversation.input.plan')).toEqual({ locked: true })
   })
 
-  it('lets the no-workspace posture win over a block', () => {
-    // Picking a workspace is the earlier prerequisite; naming a model first
-    // would send the user somewhere they cannot act yet.
+  it('keeps a workspace-less session usable as chat; a raised block owns the textarea', () => {
+    // No owning workspace: chat mode — the composer stays editable and the
+    // chip labels the session as choose workspace while keeping the shift-into-a-
+    // workspace picker affordance.
     const b = mount(conversationSnapshot({ composerPhase: 'blank' }), [], undefined, {
+      summaryBlank: true,
+    })
+    const box = b.view.getByRole('textbox') as HTMLTextAreaElement
+    expect(box.disabled).toBe(false)
+    expect(box.placeholder).toBe('描述你想要构建的内容')
+    expect(b.view.getByRole('button', { name: '选择工作区' })).toBeTruthy()
+    expect(b.pickerOwner()).toBeDefined()
+
+    // A raised block is the same inert posture with the blocker's own reason;
+    // the model seat stays live because choosing a model clears every block.
+    b.view.unmount()
+    const blocked = mount(conversationSnapshot({ composerPhase: 'blank' }), [], undefined, {
       summaryBlank: true,
       composerBlock: { reason: 'select a model first' },
     })
-    const box = b.view.getByRole('textbox') as HTMLTextAreaElement
-    expect(box.disabled).toBe(true)
-    expect(box.readOnly).toBe(false)
-    expect(box.getAttribute('aria-haspopup')).toBeNull()
-    expect(box.placeholder).not.toBe('select a model first')
-    const modelSeat = b.seatOwners.filter(call => call.key === 'conversation.input.model').at(-1)?.owner
-    expect(modelSeat).toEqual({ locked: true })
+    const blockedBox = blocked.view.getByRole('textbox') as HTMLTextAreaElement
+    expect(blockedBox.disabled).toBe(true)
+    expect(blockedBox.placeholder).toBe('select a model first')
+    const modelSeat = blocked.seatOwners.filter(call => call.key === 'conversation.input.model').at(-1)?.owner
+    expect(modelSeat).toEqual({ locked: false })
+  })
+
+  it('carries the shift-into-a-workspace chip into the active phase for a workspace-less session', () => {
+    // History exists, so the hero row is gone; the composer row keeps the
+    // picker affordance — how an ongoing chat moves into a workspace.
+    const b = mount(conversationSnapshot({ composerPhase: 'active', blank: false }), [])
+    expect(b.view.queryByText('探索未至之境')).toBeNull()
+    const chip = b.view.getByRole('button', { name: '选择工作区' }) as HTMLButtonElement
+    expect(chip.disabled).toBe(false)
+    fireEvent.click(chip)
+    const owner = b.pickerOwner() as { open: boolean }
+    expect(owner.open).toBe(true)
+
+    // A session that owns a workspace keeps today's no-switcher active phase.
+    b.view.unmount()
+    const grouped = mount(conversationSnapshot({ composerPhase: 'active', blank: false }))
+    expect(grouped.view.queryByRole('button', { name: '选择工作区' })).toBeNull()
   })
 
   it('keeps composer text in the machine, mirrors to the chat store, and submits through the sink', () => {

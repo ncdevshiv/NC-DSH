@@ -48,8 +48,12 @@ describe('web e2e: cold blank Session visibility', () => {
     await scaffold?.close()
   })
 
-  it('keeps the verified cold blank Session out of the sidebar', async () => {
+  it('opens the cold ungrouped blank as the selected chat session', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cold-blank-session'))
+    // Startup auto-selection lands in the workspace-less chat session: the
+    // only ungrouped blank is reused as that chat session and shows as the
+    // selected provisional New Session row under Ungrouped. The workspace
+    // folder name still never appears — no Workspace was registered.
     const tree = page.getByRole('tree', { name: 'Sessions' })
     await tree.waitFor({ timeout: 30_000 })
     expect(await tree.getByText(WORKSPACE_NAME, { exact: true }).count()).toBe(0)

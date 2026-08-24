@@ -150,7 +150,10 @@ function workspacesDouble() {
   const starts: unknown[] = []
   return {
     starts,
-    startSession: (workspaceId?: unknown) => { starts.push(workspaceId ?? null) },
+    startSession: (workspaceId?: unknown) => {
+      starts.push(workspaceId ?? null)
+      return Promise.resolve('fk-preset-new' as never)
+    },
   }
 }
 

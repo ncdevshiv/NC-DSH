@@ -222,4 +222,16 @@ describe('InputHub queue steering (empty-draft accelerated Enter)', () => {
     expect(b.updateQueue).not.toHaveBeenCalled()
     await b.runtime.dispose()
   })
+
+  it('resets draft when session/reset-draft event fires on the session scope', async () => {
+    const b = await bench()
+    b.shell.setDraft('typed draft text')
+    expect(b.shell.snapshot.draft).toBe('typed draft text')
+
+    const actx = b.runtime.sessions.scope('s1')!
+    actx.emit('session/reset-draft')
+
+    expect(b.shell.snapshot.draft).toBe('')
+    await b.runtime.dispose()
+  })
 })

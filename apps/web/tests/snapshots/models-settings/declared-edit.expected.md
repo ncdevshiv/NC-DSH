@@ -55,6 +55,8 @@
             - text: acme-large
           - textbox "显示名称 1":
             - /placeholder: 显示名称
+          - checkbox "视觉 1"
+          - text: 视觉
           - button "容量 1"
           - button "删除模型 1"
           - button "添加模型"

@@ -128,11 +128,13 @@ function bench(over?: BenchOptions) {
     },
     ...(over?.steerQueue !== undefined ? { steerQueue: over.steerQueue } : {}),
     // Lexicon-only stub: adjudication untouched (undefined slash methods are
-    // never reached — these benches drive plain-draft flows only).
+    // never reached — these benches drive plain-draft flows only). onChange
+    // does feed every draft through trigger detection, so track stays a no-op.
     ...(lex !== undefined
       ? {
         inputTriggers: (() => ({
           lexicon: { getSnapshot: () => lex, subscribe: () => () => {} },
+          track: () => {},
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
       : {}),
@@ -234,6 +236,53 @@ describe('image draft rail', () => {
     })
     expect(addImages).toHaveBeenCalledWith([image])
     expect(shell.snapshot.draft).toBe('同时粘贴的文字')
+  })
+
+  it('opens both upload pickers through the + menu and feeds picked files through the shared intake', () => {
+    const addImages = vi.fn(() => null)
+    const result = bench({ addImages })
+    const opened: string[] = []
+    const clickSpy = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(function click(this: HTMLElement) {
+      if (this instanceof HTMLInputElement && this.type === 'file') opened.push(this.accept)
+    })
+    try {
+      const launcher = result.view.getByLabelText('添加')
+      act(() => { fireEvent.click(launcher) })
+      act(() => { fireEvent.click(result.view.getByRole('menuitem', { name: '上传图片' })) })
+      act(() => { fireEvent.click(result.view.getByLabelText('添加')) })
+      act(() => { fireEvent.click(result.view.getByRole('menuitem', { name: '上传文件夹' })) })
+      expect(opened).toEqual(['image/png,image/jpeg,image/webp,image/gif', ''])
+    } finally {
+      clickSpy.mockRestore()
+    }
+    const [images, folders] = result.view.container.querySelectorAll<HTMLInputElement>('input[type="file"]')
+    expect(folders?.hasAttribute('webkitdirectory')).toBe(true)
+    const png = new File([Uint8Array.of(9)], 'picked.png', { type: 'image/png' })
+    act(() => { fireEvent.change(images!, { target: { files: [png] } }) })
+    expect(addImages).toHaveBeenCalledWith([png])
+    // The value clears so the same path can be re-picked.
+    expect(images!.value).toBe('')
+  })
+
+  it('mirrors the projected media types into the image picker filter', () => {
+    const result = bench({
+      addImages: vi.fn(() => null),
+      imageLimits: {
+        maxImageBytes: 1024,
+        maxImagesPerMessage: 4,
+        maxMessageImageBytes: 4096,
+        maxImagePixels: 40_000_000,
+        maxImageDimension: 2000,
+        mediaTypes: ['image/png'] as const,
+      },
+    })
+    const [images] = result.view.container.querySelectorAll<HTMLInputElement>('input[type="file"]')
+    expect(images?.accept).toBe('image/png')
+  })
+
+  it('disables the + launcher while the composer can reach neither attachments nor commands', () => {
+    const result = bench({ inert: true })
+    expect((result.view.getByLabelText('添加') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('pre-checks projected limits at intake: whole-batch refusal with product copy, none added', () => {
@@ -661,7 +710,7 @@ describe('running and lock semantics', () => {
     })
     expect(textarea.disabled).toBe(true)
     expect(textarea.placeholder).toBe('父会话已离线，无法继续发送；仍可停止当前运行')
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('添加') as HTMLButtonElement).disabled).toBe(true)
     expect(button.getAttribute('aria-label')).toBe('发送消息')
     expect(button.disabled).toBe(true)
     expect(interruptButton?.disabled).toBe(false)
@@ -709,7 +758,7 @@ describe('running and lock semantics', () => {
     const { textarea, view } = bench({ disabled: true })
     expect(textarea.disabled).toBe(true)
     expect(textarea.placeholder).toBe('会话不可用')
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('添加') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('idle primary sends and disables on empty draft', () => {
@@ -802,6 +851,33 @@ describe('running and lock semantics', () => {
     // The glyph layer carries the draft and nothing else — no height padding
     // to a second box's scroll extent.
     expect(backdrop.textContent).toBe('line\n'.repeat(40))
+  })
+
+  it('plain typing reaches the glyph and mirror layers inside the input event', () => {
+    const { view, textarea } = bench({ draft: '' })
+    const backdrop = view.container.querySelector<HTMLElement>('[data-input-backdrop]')!
+    const mirror = view.container.querySelector<HTMLElement>('[data-input-mirror]')!
+    act(() => {
+      fireEvent.change(textarea, { target: { value: 'typed' } })
+      // Still inside the act window: React has not committed, so the visible
+      // layers already holding the keystroke is the synchronous echo's work —
+      // the property that keeps them glued to the native caret on a loaded
+      // main thread.
+      expect(backdrop.firstChild).toBeInstanceOf(Text)
+      expect((backdrop.firstChild as Text).data).toBe('typed')
+      expect((mirror.firstChild as Text).data).toBe('typed\n')
+    })
+    expect((backdrop.firstChild as Text).data).toBe('typed')
+  })
+
+  it('a typing frame that introduces a decoration falls back to the commit path', () => {
+    const { view, textarea } = bench({ draft: '', lexicon: new Map([['/', ['goal']]]) })
+    const backdrop = view.container.querySelector<HTMLElement>('[data-input-backdrop]')!
+    fireEvent.change(textarea, { target: { value: 'see /goal now' } })
+    // The lexicon highlight makes the frame structural: the echo must skip it
+    // and let the commit build the marked range.
+    expect(backdrop.querySelector('[data-decoration="text-ref"]')).not.toBeNull()
+    expect(backdrop.textContent).toBe('see /goal now')
   })
 
   it('repairs Safari native overflow after the mirror shrinks the draft', () => {
@@ -1063,7 +1139,7 @@ describe('running and lock semantics', () => {
     expect(textarea.readOnly).toBe(false)
     expect(textarea.getAttribute('aria-haspopup')).toBeNull()
     expect(textarea.getAttribute('aria-expanded')).toBeNull()
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('添加') as HTMLButtonElement).disabled).toBe(true)
 
     // Clicking the card or pressing keys must not trigger a picker — the
     // chip and sidebar remain the only routes.
@@ -1326,10 +1402,10 @@ describe('strips and variants', () => {
   })
 })
 
-describe('command launcher chrome and control seats', () => {
-  it('renders the command launcher; the Access chip is absent without the permissions projection; the control seats render EMPTY without entries', () => {
+describe('+ launcher chrome and control seats', () => {
+  it('renders the + launcher; the Access chip is absent without the permissions projection; the control seats render EMPTY without entries', () => {
     const { view, slotCalls } = bench()
-    expect(view.getByLabelText('命令')).toBeTruthy()
+    expect(view.getByLabelText('添加')).toBeTruthy()
     // Capability absent (no projection value): the chip renders nothing.
     expect(view.queryByLabelText(/^访问模式/)).toBeNull()
     // Every seat dispatched, nothing rendered.
@@ -1340,16 +1416,21 @@ describe('command launcher chrome and control seats', () => {
     expect(view.queryByLabelText('Model')).toBeNull()
   })
 
-  it('passes the textarea selection to the command menu launcher and reflects its expanded state', () => {
+  it('the + menu fronts the upload pickers and the command row; the row passes the textarea selection to the command menu launcher', () => {
     const toggleCommandMenu = vi.fn()
-    const { view, textarea, menuLauncher } = bench({ draft: 'draft text', toggleCommandMenu })
-    textarea.setSelectionRange(2, 7)
-    const launcher = view.getByLabelText('命令')
+    const { view, textarea } = bench({ draft: 'draft text', toggleCommandMenu })
+    const launcher = view.getByLabelText('添加') as HTMLButtonElement
+    expect(launcher.getAttribute('aria-haspopup')).toBe('menu')
     expect(launcher.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(launcher)
-    expect(toggleCommandMenu).toHaveBeenCalledExactlyOnceWith({ start: 2, end: 7 })
-    act(() => { menuLauncher.set('command') })
     expect(launcher.getAttribute('aria-expanded')).toBe('true')
+    const rows = view.getAllByRole('menuitem').map(row => row.textContent)
+    expect(rows).toEqual(['上传图片', '上传文件夹', '命令'])
+    textarea.setSelectionRange(2, 7)
+    fireEvent.click(view.getByRole('menuitem', { name: '命令' }))
+    expect(toggleCommandMenu).toHaveBeenCalledExactlyOnceWith({ start: 2, end: 7 })
+    // The pick closed the + menu; the launcher tracks only its own menu.
+    expect(launcher.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('the Access chip renders the projection value and submits a non-Full-access pick directly', async () => {
@@ -1491,10 +1572,10 @@ describe('command launcher chrome and control seats', () => {
     expect(attachmentOwner(live.slotCalls).canAcceptDrop).toBe(true)
   })
 
-  it('disabled locks the Access chip and command launcher (running does not)', () => {
+  it('disabled locks the Access chip and the + launcher (running does not)', () => {
     const permissions = { options: [{ value: 'workspace-write', name: 'workspace-write' }], currentValue: 'workspace-write' }
     const { view } = bench({ disabled: true, permissions })
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('添加') as HTMLButtonElement).disabled).toBe(true)
     expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(true)
     cleanup()
     const live = bench({ running: true, permissions })

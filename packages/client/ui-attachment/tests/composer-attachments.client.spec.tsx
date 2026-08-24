@@ -65,7 +65,7 @@ function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): Composer
 }
 
 describe('ComposerAttachments', () => {
-  it('accepts file drops anywhere on the document and keeps non-file drags native', () => {
+  it('accepts file drops anywhere on the document and keeps non-file drags native', async () => {
     const onAddImages = vi.fn()
     const view = render(<ComposerAttachments {...props({
       onAddImages,
@@ -87,8 +87,46 @@ describe('ComposerAttachments', () => {
     expect(fireEvent.dragOver(document.body, { dataTransfer })).toBe(false)
     expect(dataTransfer.dropEffect).toBe('copy')
     expect(fireEvent.drop(document.body, { dataTransfer })).toBe(false)
-    expect(onAddImages).toHaveBeenCalledWith([image])
+    await vi.waitFor(() => expect(onAddImages).toHaveBeenCalledWith([image]))
     expect(view.queryByRole('status')).toBeNull()
+  })
+
+  it('descends into a dropped folder and forwards every collected file', async () => {
+    const onAddImages = vi.fn()
+    render(<ComposerAttachments {...props({ onAddImages })} />)
+    const top = attachment('top').file
+    const deep = attachment('deep').file
+    const fileEntry = (file: File): FileSystemFileEntry => ({
+      isFile: true, isDirectory: false, name: file.name,
+      file: (success: (data: File) => void) => { success(file) },
+    } as unknown as FileSystemFileEntry)
+    const dirEntry = (name: string, children: readonly FileSystemEntry[]): FileSystemDirectoryEntry => {
+      let served = false
+      return {
+        isFile: false, isDirectory: true, name,
+        createReader: () => ({
+          readEntries: (success: (entries: FileSystemEntry[]) => void) => {
+            if (served) { success([]); return }
+            served = true
+            success([...children])
+          },
+        }),
+      } as unknown as FileSystemDirectoryEntry
+    }
+    // The flat files list is empty — the folder itself is the only member —
+    // so everything must come from the entry walk.
+    const dataTransfer = {
+      types: ['Files'],
+      files: [],
+      dropEffect: 'none',
+      items: [{ webkitGetAsEntry: () => dirEntry('folder', [
+        fileEntry(top),
+        dirEntry('nested', [fileEntry(deep)]),
+      ]) }],
+    }
+    fireEvent.dragEnter(document.body, { dataTransfer })
+    fireEvent.drop(document.body, { dataTransfer })
+    await vi.waitFor(() => expect(onAddImages).toHaveBeenCalledWith([top, deep]))
   })
 
   it('tracks nested file drags and clears an aborted drag', () => {

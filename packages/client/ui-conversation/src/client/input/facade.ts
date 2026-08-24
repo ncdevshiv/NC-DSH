@@ -123,6 +123,17 @@ export class SessionInputShell implements SessionInput {
     this.run(this.core.dispatch({ type: 'draft-changed', draft: text, ...(editRange !== undefined ? { editRange } : {}) }))
   }
 
+  /**
+   * Reset the draft (clear text, image attachments, dismiss popup) when a fresh
+   * session start is requested.
+   */
+  reset(): void {
+    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return
+    this.imageIds = []
+    this.dismissPopup()
+    this.run(this.core.dispatch({ type: 'draft-changed', draft: '' }))
+  }
+
   /** Append ordered image ids unless an admission transaction is locked. */
   addImages(ids: readonly DraftAttachmentId[]): boolean {
     if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false

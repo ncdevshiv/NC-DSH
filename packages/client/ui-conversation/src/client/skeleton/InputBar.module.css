@@ -179,6 +179,13 @@
   padding: 4px 12px 0 16px;
   font-family: var(--dsw-font-family);
   font-size: inherit;
+  font-weight: inherit;
+  font-style: inherit;
+  font-variant-ligatures: none;
+  font-feature-settings: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-rendering: auto;
   /* Three consumers, not two: the mirror sizes the stack, the layers must break
      lines identically, and the caret reveal parses this value to step one line
      down for a caret that sits after a newline. That parse needs a length, so a
@@ -279,7 +286,10 @@
   gap: 12px;
 }
 
-/* Attach circle (figma + control): 28px, selector fill, primary glyph. */
+/* Launcher circle (figma + control): 28px, selector fill, primary glyph.
+   The row holds the single + launcher; its menu opens the upload pickers
+   (images, folder) and the command menu, which are invisible inputs beside
+   the button and host-launched popups respectively. */
 .add {
   display: grid;
   place-items: center;
@@ -300,6 +310,11 @@
 .add:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* The upload buttons' file pickers: never rendered, only opened by click(). */
+.fileInput {
+  display: none;
 }
 
 /* Plan / Read-only / model — native <select>, chip-like closed chrome

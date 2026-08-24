@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14, IconPlusOutline16, IconTrashOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { inferModelModalities } from '@deepseek-ai/dsh-llm/capabilities'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
@@ -18,6 +19,23 @@ export type DeepSeekModelDraft = Record<string, unknown>
 
 /** The catalog fields this editor writes. */
 type CatalogField = 'id' | 'name' | 'contextWindow' | 'maxTokens'
+
+/**
+ * Whether one row declares image input. An explicit `inputModalities` field
+ * is authoritative (the user set the checkbox or the row was adopted from a
+ * source that carried modalities); when absent, infer from the model's id and
+ * name so well-known multimodal models default to checked, matching what the
+ * adapter resolves to.
+ */
+function declaresVision(model: DeepSeekModelDraft): boolean {
+  const value = model['inputModalities']
+  if (Array.isArray(value)) {
+    return value.includes('image')
+  }
+  const id = typeof model['id'] === 'string' ? model['id'] : ''
+  const name = typeof model['name'] === 'string' ? model['name'] : undefined
+  return (inferModelModalities(id, name) ?? []).includes('image')
+}
 
 /** The two token counts edited as K/M-suffixed text behind a row's disclosure. */
 type CapacityField = 'contextWindow' | 'maxTokens'
@@ -174,6 +192,18 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
     props.onChange(next)
   }
 
+  /**
+   * Pin one row's image capability. Both states write the explicit
+   * `inputModalities` declaration — checked pins `['text', 'image']`,
+   * unchecked pins `['text']` — because the field is what the adapter reads
+   * and an absent field would fall back to its text-only default anyway.
+   */
+  const setVision = (index: number, vision: boolean): void => {
+    props.onChange(props.models.map((model, at) => at === index
+      ? { ...model, inputModalities: vision ? ['text', 'image'] : ['text'] }
+      : { ...model }))
+  }
+
   const remove = (index: number): void => {
     setEditing((current) => {
       const next = new Map<string, string>()
@@ -317,6 +347,16 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
                       update(index, 'name', event.target.value === '' ? undefined : event.target.value)
                     }}
                   />
+                  <label className={styles['modelVision']} title={props.t('modelVisionHint')}>
+                    <input
+                      type="checkbox"
+                      checked={declaresVision(model)}
+                      disabled={props.disabled}
+                      aria-label={`${props.t('modelVision')} ${String(index + 1)}`}
+                      onChange={(event) => { setVision(index, event.target.checked) }}
+                    />
+                    <span>{props.t('modelVision')}</span>
+                  </label>
                   <button
                     type="button"
                     className={styles['iconButton']}

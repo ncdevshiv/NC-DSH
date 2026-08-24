@@ -254,12 +254,18 @@ describe('conversation slot inject API', () => {
   it('routes workspace switching through the runtime owner, carrying the draft', async () => {
     const b = await bench()
     const resident = b.residentApi(ROOT)
-    // Same-session connect (the picked workspace resolves to this session):
-    // no draft movement, plain re-open.
-    b.runtime.workspaces.stub('connectWorkspace', () => Promise.resolve(ROOT))
-    const { state, actions } = b.inputApi(ROOT)
+    // A blank session takes the cheap connect arm. Same-session connect (the
+    // picked workspace resolves to this session): no draft movement, plain
+    // re-open.
+    const BLANK = await b.runtime.sessions.add(
+      { id: 'blank-1', summary: { blank: true } },
+      { current: false },
+    )
+    b.runtime.workspaces.stub('connectWorkspace', () => Promise.resolve(BLANK))
+    const blankResident = b.residentApi(BLANK)
+    const { state, actions } = b.inputApi(BLANK)
     actions.setDraft('carry me')
-    void resident.selectWorkspace('workspace-1' as never)
+    void blankResident.selectWorkspace('workspace-1' as never)
     await vi.waitFor(() => {
       expect(b.runtime.sessions.calls.filter(c => c.method === 'open')).toHaveLength(1)
     })
@@ -270,12 +276,29 @@ describe('conversation slot inject API', () => {
     const OTHER = 'other-1' as SessionId
     await b.runtime.sessions.add({ id: OTHER }, { current: false })
     b.runtime.workspaces.stub('connectWorkspace', () => Promise.resolve(OTHER))
-    void resident.selectWorkspace('workspace-2' as never)
+    void blankResident.selectWorkspace('workspace-2' as never)
     await vi.waitFor(() => {
       expect(b.runtime.sessions.calls).toContainEqual({ method: 'open', args: [OTHER] })
     })
     expect(state.getSnapshot().draft).toBe('')
     expect(b.inputApi(OTHER).state.getSnapshot().draft).toBe('carry me')
+    // A session with conversation history shifts instead: the retargeted
+    // fork carries the whole log into the chosen Workspace (the cwd hint
+    // rides the target's path when the list knows it), and navigation opens
+    // the child.
+    await b.runtime.workspaces.update((draft) => {
+      draft.items = [...draft.items, {
+        workspaceId: 'ws-nine', title: 'Nine', path: '/nine', sessionIds: [],
+        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      } as never]
+    })
+    void resident.selectWorkspace('ws-nine' as never)
+    await vi.waitFor(() => {
+      expect(b.runtime.sessions.calls).toContainEqual({
+        method: 'fork',
+        args: [{ sessionId: ROOT, workspaceId: 'ws-nine', cwd: '/nine' }],
+      })
+    })
     await b.runtime.dispose()
   })
 
@@ -291,11 +314,14 @@ describe('conversation slot inject API', () => {
     })
 
     // Cross-session connect with an EMPTY draft: no move, no clearing.
+    const BLANK = await b.runtime.sessions.add(
+      { id: 'b9-blank', summary: { blank: true } },
+      { current: false },
+    )
     const OTHER = 'b9-other' as SessionId
     await b.runtime.sessions.add({ id: OTHER }, { current: false })
-    const resident = b.residentApi(ROOT)
-    const { state } = b.inputApi(ROOT)
-    expect(state.getSnapshot().draft).toBe('')
+    const resident = b.residentApi(BLANK)
+    expect(b.inputApi(BLANK).state.getSnapshot().draft).toBe('')
     b.runtime.workspaces.stub('connectWorkspace', () => Promise.resolve(OTHER))
     void resident.selectWorkspace('workspace-3' as never)
     await vi.waitFor(() => {

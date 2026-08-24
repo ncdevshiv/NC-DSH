@@ -9,6 +9,8 @@
   height: 100%;
   min-width: 0;
   background: var(--dsw-alias-bg-base);
+  border-top-left-radius: 10px;
+  overflow: hidden;
 
   /* Shared width axis for the whole column: one content width W
      (--dsh-chat-content-width) for the transcript, the dock cards
@@ -25,10 +27,15 @@
   --dsh-composer-dock-inset: 8px;
 }
 
+/* Header band: background is bg-base matching the conversation surface, with
+   a subtle bottom border. The caption inset reserves the native window
+   buttons' width on the desktop shell while this column reaches the window's
+   right edge (base.css owns the variable; 0 in browsers). */
 .header {
   position: relative;
   flex: none;
-  padding: 12px 28px 0 20px;
+  padding: 0 calc(28px + var(--dsh-caption-inset, 0px)) 0 20px;
+  background: var(--dsw-alias-bg-base);
   border-bottom: 1px solid transparent;
 }
 
@@ -36,7 +43,7 @@
   content: '';
   position: absolute;
   right: 0;
-  bottom: 1px;
+  bottom: 0;
   left: 0;
   z-index: 0;
   height: 1px;
@@ -44,17 +51,20 @@
   pointer-events: none;
 }
 
-/* Blank hero/settling: keep the strict Session header mounted without taking
-   column space; the root-owned scrollport and composer remain below it. */
-.headerHidden {
-  display: none;
+/* Blank hero/settling: the strict Session header stays mounted as the empty
+   title-bar band — the window chrome (and its drag surface) persists across
+   phases — and its content returns when the session is no longer blank. */
+.headerBand {
+  height: 40px;
 }
 
 .titleRow {
   display: flex;
   align-items: center;
   gap: 0;
-  min-height: 32px;
+  /* The shell's title-bar row height (apps/desktop TITLE_BAR_HEIGHT): the
+     row's content centers on the native caption buttons' line. */
+  min-height: 40px;
 }
 
 .titleCluster {
@@ -138,8 +148,8 @@
   z-index: 1;
   display: flex;
   gap: 36px;
-  margin-top: 4px;
   padding-left: 8px;
+  background: transparent;
 }
 
 /* figma .Tab 34:11442: 13/16 text (figma wt510, rendered 500), gap 8 to the 2px bar. */
@@ -159,7 +169,7 @@
   content: '';
   position: absolute;
   right: 0;
-  bottom: 1px;
+  bottom: 0;
   left: 0;
   height: 2px;
   border-radius: 2px;
@@ -348,6 +358,23 @@
   margin-top: 4px;
   /* figma drew px 8; nudged +12 so the chip's folder glyph lines up closer to
      the card's inner controls below. */
+  padding-left: 20px;
+}
+
+/* Active-phase shift row: the same chip above the docked card for a
+   workspace-less session with history. Width rides the card cap so the row
+   centers exactly over it (the docked stack is full-column); the inset
+   mirrors .heroWorkspaceRow so the glyph lines up with the card's inner
+   controls in both phases. */
+.activeWorkspaceRow {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+  max-width: var(--dsh-composer-card-max-width);
+  margin-inline: auto;
   padding-left: 20px;
 }
 

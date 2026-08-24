@@ -10,8 +10,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
+  IconFolderOpenOutline16, IconPaperclipOutline16, IconPlusOutline16, IconWarningOutline16, Menu, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
 import type {} from '@deepseek-ai/dsh-plan-mode/client'
@@ -33,6 +34,9 @@ import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
 const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], hint: null }
+
+/** Picker filter when no attachment service projects limits (the fixed v1 image list). */
+const DEFAULT_IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
 
 export type InputBarProps = ComposerBarProps
 
@@ -98,6 +102,12 @@ export function InputBar({
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
+  const backdropRef = useRef<HTMLDivElement | null>(null)
+  // The draft the two text layers currently show as bare Text nodes, or null
+  // while they show decorations. Written by the commit-path effect below and
+  // by the synchronous echo, so consecutive keystrokes outrunning a commit
+  // keep taking the fast path.
+  const plainEchoRef = useRef<string | null>(null)
   const safari = useMemo(() => isSafariBrowser(navigator), [])
   const safariNativeShrinkRef = useRef(false)
   // IME guard: composition Enter picks a candidate, it must not send. The ref outlives renders;
@@ -121,7 +131,7 @@ export function InputBar({
   const continuable = subagent?.address.mode === 'continuable'
   const parentOffline = continuable && !subagent.parentAvailable
   // Running input stays free; locked = session removed, the
-  // inert no-workspace state, the machine faces absent (no session), or a
+  // inert no-session state, the machine faces absent (no session), or a
   // parent-offline continuable child. An owner block also disables input;
   // adjudicating and submitting render read-only so the draft stays visible.
   const disabled = removed || inert || !live || blocked !== undefined || parentOffline
@@ -354,12 +364,48 @@ export function InputBar({
     ))
   }
 
+  // Synchronous plain-text glyph echo. The native caret moves inside the
+  // keypress task, but the backdrop's glyphs repaint at this component's next
+  // commit, and on a loaded main thread (streaming-transcript renders share
+  // it) that commit lands frames late — leaving the caret one or two invisible
+  // characters ahead of the visible tail. While both text layers are bare
+  // Text nodes, typing patches them in place within the input event itself;
+  // the later commit writes the identical strings and changes nothing. The
+  // machine state is already current when this runs (setDraft dispatched
+  // first), so the patch can only agree with the pending render.
+  const echoPlainText = (next: string): void => {
+    if (!backdropRef.current || !mirrorRef.current) return
+    let bd = backdropRef.current.firstChild
+    if (!bd) {
+      bd = document.createTextNode('')
+      backdropRef.current.appendChild(bd)
+    }
+    let mir = mirrorRef.current.firstChild
+    if (!mir) {
+      mir = document.createTextNode('')
+      mirrorRef.current.appendChild(mir)
+    }
+    if (!(bd instanceof Text) || !(mir instanceof Text)) return // not mounted / decorated layers
+    bd.data = next
+    mir.data = `${next}\n`
+    plainEchoRef.current = next
+  }
+
   const onChange = (e: ChangeEvent<HTMLTextAreaElement>): void => {
     if (keyboard === undefined || locked) return // disabled/read-only states cannot edit the draft
     if (machineBusy) return // submitting is the read-only span; adjudicating holds the pending lock
     const next = e.target.value
     safariNativeShrinkRef.current = safari && next.length < draft.length
     keyboard.setDraft(next)
+    // The echo requires the CURRENT layers to be plain and the NEXT state to
+    // stay plain; any decoration (claim token, chip, lexicon highlight, hint)
+    // falls back to the normal commit path where structural DOM changes belong.
+    if (plainEchoRef.current !== null) {
+      const decoNow = deriveDecorations(keyboard.snapshot, lexicon)
+      const plainNow = decoNow.token === null && decoNow.chips.length === 0
+        && decoNow.textRefs.length === 0 && decoNow.hint === null
+      if (plainNow) echoPlainText(next)
+    }
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
     // oxlint-disable-next-line typescript/no-unnecessary-condition
     keyboard.track(next, e.target.selectionStart ?? next.length)
@@ -453,6 +499,22 @@ export function InputBar({
 
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
 
+  // The upload pickers behind the + menu: plain multi-select for images, a
+  // directory picker for folders (the `webkitdirectory` attribute has no React
+  // prop, so it is set through the ref). Both feed the same intake pre-check
+  // as paste and drop; clearing the value lets one path be re-picked.
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const folderInputRef = useRef<HTMLInputElement | null>(null)
+  const mountFolderInput = (el: HTMLInputElement | null): void => {
+    folderInputRef.current = el
+    if (el !== null) el.setAttribute('webkitdirectory', '')
+  }
+  const acceptTypes = imageLimits === undefined ? DEFAULT_IMAGE_ACCEPT : imageLimits.mediaTypes.join(',')
+  const onPickedFiles = (e: ChangeEvent<HTMLInputElement>): void => {
+    intakeImages(Array.from(e.target.files ?? []))
+    e.target.value = ''
+  }
+
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
     // Any caret/selection gesture ends a live paste attempt (the machine
     // cannot observe DOM selection). Cheap no-op when none is live.
@@ -472,6 +534,33 @@ export function InputBar({
   const onToggleCommandMenu = (): void => {
     const el = inputRef.current
     if (el !== null) toggleCommandMenu?.(selectionOf(el))
+  }
+
+  // The single + launcher: one menu fronts the two upload pickers and the
+  // command menu. Each row keeps the exact gate its separate button had —
+  // attachment rows refuse while the composer cannot accept images, the
+  // command row while the command face is absent — so a disabled row is the
+  // same refusal the removed buttons rendered, not a new one.
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+  const onAttachMenuClose = useCallback(() => { setAttachMenuOpen(false) }, [])
+  useEffect(() => {
+    if (locked) setAttachMenuOpen(false)
+  }, [locked])
+  const attachMenuItems: MenuEntry[] = [
+    { id: 'images', label: t('input.addImages'), icon: <IconPaperclipOutline16 size={14} />, disabled: !canAcceptDrop },
+    { id: 'folder', label: t('input.addFolder'), icon: <IconFolderOpenOutline16 size={14} />, disabled: !canAcceptDrop },
+    { type: 'separator', id: 'attach-separator' },
+    { id: 'commands', label: t('input.commands'), disabled: locked || toggleCommandMenu === undefined },
+  ]
+  const onAttachMenuPick = (id: string): void => {
+    setAttachMenuOpen(false)
+    // The menu row took focus on click; the textarea takes it back first —
+    // the command menu arbitrates keystrokes through the textarea, and the
+    // OS picker returns focus to the previously focused element.
+    inputRef.current?.focus({ preventScroll: true })
+    if (id === 'images') imageInputRef.current?.click()
+    else if (id === 'folder') folderInputRef.current?.click()
+    else onToggleCommandMenu()
   }
 
   // Ordinary sessions retain their primary Send/Stop toggle. A continuable
@@ -501,6 +590,13 @@ export function InputBar({
   // text. Claim tokens and references retain the draft's own glyph metrics,
   // so their decoration cannot drift from wrapping, selection, or the caret.
   const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
+  // A decoration-free draft renders both text layers as bare Text nodes —
+  // the precondition for the synchronous typing echo in onChange.
+  const decoPlain = deco.token === null && deco.chips.length === 0
+    && deco.textRefs.length === 0 && deco.hint === null
+  useLayoutEffect(() => {
+    plainEchoRef.current = decoPlain ? draft : null
+  })
   const backdrop: ReactNode[] = []
   {
     // Segment boundaries: the token range end, every structured-reference
@@ -632,12 +728,13 @@ export function InputBar({
         <div ref={scrollRef} className={css.scroll} data-input-scroll>
           <div className={css.grow}>
             <div
+              ref={backdropRef}
               aria-hidden
               className={clsx(css.backdrop, textareaDisabled && css.backdropDisabled)}
               data-input-backdrop
               data-disabled={textareaDisabled || undefined}
             >
-              {backdrop}
+              {decoPlain ? draft : backdrop}
             </div>
             <textarea
               ref={inputRef}
@@ -671,20 +768,48 @@ export function InputBar({
         </div>
         <div className={css.row}>
           <div className={css.tools}>
-            <Tooltip label={t('input.commands')} side="top" delayMs={500}>
-              <button
-                type="button"
-                className={css.add}
-                aria-label={t('input.commands')}
-                aria-haspopup="listbox"
-                aria-expanded={commandMenuOpen}
-                disabled={locked || toggleCommandMenu === undefined}
-                onMouseDown={keepFocus}
-                onClick={onToggleCommandMenu}
-              >
-                <IconPlusOutline16 size={14} />
-              </button>
-            </Tooltip>
+            <Menu
+              open={attachMenuOpen}
+              side="top"
+              anchor={
+                <Tooltip label={t('input.add')} side="top" delayMs={500}>
+                  <button
+                    type="button"
+                    className={css.add}
+                    aria-label={t('input.add')}
+                    aria-haspopup="menu"
+                    aria-expanded={attachMenuOpen}
+                    disabled={locked || (toggleCommandMenu === undefined && !canAcceptDrop)}
+                    onMouseDown={keepFocus}
+                    onClick={() => { setAttachMenuOpen(open => !open) }}
+                  >
+                    <IconPlusOutline16 size={14} />
+                  </button>
+                </Tooltip>
+              }
+              items={attachMenuItems}
+              onSelect={onAttachMenuPick}
+              onClose={onAttachMenuClose}
+            />
+            <input
+              ref={imageInputRef}
+              aria-hidden
+              tabIndex={-1}
+              type="file"
+              className={css.fileInput}
+              multiple
+              accept={acceptTypes}
+              onChange={onPickedFiles}
+            />
+            <input
+              ref={mountFolderInput}
+              aria-hidden
+              tabIndex={-1}
+              type="file"
+              className={css.fileInput}
+              multiple
+              onChange={onPickedFiles}
+            />
             <div className={css.modes}>
               {accessSelect}
               {renderSlot('conversation.input.plan', { locked })}

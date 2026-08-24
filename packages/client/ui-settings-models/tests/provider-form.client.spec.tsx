@@ -217,6 +217,43 @@ describe('model list editing', () => {
     })
   })
 
+  it('pins image input per row through the vision checkbox', async () => {
+    const { mutate } = await mountSection()
+    openEditor('openai')
+
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'ox-vision' } })
+    const vision = (): HTMLInputElement => screen.getByLabelText(`${en.modelVision} 1`)
+    expect(vision().checked).toBe(false)
+    fireEvent.click(vision())
+    expect(vision().checked).toBe(true)
+    // Unchecking writes the explicit text-only list rather than removing the
+    // field, so an inherited image declaration cannot survive an uncheck.
+    fireEvent.click(vision())
+    expect(vision().checked).toBe(false)
+    fireEvent.click(vision())
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([
+      { id: 'ox-vision', input: ['text', 'image'] },
+    ])
+  })
+
+  it('shows a stored modality declaration as a checked vision box', async () => {
+    await mountSection({
+      providers: {
+        openai: {
+          baseURL: 'https://proxy.example/v1',
+          models: [{ id: 'seeing', input: ['text', 'image'] }, { id: 'blind', input: ['text'] }],
+        },
+      },
+    })
+    openEditor('openai')
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelVision} 1`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelVision} 2`).checked).toBe(false)
+  })
+
   it('names a duplicate model id in the edit flow too', async () => {
     const { mutate } = await mountSection({
       providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'dup' }] } },
@@ -480,7 +517,10 @@ describe('endpoint interrogation', () => {
     fireEvent.click(screen.getByText(en.fetchModels))
     await screen.findByText(en.fetchTitle)
     // The already-configured row starts unchecked; the new one starts checked.
-    const boxes = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+    // Scoped to the dialog: each model row now carries its own vision checkbox,
+    // which must not read as a picker selection.
+    const dialog = screen.getByRole('dialog')
+    const boxes = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
     expect(boxes.map(box => box.checked)).toEqual([false, true])
     fireEvent.click(screen.getByText(en.fetchAdopt))
 
@@ -489,6 +529,36 @@ describe('endpoint interrogation', () => {
     expect(firstMutate(mutate).ops[0]?.value).toEqual([
       { id: 'kept', contextWindow: 111 },
       { id: 'fresh', contextWindow: 4096, name: 'Fresh' },
+    ])
+  })
+
+  it('adopts a candidate\'s declared modalities as its vision tag', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [
+        { id: 'seeing', inputModalities: ['text', 'image'] },
+        { id: 'unlisted', inputModalities: ['text'] },
+        { id: 'silent' },
+      ],
+    })))
+    const { mutate } = await mountSection({ discover })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await screen.findByText(en.fetchTitle)
+    fireEvent.click(screen.getByText(en.fetchAdopt))
+    // The adopted rows carry the answering source's own declaration, checked
+    // exactly where it declared image input; a source that said nothing stays
+    // on the route default.
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelVision} 1`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelVision} 2`).checked).toBe(false)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelVision} 3`).checked).toBe(false)
+
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([
+      { id: 'seeing', input: ['text', 'image'] },
+      { id: 'unlisted', input: ['text'] },
+      { id: 'silent' },
     ])
   })
 

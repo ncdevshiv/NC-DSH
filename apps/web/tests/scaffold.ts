@@ -750,13 +750,22 @@ export function fixtureUserPrompts(fixtureText: string): string[] {
  * @returns the realized fixture text.
  */
 export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, id: string): string {
+  // Substituted paths land inside JSON strings, so they go in JSON-escaped
+  // form: a Windows workspace path's backslashes are illegal escapes raw and
+  // would break the header parse below (and every later log parse).
+  const workspaceJson = jsonEscapePath(scaffold.workspaceCwd)
   const realized = fixtureText
     .split('{{sessionId}}').join(id)
-    .split('{{cwd}}').join(scaffold.workspaceCwd)
+    .split('{{cwd}}').join(workspaceJson)
   const fixtureCwd = (JSON.parse(realized.split('\n', 1)[0]!) as { cwd?: string }).cwd
-  return fixtureCwd === undefined
+  return fixtureCwd === undefined || fixtureCwd === scaffold.workspaceCwd
     ? realized
-    : realized.split(fixtureCwd).join(scaffold.workspaceCwd)
+    : realized.split(jsonEscapePath(fixtureCwd)).join(workspaceJson)
+}
+
+/** Escape a path for embedding inside a JSON string literal. */
+function jsonEscapePath(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
 export async function seedSession(

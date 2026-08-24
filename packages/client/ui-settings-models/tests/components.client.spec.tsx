@@ -478,6 +478,30 @@ describe('ModelsSection', () => {
     })
   })
 
+  it('pins a DeepSeek row\'s image input through the vision checkbox', async () => {
+    const { mutate } = await mountDeepSeekCard({
+      mutate: vi.fn(() => Promise.resolve(ok(wireNamespaces()[0]))),
+    })
+    fireEvent.click(screen.getByText(en.customized))
+    const vision = (index: number): HTMLInputElement => screen.getByLabelText(`${en.modelVision} ${index}`)
+    // Inherited rows start unchecked: no stored declaration exists yet.
+    expect(vision(1).checked).toBe(false)
+    fireEvent.click(vision(1))
+    expect(vision(1).checked).toBe(true)
+    // Unchecking writes the explicit text-only list rather than clearing.
+    fireEvent.click(vision(1))
+    fireEvent.click(vision(2))
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
+    const call = mutate.mock.calls[0]?.[0] as { ops: { path: string[]; value?: unknown }[] }
+    expect(call.ops[0]?.path).toEqual(['models'])
+    expect(call.ops[0]?.value).toEqual([
+      { ...DEFAULT_DEEPSEEK_MODELS[0], inputModalities: ['text'] },
+      { ...DEFAULT_DEEPSEEK_MODELS[1], inputModalities: ['text', 'image'] },
+    ])
+  })
+
   it('rejects duplicate DeepSeek model ids before writing', async () => {
     const { mutate } = await mountDeepSeekCard()
     fireEvent.click(screen.getByText(en.customized))
@@ -1321,6 +1345,74 @@ describe('ModelsSection', () => {
     expect(mutate.mock.calls[0]?.[0]).toEqual({
       ns: 'llm-pi-ai',
       ops: [{ op: 'unset', path: ['providers', 'zombie'] }],
+    })
+  })
+
+  it('offers Reset for a whole-section built-in and confirms it restores defaults', async () => {
+    // A whole-section provider's profile is its namespace, so no write can
+    // remove the row — clearing the user section lets defaults take back
+    // over. The action must say Reset for that, never Delete.
+    const scripted = scriptedFace()
+    const deepseekDefaults: SettingsNamespaceView = {
+      ns: 'llm-deepseek',
+      schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as unknown,
+      value: { defaultContextWindow: 1_000_000, maxTokens: 256_000, models: DEFAULT_DEEPSEEK_MODELS },
+      base: { defaultContextWindow: 1_000_000, maxTokens: 256_000, models: DEFAULT_DEEPSEEK_MODELS },
+      applies: 'live',
+      secrets: [],
+      revision: 0,
+    }
+    scripted.face.settings.describe.mockImplementation(() => Promise.resolve(ok({
+      writable: true,
+      hasDocument: false,
+      namespaces: wireNamespaces().map(ns => ns.ns === 'llm-deepseek' ? deepseekDefaults : ns),
+    })))
+    const { mutate, unset } = await mountFace(scripted)
+    fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.resetProvider) }))
+    const dialog = screen.getByRole('dialog', { name: deepSeekCopy(en.resetTitle) })
+    expect(dialog.textContent).toContain(deepSeekCopy(en.resetRestoresBase))
+    fireEvent.click(within(dialog).getByRole('button', { name: deepSeekCopy(en.resetConfirm) }))
+    await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
+    expect(mutate.mock.calls[0]?.[0]).toEqual({
+      ns: 'llm-deepseek',
+      ops: [{ op: 'unset', path: [] }],
+    })
+    expect(unset).not.toHaveBeenCalled()
+  })
+
+  it('offers Reset even for a customized whole-section provider with a stored key', async () => {
+    // The regression: a customized profile made the row "user-authored", so
+    // the dialog claimed Deleting removes its configuration while the row was
+    // structurally guaranteed to remain. The reset framing covers this case.
+    let resolveReset!: (response: RpcResponse<SettingsNamespaceView>) => void
+    const mutate = vi.fn((_request: { ns: string; ops: readonly { op: string; path: string[] }[] }) =>
+      new Promise<RpcResponse<SettingsNamespaceView>>((resolve) => {
+        resolveReset = resolve
+      }))
+    const scripted = scriptedFace({ mutate })
+    scripted.face.credentials.describe.mockImplementation((payload: { refs: string[] }) =>
+      Promise.resolve(ok({
+        credentials: Object.fromEntries(payload.refs.map(ref => [ref, {
+          configured: true,
+          source: 'file',
+          writable: true,
+        }])),
+      })))
+    const { unset } = await mountFace(scripted)
+    fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.resetProvider) }))
+    const dialog = screen.getByRole('dialog', { name: deepSeekCopy(en.resetTitle) })
+    expect(dialog.textContent).toContain(deepSeekCopy(en.resetRestoresBaseWithCredential))
+    fireEvent.click(within(dialog).getByRole('button', { name: deepSeekCopy(en.resetConfirm) }))
+    await waitFor(() => { expect(unset).toHaveBeenCalledWith({ ref: 'DEEPSEEK_API_KEY' }) })
+    await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
+    expect(within(dialog).getByRole('button', { name: deepSeekCopy(en.resetting) })).toBeTruthy()
+    expect(mutate.mock.calls[0]?.[0]).toEqual({
+      ns: 'llm-deepseek',
+      ops: [{ op: 'unset', path: [] }],
+    })
+    await act(async () => { resolveReset(ok(wireNamespaces()[0]!)) })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: deepSeekCopy(en.resetTitle) })).toBeNull()
     })
   })
 

@@ -224,9 +224,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * chain's fallback (a real entry, not a chain rider, so a
      * takeover election hides rather than unmounts it and the textarea DOM
      * survives). Session-maybe: the bar stays mounted across the
-     * no-session/session transition — the no-workspace hero renders the SAME
-     * textarea DOM as a read-only Workspace-picker trigger instead of a
-     * parallel inert tree — with the machine hooks absent until a session is
+     * no-session/session transition — only the truly-no-session state renders
+     * the SAME textarea DOM as a read-only Workspace-picker trigger instead
+     * of a parallel inert tree (a workspace-less session is chat mode and
+     * stays editable) — with the machine hooks absent until a session is
      * current. InputBar registers
      * here from this package's apply; its machine state arrives through the
      * standard provide channel (useInput + inputActions), the keyboard
@@ -454,6 +455,9 @@ export interface ConversationInjected {
   /**
    * Connect the selected Workspace and open its reusable/new blank session.
    * When a blank session is already current, carry its draft to the target.
+   * A current session with conversation history shifts instead: a workspace-
+   * retargeted fork carries the whole log into that Workspace's session, so
+   * picking a workspace mid-chat retains every prior message.
    */
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /**
@@ -508,7 +512,7 @@ export interface ComposerBarOwnerProps {
    */
   blocked?: { readonly reason: string }
   /**
-   * Inert no-workspace state: the bar locks message actions while preserving
+   * Inert no-session state: the bar locks message actions while preserving
    * its normal DOM so the Workspace pick transitions in place.
    */
   disabled?: boolean

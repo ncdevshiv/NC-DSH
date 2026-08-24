@@ -44,9 +44,11 @@ describe('startup RPC budget', () => {
       if (url.pathname.startsWith('/api/')) calls.push(url.pathname.slice('/api/'.length))
     })
     await page.goto(scaffold.baseUrl)
-    // Boot settles when the workspace picker is interactive; the trailing wait
-    // absorbs the first-connection reset wave the budget must include.
-    await page.getByRole('textbox', { name: 'Choose workspace' }).waitFor({ timeout: 30_000 })
+    // Boot settles when the auto-connected chat session's composer is live;
+    // the trailing wait absorbs the first-connection reset wave the budget
+    // must include.
+    await page.locator('textarea:enabled[placeholder="Describe what you want to build"]')
+      .waitFor({ timeout: 30_000 })
     await page.waitForTimeout(3000)
     const describeCount = calls.filter(method => method === 'settings.describe').length
     expect(describeCount, `startup /api calls:\n${calls.join('\n')}`).toBe(DESCRIBE_BUDGET)

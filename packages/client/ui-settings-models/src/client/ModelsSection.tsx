@@ -65,6 +65,10 @@ interface EditorTarget extends ProviderIdentity {
   credentialRef?: string
   /** The adapter reports this route as one it does not ship (see {@link ProviderEditorProps.declared}). */
   declared?: boolean
+  /** The current profile was not authored by the user, so the destructive
+   * action resets defaults rather than deleting a saved configuration, and
+   * the control says so. */
+  restoresBase?: boolean
 }
 
 /** Values that vary around the shared provider-editor rendering. */
@@ -155,6 +159,10 @@ function targetOf(row: ProviderRow): EditorTarget {
     // route-level fields only a declared route owns off the card, exactly as
     // it leaves the custom tag off the row.
     ...row.entry.declared === true ? { declared: true } : {},
+    // A whole-section target always restores defaults (its namespace is
+    // composition-owned and cannot be removed). A path-addressed target
+    // deletes when user-authored and restores when matching base.
+    ...row.entry.settingsPath.length === 0 || !row.removable ? { restoresBase: true } : {},
   }
 }
 
@@ -369,12 +377,15 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   >
                     {t('edit')}
                   </button>
-                  {row.removable
+                  {row.entry.settingsPath.length === 0 || row.removable
                     ? (
                       <button
                         type="button"
                         className={styles['dangerButton']}
-                        aria-label={providerCopy(t('removeProvider'), target)}
+                        aria-label={providerCopy(
+                          target.restoresBase === true ? t('resetProvider') : t('removeProvider'),
+                          target,
+                        )}
                         disabled={!state.writable}
                         onClick={() => {
                           setSavedTarget(undefined)
@@ -382,7 +393,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                           setDeleteTarget(target)
                         }}
                       >
-                        {t('remove')}
+                        {target.restoresBase === true ? t('reset') : t('remove')}
                       </button>
                     )
                     : null}
@@ -502,14 +513,23 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       <Modal
         open={deleteTarget !== undefined}
         onClose={closeDelete}
-        title={deleteTarget === undefined ? '' : providerCopy(t('deleteTitle'), deleteTarget)}
+        title={deleteTarget === undefined
+          ? ''
+          : providerCopy(
+            deleteTarget.restoresBase === true ? t('resetTitle') : t('deleteTitle'),
+            deleteTarget,
+          )}
         closeLabel={t('close')}
         description={deleteTarget === undefined
           ? ''
           : providerCopy(
-            deleteTarget.credentialRef === undefined
-              ? t('deleteDescription')
-              : t('deleteDescriptionWithCredential'),
+            deleteTarget.restoresBase === true
+              ? deleteTarget.credentialRef === undefined
+                ? t('resetRestoresBase')
+                : t('resetRestoresBaseWithCredential')
+              : deleteTarget.credentialRef === undefined
+                ? t('deleteDescription')
+                : t('deleteDescriptionWithCredential'),
             deleteTarget,
           )}
         className={styles['deleteDialog'] as string}
@@ -526,7 +546,12 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             >
               {deleteTarget === undefined
                 ? ''
-                : providerCopy(deleting ? t('deleting') : t('deleteConfirm'), deleteTarget)}
+                : providerCopy(
+                  deleting
+                    ? deleteTarget.restoresBase === true ? t('resetting') : t('deleting')
+                    : deleteTarget.restoresBase === true ? t('resetConfirm') : t('deleteConfirm'),
+                  deleteTarget,
+                )}
             </Button>
           </>
         )}

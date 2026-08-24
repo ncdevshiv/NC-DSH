@@ -160,7 +160,9 @@ export function apply(ctx: ClientContext): void {
         // The introduce cue makes the chip announce the pick the user never
         // made on this screen — the stage happened back in settings.
         seat.stage('cordis', true)
-        scope.workspaces.startSession()
+        // Programmatic start: failures are logged by the runtime; this chip
+        // has no surface of its own to render them on.
+        scope.workspaces.startSession().catch(() => {})
       }
       const chip = scope.slots.register({
         name: 'conversation.hero.agentPreset',

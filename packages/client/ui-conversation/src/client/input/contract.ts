@@ -33,6 +33,8 @@ export interface InputTarget {
 export interface SessionInput extends InputTarget {
   /** Single write path for draft text (all mutation rides machine events). */
   setDraft(text: string): void
+  /** Reset draft text, image attachments, and dismiss popup on fresh session activation. */
+  reset(): void
   /** Append ordered browser-owned image ids; busy admission phases refuse. */
   addImages(ids: readonly DraftAttachmentId[]): boolean
   /** Remove one browser-owned image id; busy admission phases refuse. */

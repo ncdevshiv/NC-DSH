@@ -28,21 +28,24 @@ export function workspaceLabel(cwd: string): string {
 }
 
 /**
- * The workspace chip (folder + label + chevron), always interactive: before
+ * The workspace chip (icon + label + chevron), always interactive: before
  * the first message the workspace stays switchable — picking another one
  * moves the New Session flow to that workspace's blank session. Without a
  * label the chip renders its placeholder state: closed folder + the
- * "Choose workspace" call to action.
+ * "Choose workspace" call to action. A workspace-less chat session labels
+ * the chip with its own glyph via `icon`, keeping the picker affordance.
  * @param props.label - chip label (see {@link workspaceLabel}); omitted → placeholder.
  * @param props.menuOpen - menu expansion echo.
  * @param props.onClick - menu toggle.
+ * @param props.icon - leading-glyph override (chat mode); folders render when omitted.
  * @returns the chip button element.
  */
-export function WorkspaceChip({ buttonRef, label, menuOpen = false, onClick, t }: {
+export function WorkspaceChip({ buttonRef, label, menuOpen = false, onClick, icon, t }: {
   buttonRef?: RefObject<HTMLButtonElement>
   label?: string | undefined
   menuOpen?: boolean
   onClick?: () => void
+  icon?: ReactNode | undefined
   t: HeroTranslate
 }) {
   return (
@@ -55,9 +58,9 @@ export function WorkspaceChip({ buttonRef, label, menuOpen = false, onClick, t }
       aria-expanded={menuOpen}
       onClick={onClick}
     >
-      {label === undefined
+      {icon ?? (label === undefined
         ? <IconFolderClose16 className={css.folder} size={16} />
-        : <IconFolderOpen16 className={css.folder} size={16} />}
+        : <IconFolderOpen16 className={css.folder} size={16} />)}
       <span className={css.workspaceLabel}>{label ?? t('hero.chooseWorkspace')}</span>
       <IconChevronDownOutline14 className={css.chevron} size={12} />
     </button>

@@ -6,6 +6,7 @@ import { AttachmentRail } from '../AttachmentRail.tsx'
 import type { AttachmentRailItem } from '../AttachmentRail.tsx'
 import { DropOverlay } from '../DropOverlay.tsx'
 import { ImageLightbox } from '../ImageLightbox.tsx'
+import { filesFromDataTransfer } from './drop-files.ts'
 import { attachmentRailLabels, dropOverlayLabels, lightboxLabels } from './labels.ts'
 import css from './ComposerAttachments.module.css'
 
@@ -62,7 +63,12 @@ export function ComposerAttachments({
       if (dataTransfer === null) return
       event.preventDefault()
       reset()
-      if (canAcceptDrop) onAddImages([...dataTransfer.files])
+      if (!canAcceptDrop) return
+      // Dropped folders need the entry walk; the flat files list holds only
+      // top-level members. The intake pre-check owns the batch verdict.
+      void filesFromDataTransfer(dataTransfer).then((files) => {
+        if (files.length > 0) onAddImages(files)
+      })
     }
     document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)

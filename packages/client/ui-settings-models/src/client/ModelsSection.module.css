@@ -462,9 +462,26 @@
 
 .modelRow {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 6px;
+}
+
+/* The per-row vision tag: a compact labeled checkbox between the display
+   name and the row actions. */
+.modelVision {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.modelVision input {
+  margin: 0;
 }
 
 /* Square, label-free affordances: the row's own inputs carry the meaning, so

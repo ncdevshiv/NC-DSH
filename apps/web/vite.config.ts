@@ -112,6 +112,13 @@ export default defineConfig({
   plugins: [rejectStandaloneServe(), clientDocumentTitle(), react()],
   build: {
     sourcemap: true,
+    // Watch rebuilds skip the public-dir copy: two writers over one dist asset
+    // collide with Windows EBUSY and killed the watcher outright (the
+    // single-instance guard plus dev-web's stage supervisor are the other two
+    // layers of that defense). Requires one prior non-watch `bun run build`
+    // for dist to hold the public files at all — the documented dev-web
+    // prerequisite.
+    copyPublicDir: !process.argv.includes('--watch'),
     rollupOptions: {
       output: {
         // Output layout: the two main chunks stay at assets/ root; lazy

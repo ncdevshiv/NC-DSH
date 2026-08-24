@@ -86,16 +86,33 @@ export function ConversationRoot({
   //   2. cold start, no session yet → placeholder ("Choose workspace");
   //   3. the blank session's workspace is in the list → its title;
   //   4. list still loading → cwd folder name bridges so the title does not
-  //      flash on refresh (empty cwd → placeholder);
-  //   5. list ready but no owning workspace (deleted from the sidebar) →
-  //      placeholder, never the deleted folder's name via cwd.
+  //      flash on refresh;
+  //   5. no owning workspace once the list is ready — a workspace-less chat
+  //      session, or one whose workspace was deleted — stays usable as chat:
+  //      the chip reads the chat label (chat glyph) and still opens the
+  //      picker, which is how a chat shifts into a workspace.
+  const bridgingCwd = workspaces.phase !== 'ready' && cwd !== undefined && cwd !== ''
   const chipTitle = pendingWorkspace?.title
     ?? (sessionId === undefined
       ? undefined
       : sessionWorkspace?.title
-        ?? (workspaces.phase === 'ready' || cwd === undefined || cwd === ''
-          ? undefined
-          : workspaceLabel(cwd)))
+        ?? (bridgingCwd ? workspaceLabel(cwd) : undefined))
+
+  // The picker slot and its anchor are shared by both chip rows — hero and
+  // active are exclusive phases, so only one instance mounts at a time.
+  const pickerSlot = renderSlot('conversation.hero.workspace', {
+    open: pickerOpen,
+    anchorRef: pickerAnchor,
+    selectedId: pendingWorkspaceId ?? sessionWorkspace?.workspaceId,
+    onPick: (workspaceId) => {
+      setPickerOpen(false)
+      setPendingWorkspaceId(workspaceId)
+      void selectWorkspace(workspaceId).catch(() => {
+        setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
+      })
+    },
+    onClose: () => { setPickerOpen(false) },
+  })
 
   const heroWorkspaceRow = (
     <div className={css.heroWorkspaceRow}>
@@ -106,29 +123,37 @@ export function ConversationRoot({
         onClick={() => { setPickerOpen(open => !open) }}
         t={t}
       />
-      {renderSlot('conversation.hero.workspace', {
-        open: pickerOpen,
-        anchorRef: pickerAnchor,
-        selectedId: pendingWorkspaceId ?? sessionWorkspace?.workspaceId,
-        onPick: (workspaceId) => {
-          setPickerOpen(false)
-          setPendingWorkspaceId(workspaceId)
-          void selectWorkspace(workspaceId).catch(() => {
-            setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
-          })
-        },
-        onClose: () => { setPickerOpen(false) },
-      })}
+      {pickerSlot}
       {renderSlot('conversation.hero.agentPreset', {})}
     </div>
   )
 
-  // The placeholder chip ("Choose workspace") and the Workspace-trigger input travel
-  // together: no workspace picked yet (cold start, no session at all), or a
-  // blank session whose workspace vanished (deleted from the sidebar). The
-  // bar is ONE session-maybe slot rendered unconditionally — inert is a prop,
-  // not a different tree, so the textarea DOM survives the transition.
-  const inert = sessionId === undefined || (hero && chipTitle === undefined)
+  // Active-phase shift affordance: a workspace-less session with conversation
+  // history has no hero row left, so the composer carries the same picker
+  // entry — picking (or adding) a workspace here is how an ongoing chat moves
+  // into work mode with its history. Sessions that already own a workspace
+  // keep today's no-switcher behavior.
+  const activeShiftVisible = sessionId !== undefined && !hero
+    && sessionWorkspace === undefined && !bridgingCwd
+  const activeWorkspaceRow = !activeShiftVisible ? null : (
+    <div className={css.activeWorkspaceRow}>
+      <WorkspaceChip
+        buttonRef={pickerAnchor}
+        label={pendingWorkspace?.title ?? t('hero.chooseWorkspace')}
+        menuOpen={pickerOpen}
+        onClick={() => { setPickerOpen(open => !open) }}
+        t={t}
+      />
+      {pickerSlot}
+    </div>
+  )
+
+  // The bar is ONE session-maybe slot rendered unconditionally — inert is a prop,
+  // not a different tree, so the textarea DOM survives the transition. Inert
+  // is ONLY the truly-no-session state: a workspace-less session stays
+  // usable as chat mode, its chip doubling as the shift-into-a-workspace
+  // affordance.
+  const inert = sessionId === undefined
   // A raised block is the same inert posture with the blocker's own reason:
   // one disabled textarea, never a second tree. The no-workspace state wins
   // when both hold — picking a workspace is the earlier prerequisite.
@@ -159,6 +184,7 @@ export function ConversationRoot({
       {hero && <HeroGlow className={css.heroGlow} />}
       {hero && <HeroShell t={t} renderSlot={renderSlot} />}
       {hero && heroWorkspaceRow}
+      {activeWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
     </div>
