@@ -76,6 +76,8 @@ const CATALOG: Record<string, PluginMeta> = {
   '@deepseek-ai/dsh-cmdline': { summary: 'Immutable command-line handoff from a dsh launcher to any app plugin that injects cmdlineArgs', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
   '@deepseek-ai/dsh-code-runtime': { summary: 'Abstract code-execution seam (ctx.codeRuntime) for the DeepSeek Harness', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
   '@deepseek-ai/dsh-code-runtime-python': { summary: 'CPython subprocess implementation of the DeepSeek Harness code-execution seam', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
+  '@deepseek-ai/dsh-browser': { summary: 'Abstract browser-automation capability seam (ctx.browser) for the DeepSeek Harness — provider registry, registration-order-independent selection, session/page vocabulary, and the BrowserError taxonomy', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
+  '@deepseek-ai/dsh-tool-browser': { summary: 'Model-facing browser tools (browser_navigate/snapshot/click/type/screenshot) over ctx.browser', impact: 'Browser automation. Disabling removes model browser control.' },
   '@deepseek-ai/dsh-code-runtime-worker-thread': { summary: 'Worker-thread implementation of the DeepSeek Harness code-execution seam', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
   '@deepseek-ai/dsh-command-compact': { summary: 'Human-facing slash command for explicit session compaction', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
   '@deepseek-ai/dsh-command-feedback': { summary: 'Log-only session feedback producer and human-facing slash command', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
@@ -232,11 +234,17 @@ const CATALOG: Record<string, PluginMeta> = {
   '@deepseek-ai/dsh-web-search-deepseek': { summary: 'DeepSeek-backed search provider (native web_search via the Anthropic-compatible API) for the DeepSeek Harness web capability seam (ctx.web)', impact: 'Web search/fetch. Disabling removes internet browsing.' },
   '@deepseek-ai/dsh-web-search-exa': { summary: 'Exa-backed search provider for the DeepSeek Harness web capability seam (ctx.web)', impact: 'Web search/fetch. Disabling removes internet browsing.' },
   '@deepseek-ai/dsh-web-search-perplexity': { summary: 'Perplexity-backed search provider for the DeepSeek Harness web capability seam (ctx.web)', impact: 'Web search/fetch. Disabling removes internet browsing.' },
+  '@deepseek-ai/dsh-web-search-searxng': { summary: 'SearXNG-backed search provider for the DeepSeek Harness web capability seam (ctx.web): queries a self-hosted SearXNG instance JSON API', impact: 'Web search/fetch. Disabling removes the searxng backend.' },
   '@deepseek-ai/dsh-workflow': { summary: 'Workflow capability seam: ctx.workflowEngine service, run vocabulary, and workflow/* events', impact: 'Workflow engine. Disabling removes the workflow tool and durable runs.' },
   '@deepseek-ai/dsh-workflow-worker-thread': { summary: 'worker-thread workflow engine: executes model-written orchestration scripts off the host event loop, bridging agent() calls back to ctx.subagents', impact: 'Workflow engine. Disabling removes the workflow tool and durable runs.' },
   '@deepseek-ai/dsh-workspace': { summary: 'Workspace entity registry (ctx.workspaceRegistry): durable workspace records with validated session attachment over the domain data form for the DeepSeek Harness', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
   '@deepseek-ai/schemastery': { summary: 'Type driven schema validator', impact: 'Disabling removes this feature; re-enable to restore it. Requires host restart if the plugin already failed to apply.' },
 }
+/**
+ * Resolve one plugin module's inventory summary and impact fallback.
+ * @param moduleName - the plugin package or builtin name as mounted.
+ * @returns the catalog entry, or a derived fallback for unknown names.
+ */
 export function getPluginMeta(moduleName: string): PluginMeta {
   const exact = CATALOG[moduleName]
   if (exact) return exact
@@ -258,6 +266,11 @@ export function getPluginMeta(moduleName: string): PluginMeta {
   const human = short.replace(/^dsh-/, '').replace(/-/g, ' ')
   return { summary: 'Plugin ' + human, impact: 'Disabling removes this feature; re-enable to restore it.' }
 }
+/**
+ * True for plugins the shell cannot render without.
+ * @param moduleName - the plugin package name as mounted.
+ * @returns whether disabling it would break the assembled browser shell.
+ */
 /* v8 ignore next 3 -- essential check is simple predicate, covered via component rendering */
 export function isEssentialPlugin(moduleName: string): boolean {
   return moduleName.includes('ui-renderer') || moduleName.includes('client-modules') || moduleName.includes('client-runtime') || moduleName.includes('connection') || moduleName.includes('host-plugin-inventory') || moduleName.includes('cordis-plugin-loader')

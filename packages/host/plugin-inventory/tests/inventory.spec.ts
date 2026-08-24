@@ -15,6 +15,9 @@ const pendingPlugin: Plugin.Object = {
   inject: ['neverReady'],
   apply() {},
 }
+// Publishes a service so a second same-module instance collides with it —
+// the duplicate-registration failure the replacement path reconciles.
+const duplicateProvider: Plugin.Function = (ctx) => { ctx.provide('duplicateService', true) }
 
 async function harness(): Promise<{
   ctx: Context
@@ -117,5 +120,66 @@ describe('PluginInventoryGateway', () => {
 
     const missing = await inventory.setEnabled('missing' as never, false)
     expect(missing.ok).toBe(false)
+  })
+
+  it('enables an entry whose module already runs by replacing the active duplicate', async () => {
+    const { ctx, inventory } = await harness()
+    ctx.loader.builtins['dup-provider'] = duplicateProvider
+    const firstId = await ctx.loader.create({ name: 'cordis:dup-provider' })
+    const secondId = await ctx.loader.create({ name: 'cordis:dup-provider', disabled: true })
+
+    const result = await inventory.setEnabled(secondId as never, true)
+
+    // The direct enable collided with the first instance's service; the
+    // gateway displaced it and the target now owns the service alone.
+    expect(result).toEqual({ ok: true })
+    const rows = inventory.list().entries
+    expect(rows.find(row => row.entryId === firstId)).toMatchObject({ enabled: false, fiberPhase: null })
+    expect(rows.find(row => row.entryId === secondId)).toMatchObject({ enabled: true, fiberPhase: 'active' })
+    expect(ctx.get('duplicateService')).toBe(true)
+  })
+
+  it('restores the displaced providers when the replacement itself fails', async () => {
+    const { ctx, inventory } = await harness()
+    ctx.loader.builtins['dup-provider'] = duplicateProvider
+    const firstId = await ctx.loader.create({ name: 'cordis:dup-provider' })
+    const secondId = await ctx.loader.create({ name: 'cordis:dup-provider', disabled: true })
+
+    // Fail only the retry (the second enable of the target), not the initial
+    // attempt whose failure triggers displacement.
+    const realUpdate = ctx.loader.update.bind(ctx.loader)
+    let enableAttempts = 0
+    ;(ctx.loader as { update: typeof realUpdate }).update = async (id, options) => {
+      if (id === secondId && (options as { disabled?: unknown } | undefined)?.disabled === null) {
+        enableAttempts += 1
+        if (enableAttempts > 1) throw new Error('synthetic replacement failure')
+      }
+      return realUpdate(id, options)
+    }
+
+    const result = await inventory.setEnabled(secondId as never, true)
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('synthetic replacement failure')
+    expect(enableAttempts).toBe(2)
+    // The previously active provider is running again; the target stays disabled.
+    const rows = inventory.list().entries
+    expect(rows.find(row => row.entryId === firstId)).toMatchObject({ enabled: true, fiberPhase: 'active' })
+    expect(rows.find(row => row.entryId === secondId)).toMatchObject({ enabled: false, fiberPhase: null })
+    expect(ctx.get('duplicateService')).toBe(true)
+  })
+
+  it('reports an unrelated enable failure verbatim without touching other entries', async () => {
+    const { ctx, inventory } = await harness()
+    const healthyId = await ctx.loader.create({ name: 'cordis:active' })
+    const missingId = await ctx.loader.create({ name: './missing-plugin.mjs', disabled: true })
+
+    const result = await inventory.setEnabled(missingId as never, true)
+
+    // No active same-module entry exists, so nothing is displaced and the
+    // loader's own import failure reaches the caller unchanged.
+    expect(result.ok).toBe(false)
+    expect(result.message).toMatch(/failed to import loader entry/)
+    expect(inventory.list().entries.find(row => row.entryId === healthyId)?.fiberPhase).toBe('active')
   })
 })

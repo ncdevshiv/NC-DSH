@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-24-desktop-recovery-stack.md
+2026-08-24-desktop-recovery-stack.md: 06be18317b7694bb090201484441046438948562
+2026-08-24-desktop-recovery-stack.zh.md: a1ef8436f4912d129a605107463a19045e56279e

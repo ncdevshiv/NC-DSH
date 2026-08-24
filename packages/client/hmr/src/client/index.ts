@@ -57,9 +57,13 @@
  * apply opens a fresh channel. Frames arriving during the gap are lost —
  * acceptable for the dev channel, the next rebuild renotifies.
  *
- * Failure policy: no rollback. An import failure leaves the entry
- * fiberless (the next rebuilt frame retries from scratch); an apply failure
- * leaves a FAILED fiber for the shell's status projection. Both log loudly.
+ * Failure policy: bounded self-recovery, no rollback. A failed swap retries
+ * with backoff (0/500/2000ms) before giving up until the next rebuilt frame;
+ * an import failure leaves the entry fiberless (retryable the same way); an
+ * apply failure leaves a FAILED fiber for the shell's status projection.
+ * Every settled swap — success or final failure — announces `dsh:hmr-swapped`
+ * on window so crashed slot boundaries reset against the live generation.
+ * All failures log loudly.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Entry, Loader } from '@deepseek-ai/cordis-plugin-loader'
@@ -91,6 +95,67 @@ function removeOwnedStyles(id: string): void {
 }
 
 /**
+ * Quiesce point before the destructive phase: let in-flight browser work
+ * settle so no React commit or microtask is mid-render while registrations
+ * are absent. Without it, a render landing in the teardown→rematerialize gap
+ * throws "service unavailable" inside an entry boundary and abdicates that
+ * entry — recoverable since the boundary self-heals on the swap signal, but
+ * avoidable churn. Two animation frames straddle one full commit cycle.
+ */
+function settle(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => { requestAnimationFrame(() => { setTimeout(resolve, 0) }) })
+  })
+}
+
+/** Swap-settled announcement: crashed slot boundaries reset on this signal. */
+function announceSwapped(id: string): void {
+  window.dispatchEvent(new CustomEvent('dsh:hmr-swapped', { detail: { id } }))
+}
+
+// ── white-screen watchdog ───────────────────────────────────────────────────
+//
+// A swap (or boot) failure above the slot layer — an uncaught throw while a
+// shell-critical entry applies — leaves the renderer blank, and every heal
+// below that layer is unreachable because there is no mounted tree left to
+// heal. The watchdog is the top of the recovery ladder: after boot and after
+// every settled swap it checks for real rendered content and, finding none,
+// performs exactly ONE automatic page reload per episode. A sessionStorage
+// stamp (survives the reload, cleared on success) makes the second blank
+// window in a row log loudly and stop — a reload loop would hide the very
+// failure this exists to surface.
+
+const WATCHDOG_DELAY_MS = 8_000
+const WATCHDOG_MIN_TEXT_CHARS = 40
+const WATCHDOG_GUARD_KEY = 'dsh:hmr-watchdog-reloaded'
+const WATCHDOG_GUARD_WINDOW_MS = 60_000
+
+/** Heuristic liveness: the shell always renders chrome text; a truly blank renderer does not. */
+function rendererLooksAlive(): boolean {
+  const body = document.body
+  if (body === null) return false
+  if (document.querySelector('canvas, video') !== null) return true
+  return body.innerText.trim().length >= WATCHDOG_MIN_TEXT_CHARS
+}
+
+function armWatchdog(ctx: Context, delayMs: number = WATCHDOG_DELAY_MS): void {
+  window.setTimeout(() => {
+    if (rendererLooksAlive()) {
+      sessionStorage.removeItem(WATCHDOG_GUARD_KEY)
+      return
+    }
+    const stamped = Number(sessionStorage.getItem(WATCHDOG_GUARD_KEY) ?? '0')
+    if (Number.isFinite(stamped) && stamped > 0 && Date.now() - stamped < WATCHDOG_GUARD_WINDOW_MS) {
+      ctx.logger.error('client-hmr: renderer blank even after the watchdog reload; not reloading again — inspect the renderer console for the uncaught error')
+      return
+    }
+    ctx.logger.error(`client-hmr: renderer blank ${String(delayMs)}ms after boot/swap; forcing one page reload`)
+    sessionStorage.setItem(WATCHDOG_GUARD_KEY, String(Date.now()))
+    window.location.reload()
+  }, delayMs)
+}
+
+/**
  * Mount the HMR driver: subscribe to the system SSE channel and hot-swap
  * rebuilt entries.
  * @param ctx - plugin context with `loader` and `modules` available.
@@ -117,6 +182,9 @@ export function apply(ctx: Context): void {
 
     const oldFiber = entry.fiber
     if (oldFiber !== undefined) {
+      // Quiesce first: in-flight commits drain against the OLD, fully
+      // registered world (see settle()).
+      await settle()
       // Registry-first teardown (see module comment): the runtime record must
       // be gone before the fiber's disposer emits internal/plugin, or the
       // Loader flags the entry disabled.
@@ -139,15 +207,50 @@ export function apply(ctx: Context): void {
     await entry.fiber?.await()
   }
 
+  /**
+   * True for cordis's inactive-context rejection — the signature of applying
+   * or continuing work on a fiber whose uid was cleared. A swap that produced
+   * one has left the entry half-applied; an immediate retry would re-apply
+   * onto that dead context and throw again, so this failure ends the retry
+   * budget and waits for the next rebuilt frame (fresh bytes, fresh state).
+   */
+  function isInactiveContextError(error: unknown): boolean {
+    return error instanceof Error && error.message.includes('cannot create effect on inactive context')
+  }
+
   // Serialize reloads: frames can arrive faster than a swap completes, and
   // interleaved dispose/execute chains would corrupt the single-slot handoff.
+  // A failed swap retries with backoff (bounded): transient import/apply
+  // failures used to strand an entry fiberless until the NEXT rebuild, which
+  // for a shell-critical plugin meant a dead window. After the final attempt
+  // (or success) the swap signal still fires so crashed slot boundaries get
+  // their one chance to reset against whatever generation is live.
   let queue: Promise<void> = Promise.resolve()
+  const RELOAD_DELAYS_MS = [0, 500, 2000] as const
   const handle = (frame: PluginsEventFrame): void => {
     switch (frame.type) {
       case 'rebuilt':
-        queue = queue.then(() => reload(frame.id)).catch((error: unknown) => {
-          ctx.logger.error(`client-hmr: reload of "${frame.id}" failed`)
-          ctx.logger.error(error)
+        queue = queue.then(async () => {
+          for (let attempt = 0; attempt < RELOAD_DELAYS_MS.length; attempt++) {
+            try {
+              if (RELOAD_DELAYS_MS[attempt] !== 0) {
+                await new Promise((resolve) => { setTimeout(resolve, RELOAD_DELAYS_MS[attempt]) })
+              }
+              await reload(frame.id)
+              announceSwapped(frame.id); armWatchdog(ctx)
+              return
+            } catch (error: unknown) {
+              const last = attempt === RELOAD_DELAYS_MS.length - 1
+              ctx.logger.error(
+                `client-hmr: reload of "${frame.id}" failed (attempt ${String(attempt + 1)})${last ? ' — giving up until the next rebuilt frame' : ''}`,
+              )
+              ctx.logger.error(error)
+              if (last || isInactiveContextError(error)) {
+                announceSwapped(frame.id); armWatchdog(ctx)
+                return
+              }
+            }
+          }
         })
         break
       case 'graph':
@@ -178,4 +281,7 @@ export function apply(ctx: Context): void {
     })
     return () => { source.close() }
   }, 'client-hmr: event source')
+
+  // Boot arm: a renderer that never painted gets one automatic reload.
+  armWatchdog(ctx)
 }

@@ -16,7 +16,8 @@
     "directory": "apps/desktop"
   },
   "files": [
-    "main.mjs"
+    "main.mjs",
+    "preload.cjs"
   ],
   "license": "MIT",
   "devDependencies": {
