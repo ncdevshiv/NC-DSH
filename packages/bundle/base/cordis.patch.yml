@@ -433,6 +433,15 @@
     - id: browser
       name: '@deepseek-ai/dsh-browser'
 
+    # Local moli providers over the browser and fetch seams: dormant until
+    # $MOLI_BINARY (or `moli` on PATH) names a built binary, the same
+    # availability posture as the searxng row above. `tool-browser` stays a
+    # preset decision; host availability alone grants no tool.
+    - id: browser-moli
+      name: '@deepseek-ai/dsh-browser-moli'
+
+    - id: web-fetch-moli
+      name: '@deepseek-ai/dsh-web-fetch-moli'
 
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 

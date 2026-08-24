@@ -197,8 +197,14 @@
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
-    fetch: false
+    fetch: true
     searchTimeoutMs: 60000
+
+# Browser automation over the base bundle's browser seam; the moli CDP
+# provider mounts beside it, availability-gated on the moli binary
+# ($MOLI_BINARY or `moli` on PATH).
+- id: tool-browser
+  name: '@deepseek-ai/dsh-tool-browser'
 
 # ── dataworm / openmem sidecars ─────────────────────────────────────────────
 #
