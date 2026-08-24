@@ -63,7 +63,7 @@ try {
       } else {
         try { process.kill(held.pid, 'SIGTERM') } catch { /* already gone; taking the lock over is correct */ }
       }
-    } else {
+    } else if (!forceSecondInstance) {
       console.error(
         `[desktop] another dev:desktop stack is running (pid ${String(held.pid)}`
         + `${typeof held.url === 'string' ? `, ${held.url}` : ''}). Close it first, `
