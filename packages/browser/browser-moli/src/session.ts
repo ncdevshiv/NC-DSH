@@ -76,20 +76,22 @@ export class MoliBrowserSession implements BrowserSession {
     private readonly handle: MoliSessionHandle,
     private readonly limits: {
       readonly navigationTimeoutMs: number
+      readonly cdpTimeoutMs: number
       readonly maxContentChars: number
+      readonly settleMs: number
     },
   ) {}
 
   /** @inheritDoc */
-  async navigate(request: BrowserNavigateRequest): Promise<BrowserPageState> {
+  async navigate(request: BrowserNavigateRequest, signal?: AbortSignal): Promise<BrowserPageState> {
     const url = assertNavigationUrl(request.url)
     return this.enqueue(async () => {
       // The load-event waiter registers BEFORE the command: a page that
       // finishes loading between command resolution and registration would
       // otherwise miss the event and stall out the whole budget.
-      const loaded = this.handle.connection.waitForEvent('Page.loadEventFired', this.limits.navigationTimeoutMs)
+      const loaded = this.handle.connection.waitForEvent('Page.loadEventFired', this.limits.navigationTimeoutMs, signal)
       try {
-        await this.handle.connection.send('Page.navigate', { url }, this.limits.navigationTimeoutMs)
+        await this.handle.connection.send('Page.navigate', { url }, this.limits.navigationTimeoutMs, signal)
       } catch (error: unknown) {
         // The send failure is the reported cause; its load-event waiter must
         // not linger until its own deadline or surface as an unhandled rejection.
@@ -100,31 +102,31 @@ export class MoliBrowserSession implements BrowserSession {
         throw error
       }
       await loaded
-      return this.readState()
+      return this.readState(signal)
     })
   }
 
   /** @inheritDoc */
-  async snapshot(): Promise<BrowserPageState> {
-    return this.enqueue(() => this.readState())
+  async snapshot(signal?: AbortSignal): Promise<BrowserPageState> {
+    return this.enqueue(() => this.readState(signal))
   }
 
   /** @inheritDoc */
-  async click(request: BrowserClickRequest): Promise<BrowserPageState> {
+  async click(request: BrowserClickRequest, signal?: AbortSignal): Promise<BrowserPageState> {
     return this.enqueue(async () => {
       const outcome = await this.evaluateDomScript(`(() => {
         const el = document.querySelector(${JSON.stringify(request.selector)});
         if (!el) return 'missing';
         el.click();
         return 'ok';
-      })()`)
+      })()`, signal)
       this.assertPresent(outcome)
-      return this.settleAndRead()
+      return this.settleAndRead(signal)
     })
   }
 
   /** @inheritDoc */
-  async type(request: BrowserTypeRequest): Promise<BrowserPageState> {
+  async type(request: BrowserTypeRequest, signal?: AbortSignal): Promise<BrowserPageState> {
     return this.enqueue(async () => {
       const submit = request.submit === true
       const outcome = await this.evaluateDomScript(`(() => {
@@ -142,19 +144,19 @@ export class MoliBrowserSession implements BrowserSession {
           }
         }
         return 'ok';
-      })()`)
+      })()`, signal)
       this.assertPresent(outcome)
-      return this.settleAndRead()
+      return this.settleAndRead(signal)
     })
   }
 
   /** @inheritDoc */
-  async screenshot(request: BrowserScreenshotRequest): Promise<BrowserScreenshot> {
+  async screenshot(request: BrowserScreenshotRequest, signal?: AbortSignal): Promise<BrowserScreenshot> {
     return this.enqueue(async () => {
       const result = await this.handle.connection.send('Page.captureScreenshot', {
         format: 'png',
         captureBeyondViewport: request.fullPage === true,
-      }) as { data?: string }
+      }, this.limits.cdpTimeoutMs, signal) as { data?: string }
       if (result.data === undefined) {
         throw new BrowserError('moli returned no screenshot data', 'BROWSER_CAPTURE_FAILED')
       }
@@ -210,11 +212,11 @@ export class MoliBrowserSession implements BrowserSession {
   }
 
   /** Read url/title/body text through three bounded evaluates. */
-  private async readState(): Promise<BrowserPageState> {
+  private async readState(signal?: AbortSignal): Promise<BrowserPageState> {
     const [url, title, content] = await Promise.all([
-      this.evaluateText('location.href'),
-      this.evaluateText('document.title'),
-      this.evaluateText(`(document.body?.innerText ?? '').slice(0, ${this.limits.maxContentChars})`),
+      this.evaluateText('location.href', signal),
+      this.evaluateText('document.title', signal),
+      this.evaluateText(`(document.body?.innerText ?? '').slice(0, ${this.limits.maxContentChars})`, signal),
     ])
     return {
       url,
@@ -224,17 +226,17 @@ export class MoliBrowserSession implements BrowserSession {
   }
 
   /** A short settle delay after DOM interaction before reading state. */
-  private async settleAndRead(): Promise<BrowserPageState> {
-    await new Promise(resolve => setTimeout(resolve, 150))
-    return this.readState()
+  private async settleAndRead(signal?: AbortSignal): Promise<BrowserPageState> {
+    await new Promise(resolve => setTimeout(resolve, this.limits.settleMs))
+    return this.readState(signal)
   }
 
   /** Evaluate one expression returning a string value. */
-  private async evaluateText(expression: string): Promise<string> {
+  private async evaluateText(expression: string, signal?: AbortSignal): Promise<string> {
     const result = await this.handle.connection.send('Runtime.evaluate', {
       expression,
       returnByValue: true,
-    }) as CdpEvaluateResult
+    }, this.limits.cdpTimeoutMs, signal) as CdpEvaluateResult
     // An in-page exception must surface as a structured error: collapsing it
     // to '' made click/type report success while nothing happened, and
     // snapshot report an empty page.
@@ -248,8 +250,8 @@ export class MoliBrowserSession implements BrowserSession {
   }
 
   /** Evaluate one DOM-interaction script whose IIFE returns 'ok' or 'missing'. */
-  private async evaluateDomScript(expression: string): Promise<string> {
-    return this.evaluateText(expression)
+  private async evaluateDomScript(expression: string, signal?: AbortSignal): Promise<string> {
+    return this.evaluateText(expression, signal)
   }
 
   /** Throw the structured missing-element error for a failed selector match. */

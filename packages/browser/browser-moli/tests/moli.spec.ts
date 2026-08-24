@@ -61,7 +61,9 @@ function makeHarness(overrides: Partial<ConstructorParameters<typeof MoliBrowser
     binaryPath: 'moli-fake',
     startupTimeoutMs: 500,
     navigationTimeoutMs: 5_000,
+    cdpTimeoutMs: 30_000,
     maxContentChars: 100_000,
+    settleMs: 150,
     probeTimeoutMs: 5_000,
     pollEveryMs: 1,
     extraServeArgs: [],
@@ -297,6 +299,74 @@ describe('MoliBrowserSession interaction', () => {
     expect(harness.socket.sent).toEqual([])
     await session.close()
   })
+
+  it('reports BROWSER_ABORTED when a caller aborts an operation blocked on a CDP event', async () => {
+    const controller = new AbortController()
+    const harness = makeHarness()
+    const session = await launchWithSocket(harness)
+    const navigating = session.navigate({ url: 'https://example.com/' }, controller.signal)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    controller.abort()
+    await expect(navigating).rejects.toThrow(expect.objectContaining({ code: 'BROWSER_ABORTED' }))
+    // The aborted operation must not wedge the serialization chain.
+    await expect(session.snapshot()).resolves.toMatchObject({ url: 'https://example.com/' })
+    await session.close()
+  })
+
+  it('rejects an already-aborted signal before sending any CDP frame', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const harness = makeHarness()
+    const session = await launchWithSocket(harness)
+    harness.socket.sent.length = 0
+    await expect(session.snapshot(controller.signal))
+      .rejects.toThrow(expect.objectContaining({ code: 'BROWSER_ABORTED' }))
+    expect(harness.socket.sent).toEqual([])
+    await session.close()
+  })
+})
+
+describe('MoliBrowserProvider live-session finalization', () => {
+  it('force-kills every unclosed serve process at host exit and clears the set', async () => {
+    const kill = vi.fn()
+    const { provider } = makeHarness({
+      spawnFn: () => ({ pid: 4321, kill }),
+    })
+    await provider.launch()
+    await provider.launch()
+    provider.terminateForHostExit()
+    expect(kill).toHaveBeenCalledTimes(2)
+    // A second pass is a no-op: the set emptied after the first sweep.
+    provider.terminateForHostExit()
+    expect(kill).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops tracking a session once its close() runs', async () => {
+    const kill = vi.fn()
+    const harness = makeHarness({
+      spawnFn: () => ({ pid: 4321, kill }),
+    })
+    const session = await harness.provider.launch()
+    await session.close()
+    // The graceful path already killed it; host-exit finalization finds nothing left.
+    harness.provider.terminateForHostExit()
+    expect(kill).toHaveBeenCalledTimes(1)
+  })
+
+  it('detaches the exit listener through the finalization disposer', () => {
+    const prependSpy = vi.spyOn(process, 'prependListener')
+    const offSpy = vi.spyOn(process, 'off')
+    try {
+      const { provider } = makeHarness()
+      const dispose = provider.installHostExitFinalization()
+      expect(prependSpy).toHaveBeenCalledWith('exit', expect.any(Function))
+      dispose()
+      expect(offSpy).toHaveBeenCalledWith('exit', expect.any(Function))
+    } finally {
+      prependSpy.mockRestore()
+      offSpy.mockRestore()
+    }
+  })
 })
 
 describe('moli serve argv', () => {
@@ -331,5 +401,9 @@ describe('browser-moli plugin registration', () => {
       .rejects.toThrow(/startupTimeoutMs must be a positive finite number/)
     await expect(ctx.plugin(moliPlugin, { maxContentChars: -1 }))
       .rejects.toThrow(/maxContentChars must be a positive finite number/)
+    await expect(ctx.plugin(moliPlugin, { cdpTimeoutMs: 0 }))
+      .rejects.toThrow(/cdpTimeoutMs must be a positive finite number/)
+    await expect(ctx.plugin(moliPlugin, { settleMs: -5 }))
+      .rejects.toThrow(/settleMs must be a positive finite number/)
   })
 })

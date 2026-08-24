@@ -92,7 +92,11 @@ export interface BrowserSession {
  */
 export interface BrowserProvider {
   readonly id: string
-  /** Cheap local usability check; must not spawn processes or make network calls. */
+  /**
+   * Cheap local usability check. It may probe a local binary's presence once,
+   * but it never opens network connections and never starts a long-lived
+   * process — session launch is {@link launch}'s job alone.
+   */
   available(): boolean
   /**
    * Start or attach to a browser session. Implementations own the lifecycle controller for the
@@ -106,7 +110,7 @@ export interface BrowserProvider {
  * Typed browser error with a machine-routable, open-string `code` and chained `cause`. Shared
  * codes cover unavailable, missing, unusable, ambiguous, or duplicate providers and cancellation,
  * mirroring the web seam; browser-specific codes cover invalid navigation targets, missing
- * elements, navigation failures, capture failures, and failed in-page evaluation. Tool execution
- * exposes the code in structured error metadata.
+ * elements, navigation failures, capture failures, oversized captures, and failed in-page
+ * evaluation. Tool execution exposes the code in structured error metadata.
  */
 export class BrowserError extends HarnessError {}

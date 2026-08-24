@@ -25,6 +25,8 @@ export type MoliBinaryProber = (binaryPath: string, timeoutMs: number) => MoliBi
 export interface MoliFetchProviderOptions {
   /** The moli binary: a PATH name or an absolute/relative executable path. */
   binaryPath: string
+  /** Maximum accepted request URL length in characters. */
+  maxUrlLength: number
   /** Character cap on returned markdown; a longer body is truncated and flagged. */
   maxBodyChars: number
   /**

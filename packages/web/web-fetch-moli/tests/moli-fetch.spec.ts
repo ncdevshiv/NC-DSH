@@ -24,6 +24,7 @@ function makeProvider(overrides: Partial<ConstructorParameters<typeof MoliFetchP
   const prober = overrides.prober ?? (() => ({ status: 0, error: null }))
   return new MoliFetchProvider({
     binaryPath: 'moli-fake',
+    maxUrlLength: 2_048,
     maxBodyChars: 100_000,
     timeoutMs: 30_000,
     probeTimeoutMs: 5_000,
@@ -176,6 +177,17 @@ describe('moli fetch URL policy', () => {
       .toThrow(expect.objectContaining({ code: 'WEB_INVALID_URL' }))
   })
 
+  it('enforces the configured maxUrlLength instead of the default cap', async () => {
+    const runner = vi.fn(resolvingRunner('content'))
+    const provider = makeProvider({ runner, maxUrlLength: 16 })
+    const longUrl = `https://example.com/${'a'.repeat(16)}`
+    await expect(provider.fetch({ url: longUrl }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_INVALID_URL', message: expect.stringContaining('maximum length of 16') }))
+    expect(runner).not.toHaveBeenCalled()
+    // At exactly the configured cap the request proceeds (this URL is 16 chars).
+    await expect(provider.fetch({ url: 'https://e.co/xy1' })).resolves.toBeDefined()
+  })
+
   it('accepts a plain https URL and returns it parsed', () => {
     expect(validateFetchUrl('https://example.com/').hostname).toBe('example.com')
   })
@@ -208,6 +220,8 @@ describe('web-fetch-moli plugin registration', () => {
       .rejects.toThrow(/timeoutMs must be a positive finite number/)
     await expect(ctx.plugin(moliPlugin, { probeTimeoutMs: 0 }))
       .rejects.toThrow(/probeTimeoutMs must be a positive finite number/)
+    await expect(ctx.plugin(moliPlugin, { maxUrlLength: 0 }))
+      .rejects.toThrow(/maxUrlLength must be a positive finite number/)
   })
 
   it('rejects a timeout beyond Node timer range at construction', async () => {

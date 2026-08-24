@@ -34,6 +34,8 @@ export const inject = ['web']
 export interface Config {
   /** The moli binary. Falls back to `$MOLI_BINARY`, then `'moli'` on PATH. */
   binaryPath?: string
+  /** Maximum accepted request URL length in characters. */
+  maxUrlLength?: number
   /** Maximum decoded markdown length in characters. */
   maxBodyChars?: number
   /** Resource-backstop fetch budget in milliseconds, within Node's timer range. */
@@ -44,6 +46,7 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   binaryPath: z.string().default(''),
+  maxUrlLength: z.number().default(2_048),
   maxBodyChars: z.number().default(100_000),
   timeoutMs: z.number().default(30_000),
   probeTimeoutMs: z.number().default(5_000),
@@ -71,6 +74,7 @@ function assertTimeoutMs(value: number): void {
 export function apply(ctx: Context, config: Config): void {
   // schemastery (Config) has already filled every defaulted field.
   const resolved = config as ResolvedConfig
+  assertPositiveFinite('maxUrlLength', resolved.maxUrlLength)
   assertPositiveFinite('maxBodyChars', resolved.maxBodyChars)
   assertTimeoutMs(resolved.timeoutMs)
   assertPositiveFinite('probeTimeoutMs', resolved.probeTimeoutMs)
@@ -79,6 +83,7 @@ export function apply(ctx: Context, config: Config): void {
     : launchEnvironmentOf(ctx).get('MOLI_BINARY')?.value ?? 'moli'
   ctx.web.registerFetchProvider(new MoliFetchProvider({
     binaryPath,
+    maxUrlLength: resolved.maxUrlLength,
     maxBodyChars: resolved.maxBodyChars,
     timeoutMs: resolved.timeoutMs,
     probeTimeoutMs: resolved.probeTimeoutMs,

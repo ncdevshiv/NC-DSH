@@ -21,17 +21,19 @@ export interface CdpTarget {
  *
  * @param fetchFn - the fetch boundary.
  * @param baseUrl - the endpoint root, e.g. `http://127.0.0.1:9222`.
+ * @param signal - cancellation carried into both discovery fetches.
  * @returns the discovered target with its WebSocket debugger URL.
  * @throws BrowserError `BROWSER_PROVIDER_ERROR` when discovery fails or no
  *   debugger URL is reachable.
  */
 export async function discoverPageTarget(
-  fetchFn: (url: string, init?: { method?: string }) => Promise<Response>,
+  fetchFn: (url: string, init?: { method?: string; signal?: AbortSignal }) => Promise<Response>,
   baseUrl: string,
+  signal?: AbortSignal,
 ): Promise<CdpTarget> {
   let targets: CdpTarget[]
   try {
-    const response = await fetchFn(`${baseUrl}/json/list`)
+    const response = await fetchFn(`${baseUrl}/json/list`, { ...signal !== undefined ? { signal } : {} })
     if (!response.ok) {
       throw new BrowserError(`moli CDP target listing answered HTTP ${response.status}`, 'BROWSER_PROVIDER_ERROR')
     }
@@ -47,7 +49,10 @@ export async function discoverPageTarget(
   const existing = targets.find(target => target.type === 'page' && target.webSocketDebuggerUrl !== undefined)
   if (existing !== undefined) return existing
   try {
-    const created = await fetchFn(`${baseUrl}/json/new?about:blank`, { method: 'PUT' })
+    const created = await fetchFn(`${baseUrl}/json/new?about:blank`, {
+      method: 'PUT',
+      ...signal !== undefined ? { signal } : {},
+    })
     if (!created.ok) {
       throw new BrowserError(`moli CDP target creation answered HTTP ${created.status}`, 'BROWSER_PROVIDER_ERROR')
     }
@@ -66,12 +71,16 @@ interface Pending {
   resolve: (value: unknown) => void
   reject: (error: unknown) => void
   timer: ReturnType<typeof setTimeout>
+  /** Detaches the caller's abort listener; present only when a signal was given. */
+  removeAbort?: () => void
 }
 
 interface EventWaiter {
   resolve: () => void
   reject: (error: unknown) => void
   timer: ReturnType<typeof setTimeout>
+  /** Detaches the caller's abort listener; present only when a signal was given. */
+  removeAbort?: () => void
 }
 
 /**
@@ -126,23 +135,39 @@ export class CdpConnection {
    * @param method - the protocol method, e.g. `Page.navigate`.
    * @param params - the method parameters.
    * @param timeoutMs - response deadline; a silent endpoint rejects past it.
+   * @param signal - caller cancellation; an aborted signal rejects the call
+   *   as `BROWSER_ABORTED` and stops tracking its response.
    * @returns the command's `result` payload.
    */
-  send(method: string, params: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<unknown> {
+  send(method: string, params: Record<string, unknown> = {}, timeoutMs = 30_000, signal?: AbortSignal): Promise<unknown> {
     if (this.isClosed) {
       return Promise.reject(sessionClosedError())
     }
+    if (signal?.aborted) {
+      return Promise.reject(operationAbortedError())
+    }
     const id = this.nextId++
     return new Promise((resolve, reject) => {
+      const onAbort = (): void => {
+        this.pending.delete(id)
+        clearTimeout(timer)
+        reject(operationAbortedError())
+      }
+      const removeAbort = (): void => {
+        signal?.removeEventListener('abort', onAbort)
+      }
       const timer = setTimeout(() => {
         this.pending.delete(id)
+        removeAbort()
         reject(new BrowserError(`moli CDP call ${method} timed out`, 'BROWSER_PROVIDER_ERROR'))
       }, timeoutMs)
       this.pending.set(id, {
         resolve,
         reject,
         timer,
+        removeAbort,
       })
+      signal?.addEventListener('abort', onAbort, { once: true })
       try {
         this.ws.send(JSON.stringify({
           id,
@@ -155,6 +180,7 @@ export class CdpConnection {
         // DOMException escaping the executor.
         this.pending.delete(id)
         clearTimeout(timer)
+        removeAbort()
         reject(new BrowserError(`moli CDP call ${method} could not be sent`, 'BROWSER_PROVIDER_ERROR', { cause: error }))
       }
     })
@@ -164,23 +190,39 @@ export class CdpConnection {
    * Resolve on the next occurrence of a protocol event, or reject at the deadline.
    * @param method - the event name, e.g. `Page.loadEventFired`.
    * @param timeoutMs - waiting deadline in milliseconds.
+   * @param signal - caller cancellation; an aborted signal rejects the wait
+   *   as `BROWSER_ABORTED` and removes its waiter.
    */
-  waitForEvent(method: string, timeoutMs: number): Promise<void> {
+  waitForEvent(method: string, timeoutMs: number, signal?: AbortSignal): Promise<void> {
     if (this.isClosed) {
       return Promise.reject(sessionClosedError())
     }
+    if (signal?.aborted) {
+      return Promise.reject(operationAbortedError())
+    }
     return new Promise((resolve, reject) => {
       const queue = this.eventWaiters.get(method) ?? []
+      const onAbort = (): void => {
+        this.forgetWaiter(method, waiter)
+        clearTimeout(waiter.timer)
+        reject(operationAbortedError())
+      }
+      const removeAbort = (): void => {
+        signal?.removeEventListener('abort', onAbort)
+      }
       const waiter: EventWaiter = {
         resolve,
         reject,
         timer: setTimeout(() => {
+          removeAbort()
           this.forgetWaiter(method, waiter)
           reject(new BrowserError(`timed out waiting for moli CDP event ${method}`, 'BROWSER_NAVIGATION_TIMEOUT'))
         }, timeoutMs),
+        removeAbort,
       }
       queue.push(waiter)
       this.eventWaiters.set(method, queue)
+      signal?.addEventListener('abort', onAbort, { once: true })
     })
   }
 
@@ -201,12 +243,14 @@ export class CdpConnection {
     }
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
+      pending.removeAbort?.()
       pending.reject(sessionClosedError())
     }
     this.pending.clear()
     for (const queue of this.eventWaiters.values()) {
       for (const waiter of queue.splice(0)) {
         clearTimeout(waiter.timer)
+        waiter.removeAbort?.()
         waiter.reject(sessionClosedError())
       }
     }
@@ -229,6 +273,7 @@ export class CdpConnection {
       if (pending === undefined) return
       this.pending.delete(message.id)
       clearTimeout(pending.timer)
+      pending.removeAbort?.()
       if (message.error !== undefined) {
         pending.reject(new BrowserError(`moli CDP call failed: ${JSON.stringify(message.error)}`, 'BROWSER_PROVIDER_ERROR'))
       } else {
@@ -242,6 +287,7 @@ export class CdpConnection {
       this.eventWaiters.delete(message.method)
       for (const waiter of queue.splice(0)) {
         clearTimeout(waiter.timer)
+        waiter.removeAbort?.()
         waiter.resolve()
       }
     }
@@ -260,4 +306,9 @@ export class CdpConnection {
 /** The one rejection every blocked call sees after teardown. */
 export function sessionClosedError(): BrowserError {
   return new BrowserError('the moli browser session was closed', 'BROWSER_SESSION_CLOSED')
+}
+
+/** The rejection a caller-cancelled CDP operation sees. */
+export function operationAbortedError(): BrowserError {
+  return new BrowserError('the moli browser operation was aborted', 'BROWSER_ABORTED')
 }

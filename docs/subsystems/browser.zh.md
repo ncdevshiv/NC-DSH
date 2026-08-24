@@ -20,7 +20,7 @@ Provider 的 `available()` 是廉价的本地检查（对 moli 是记忆化的 `
 
 ## 错误
 
-`BrowserError extends HarnessError` 携带开放式字符串 `code`，与 `WebError` 一致。seam 中立代码来自共享运行时约定：`BROWSER_PROVIDER_UNAVAILABLE`、`BROWSER_PROVIDER_CONFIGURED_MISSING`、`BROWSER_PROVIDER_CONFIGURED_UNAVAILABLE`、`BROWSER_PROVIDER_AMBIGUOUS`、`BROWSER_DUPLICATE_PROVIDER`、`BROWSER_ABORTED`、`BROWSER_SESSION_CLOSED`。实现自有代码涵盖启动超时、导航超时、无效导航目标、元素缺失、截取失败与页内执行失败；消费方必须容忍未知代码。
+`BrowserError extends HarnessError` 携带开放式字符串 `code`，与 `WebError` 一致。seam 中立代码来自共享运行时约定：`BROWSER_PROVIDER_UNAVAILABLE`、`BROWSER_PROVIDER_CONFIGURED_MISSING`、`BROWSER_PROVIDER_CONFIGURED_UNAVAILABLE`、`BROWSER_PROVIDER_AMBIGUOUS`、`BROWSER_DUPLICATE_PROVIDER`、`BROWSER_ABORTED`、`BROWSER_SESSION_CLOSED`。实现自有代码涵盖启动超时、导航超时、无效导航目标、元素缺失、截取失败、超大截图与页内执行失败；消费方必须容忍未知代码。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write packages/browser/browser-moli/README.md
-README.md: fcb71709ccda2fef6ded56acfb35a6c8fa8dd40a
-README.zh.md: 6fe95e461b39974e4b9939c4e009228beb50698c
+README.md: ce5baccedc99f35f2f741e6ebec7035810fc159c
+README.zh.md: 66675cb3706db74b6b047ae462534bc63b57cd8e

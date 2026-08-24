@@ -9,8 +9,9 @@
 ## 工作方式
 
 - 可用性是一次记忆化的本地 `moli --version` 探测——已挂载的 provider 在 `$MOLI_BINARY`（或 `PATH`）可解析之前保持休眠。
-- 一个会话 = 一个 serve 进程：启动之间状态隔离；每个会话一个生命周期控制器，同时拥有子进程与 WebSocket，任何路径的 `close()` 都会将其拆除。关闭连接会立即结算所有阻塞中的命令与事件等待，因此 `close()` 绝不会等待期限计时器走完。
+- 一个会话 = 一个 serve 进程：启动之间状态隔离；每个会话一个生命周期控制器，同时拥有子进程与 WebSocket，任何路径的 `close()` 都会将其拆除。关闭连接会立即结算所有阻塞中的命令与事件等待，因此 `close()` 绝不会等待期限计时器走完。崩溃或硬退出遗留的 serve 进程会在 Node 同步退出阶段被强制终止。
 - 导航在承载任何 CDP 流量之前按 seam 契约校验目标（只接受绝对 `http:`/`https:`，否则报 `BROWSER_INVALID_URL`）；页内执行失败以 `BROWSER_EVALUATION_FAILED` 呈现，而不是返回空页面状态。
+- 每个操作都把调用方的 `AbortSignal` 贯穿到 CDP 层：取消会立即以 `BROWSER_ABORTED` 拒绝，包括导航期间与启动发现阶段。
 - CDP 客户端是包内最小实现（按 id 关联命令、事件等待），跑在 Node 全局 WebSocket 上；不新增自动化依赖。
 - 操作在会话内串行；页面文本走有界的 `Runtime.evaluate` 读取；交互执行小型 DOM 脚本；截图走 `Page.captureScreenshot`。
 
@@ -21,7 +22,9 @@
 | `binaryPath` | `$MOLI_BINARY` ?? `'moli'` | moli 可执行文件。探测时无法解析则 provider 不可用。 |
 | `startupTimeoutMs` | `15_000` | 单个会话服务端启动就绪轮询的预算。 |
 | `navigationTimeoutMs` | `30_000` | 单次页面导航的预算。 |
+| `cdpTimeoutMs` | `30_000` | 导航之外单条 CDP 命令或事件等待（`Runtime.evaluate`、截图）的预算。 |
 | `maxContentChars` | `100_000` | 返回页面文本内容的字符上限。 |
+| `settleMs` | `150` | DOM 交互之后、读取状态之前的 settle 延迟。 |
 | `probeTimeoutMs` | `5_000` | 一次性可用性探测的预算。 |
 | `pollEveryMs` | `100` | 就绪轮询间隔。 |
 | `extraServeArgs` | `[]` | 原样追加到 `moli serve` 调用后的额外 argv（用于覆盖旗标）。 |

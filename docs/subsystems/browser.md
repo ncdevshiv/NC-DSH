@@ -20,7 +20,7 @@ A provider's `available()` is a cheap local check (for moli, a memoized `--versi
 
 ## Errors
 
-`BrowserError extends HarnessError` carries an open-string `code`, like `WebError`. Seam-neutral codes come from the shared runtime contract: `BROWSER_PROVIDER_UNAVAILABLE`, `BROWSER_PROVIDER_CONFIGURED_MISSING`, `BROWSER_PROVIDER_CONFIGURED_UNAVAILABLE`, `BROWSER_PROVIDER_AMBIGUOUS`, `BROWSER_DUPLICATE_PROVIDER`, `BROWSER_ABORTED`, `BROWSER_SESSION_CLOSED`. Implementation-owned codes cover startup timeout, navigation timeout, invalid navigation targets, missing elements, capture failure, and failed in-page evaluation; consumers must tolerate unknown codes.
+`BrowserError extends HarnessError` carries an open-string `code`, like `WebError`. Seam-neutral codes come from the shared runtime contract: `BROWSER_PROVIDER_UNAVAILABLE`, `BROWSER_PROVIDER_CONFIGURED_MISSING`, `BROWSER_PROVIDER_CONFIGURED_UNAVAILABLE`, `BROWSER_PROVIDER_AMBIGUOUS`, `BROWSER_DUPLICATE_PROVIDER`, `BROWSER_ABORTED`, `BROWSER_SESSION_CLOSED`. Implementation-owned codes cover startup timeout, navigation timeout, invalid navigation targets, missing elements, capture failure, oversized captures, and failed in-page evaluation; consumers must tolerate unknown codes.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

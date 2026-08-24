@@ -93,7 +93,7 @@ export class MoliFetchProvider implements WebFetchProvider {
    * @returns the fetched markdown capped to `maxBodyChars`.
    */
   async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {
-    validateFetchUrl(request.url)
+    validateFetchUrl(request.url, this.options.maxUrlLength)
     // A caller that already aborted must not launch a doomed subprocess; the
     // composed backstop below would kill it, but only after a spawn.
     if (signal?.aborted) {

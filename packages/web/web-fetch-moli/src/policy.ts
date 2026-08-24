@@ -13,13 +13,14 @@ import { WebError } from '@deepseek-ai/dsh-web'
  * is deferred at the seam level — see the package README.)
  *
  * @param input - the raw URL string from the fetch request.
+ * @param maxUrlLength - the configured URL length cap in characters.
  * @returns the parsed `URL`.
  */
-/* jscpd:ignore-start -- the same transport hygiene as web-fetch-http, kept local because
-   cross-package src imports are forbidden; the copies change together by review. */
-export function validateFetchUrl(input: string): URL {
-  if (input.length > 2048) {
-    throw new WebError('URL exceeds the maximum length of 2048', 'WEB_INVALID_URL')
+/* jscpd:ignore-start -- the same transport hygiene family as web-fetch-http, kept local because
+   cross-package src imports are forbidden; each copy takes its cap from its own config. */
+export function validateFetchUrl(input: string, maxUrlLength: number = 2_048): URL {
+  if (input.length > maxUrlLength) {
+    throw new WebError(`URL exceeds the maximum length of ${maxUrlLength}`, 'WEB_INVALID_URL')
   }
   let url: URL
   try {

@@ -14,7 +14,7 @@ Provider 的 `timeoutMs` 是面向直接 `ctx.web.fetch()` 调用方与错误部
 
 ## 传输卫生
 
-- 只接受 `http:`/`https:` URL；在任何进程启动前拒绝 URL 内嵌凭证（`WEB_BLOCKED_URL`）与过长/畸形 URL（`WEB_INVALID_URL`）。调用方的中止信号已经触发时，同样在子进程启动之前拒绝。
+- 只接受 `http:`/`https:` URL；在任何进程启动前拒绝 URL 内嵌凭证（`WEB_BLOCKED_URL`）与过长/畸形 URL（`WEB_INVALID_URL`，超出配置的 `maxUrlLength`）。调用方的中止信号已经触发时，同样在子进程启动之前拒绝。
 - 无 shell 地运行 moli 并把中止传播进子进程。
 - 天然是浏览器级：页面 JavaScript 会执行，重定向按浏览器语义原生跟随——[`dsh-web-fetch-http`](../web-fetch-http/README.md) 的仅同源重定向规则在这里不适用。
 - 输出渲染后的 markdown，按 seam 的 `kind: 'text'` 正文分类（markdown 就是文本；工具对文本原样透传），直到封闭的 `WebFetchBody` 联合类型增加 markdown 分支。
@@ -24,6 +24,7 @@ Provider 的 `timeoutMs` 是面向直接 `ctx.web.fetch()` 调用方与错误部
 | 键 | 默认 | 含义 |
 |---|---|---|
 | `binaryPath` | `$MOLI_BINARY` ?? `'moli'` | moli 可执行文件：PATH 名或路径。探测时无法解析则 provider 不可用。 |
+| `maxUrlLength` | `2048` | 接受的请求 URL 最大字符数。 |
 | `maxBodyChars` | `100_000` | 返回 markdown 的最大字符数；超出部分被截断并标记。 |
 | `timeoutMs` | `30_000` | Node 定时器范围内的获取超时——面向直接调用方的资源兜底，不是模型侧预算。 |
 | `probeTimeoutMs` | `5_000` | 一次性 `--version` 可用性探测的预算。 |

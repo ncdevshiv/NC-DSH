@@ -28,8 +28,12 @@ export interface MoliBrowserProviderOptions {
   startupTimeoutMs: number
   /** Budget for one page navigation in milliseconds. */
   navigationTimeoutMs: number
+  /** Budget for one CDP command or event wait outside navigation (evaluate, screenshot) in milliseconds. */
+  cdpTimeoutMs: number
   /** Character cap on returned page text content. */
   maxContentChars: number
+  /** Settle delay after a DOM interaction before the state read, in milliseconds. */
+  settleMs: number
   /** Budget for the one-time `--version` availability probe in milliseconds. */
   probeTimeoutMs: number
   /** Interval between readiness polls in milliseconds. */

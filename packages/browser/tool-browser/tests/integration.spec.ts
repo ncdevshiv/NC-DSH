@@ -6,6 +6,7 @@
  * "browser" is an in-memory page model, so no process or network runs.
  */
 
+import { rm } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { CallId } from '@deepseek-ai/dsh-llm'
@@ -144,8 +145,41 @@ describe('browser tools over the real registry', () => {
     expect(out.isError).toBe(false)
     const text = textOf(out)
     expect(text).toContain('<type>image/png</type>')
-    expect(text).toMatch(/<path>.+dsh-tool-browser-.+\.png<\/path>/)
-    expect(text).toContain('2 bytes')
+    const path = /<path>(.+)<\/path>/.exec(text)?.[1]
+    expect(path).toBeDefined()
+    try {
+      expect(text).toMatch(/<path>.+dsh-tool-browser-.+\.png<\/path>/)
+      expect(text).toContain('2 bytes')
+    } finally {
+      // The written fixture must not leak into the OS temp directory.
+      if (path !== undefined) await rm(path, { force: true })
+    }
+  })
+
+  it('rejects a capture above maxScreenshotBytes without writing a file', async () => {
+    const local = new Context()
+    await local.plugin(SystemPrompt)
+    await local.plugin(ToolRuntime)
+    await local.plugin(BrowserRuntime, { provider: provider.id })
+    local.browser.registerProvider(provider)
+    await local.plugin(TimeoutPolicy)
+    const fiber = await local.plugin(ToolBrowser, { maxScreenshotBytes: 1 })
+    try {
+      const out = await local.tools.execute({
+        signal: testToolSignal,
+        callId: CallId('oversize-capture'),
+        name: 'browser_screenshot',
+        arguments: {},
+      })
+      expect(out.isError).toBe(true)
+      const text = out.content.map(block => block.type === 'text' ? block.text : '').join('')
+      // The rendered text names the cap and config key; the
+      // BROWSER_SCREENSHOT_TOO_LARGE code rides the structured error metadata.
+      expect(text).toContain('above the 1-byte cap')
+      expect(text).toContain('maxScreenshotBytes')
+    } finally {
+      await fiber.dispose()
+    }
   })
 
   it('closes the underlying session when the plugin fiber is disposed (HMR safety)', async () => {

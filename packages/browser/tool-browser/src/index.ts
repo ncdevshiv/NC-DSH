@@ -49,6 +49,9 @@ export const DEFAULT_ACTION_TIMEOUT_MS = 15_000
 /** Default cap on one browser tool's rendered output characters. */
 export const DEFAULT_MAX_OUTPUT_CHARS = 20_000
 
+/** Default cap on one screenshot's encoded PNG size in bytes. */
+export const DEFAULT_MAX_SCREENSHOT_BYTES = 5_242_880
+
 /**
  * The shared system-prompt guidance for every enabled browser tool. One
  * section regardless of which tools are enabled, so toggling a single action
@@ -74,6 +77,8 @@ export interface Config {
   actionTimeoutMs?: number
   /** Cap on one tool's complete rendered output characters. Defaults to 20000. */
   maxOutputChars?: number
+  /** Cap on one screenshot's encoded PNG size in bytes. Defaults to 5242880 (5 MiB). */
+  maxScreenshotBytes?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -85,6 +90,7 @@ export const Config: z<Config> = z.object({
   navigationTimeoutMs: z.number().default(DEFAULT_NAVIGATION_TIMEOUT_MS),
   actionTimeoutMs: z.number().default(DEFAULT_ACTION_TIMEOUT_MS),
   maxOutputChars: z.number().default(DEFAULT_MAX_OUTPUT_CHARS),
+  maxScreenshotBytes: z.number().default(DEFAULT_MAX_SCREENSHOT_BYTES),
 })
 
 /** Complete config after schemastery applies every field default. */
@@ -108,6 +114,7 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveInteger('navigationTimeoutMs', resolved.navigationTimeoutMs)
   assertPositiveInteger('actionTimeoutMs', resolved.actionTimeoutMs)
   assertPositiveInteger('maxOutputChars', resolved.maxOutputChars)
+  assertPositiveInteger('maxScreenshotBytes', resolved.maxScreenshotBytes)
 
   const anyEnabled = resolved.navigate || resolved.snapshot || resolved.click || resolved.typing || resolved.screenshot
   if (!anyEnabled) return
@@ -127,5 +134,5 @@ export function apply(ctx: Context, config: Config): void {
   if (resolved.snapshot) applyBrowserSnapshotTool(ctx, session, resolved.actionTimeoutMs, resolved.maxOutputChars)
   if (resolved.click) applyBrowserClickTool(ctx, session, resolved.actionTimeoutMs, resolved.maxOutputChars)
   if (resolved.typing) applyBrowserTypeTool(ctx, session, resolved.actionTimeoutMs, resolved.maxOutputChars)
-  if (resolved.screenshot) applyBrowserScreenshotTool(ctx, session, resolved.actionTimeoutMs)
+  if (resolved.screenshot) applyBrowserScreenshotTool(ctx, session, resolved.actionTimeoutMs, resolved.maxScreenshotBytes)
 }

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-24-moli-session-provider-boundary-fixes.md
-2026-08-24-moli-session-provider-boundary-fixes.md: 65bd096fffedc7d62e9c0e748c38d1b8eeddffc0
-2026-08-24-moli-session-provider-boundary-fixes.zh.md: af96013871cc16e6668021c10abd42719277333f
+2026-08-24-moli-session-provider-boundary-fixes.md: 0849620b3f0e8db822e88c987afe8c15509779d8
+2026-08-24-moli-session-provider-boundary-fixes.zh.md: e297f6ee1bcb0fa4e9f9b61738e8df21183040fb

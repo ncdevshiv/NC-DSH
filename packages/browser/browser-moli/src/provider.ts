@@ -13,9 +13,10 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { spawnSync } from 'node:child_process'
+import type { CdpTarget } from './cdp.ts'
 import { CdpConnection, discoverPageTarget } from './cdp.ts'
 import { MoliBrowserSession, buildServeArgv, killServeProcess } from './session.ts'
-import type { FetchFn, MoliBrowserProviderOptions, SpawnFn, WebSocketFactory } from './types.ts'
+import type { FetchFn, MoliBrowserProviderOptions, SpawnFn, SpawnedProcess, WebSocketFactory } from './types.ts'
 
 /** Stable id this provider registers under. */
 export const MOLI_BROWSER_PROVIDER_ID = 'moli'
@@ -44,7 +45,9 @@ export async function reserveEphemeralPort(): Promise<number> {
 /**
  * The moli-backed browser provider. One provider instance may hand out many
  * sessions; each session owns an isolated serve process for teardown
- * simplicity and state isolation between launches.
+ * simplicity and state isolation between launches. Live serve processes are
+ * tracked so Node's synchronous exit phase can force-kill any the host leaves
+ * behind; graceful session `close()` remains the caller's ownership.
  */
 export class MoliBrowserProvider implements BrowserProvider {
   readonly id = MOLI_BROWSER_PROVIDER_ID
@@ -53,6 +56,8 @@ export class MoliBrowserProvider implements BrowserProvider {
   private readonly spawnFn: SpawnFn
   private readonly wsFactory: WebSocketFactory
   private readonly prober: NonNullable<MoliBrowserProviderOptions['prober']>
+  /** Serve processes of sessions not yet closed, for host-exit finalization. */
+  private readonly live = new Set<SpawnedProcess>()
   private availability: boolean | undefined
 
   constructor(private readonly options: MoliBrowserProviderOptions) {
@@ -61,6 +66,49 @@ export class MoliBrowserProvider implements BrowserProvider {
     this.wsFactory = options.wsFactory ?? (url => new WebSocket(url))
     this.prober = options.prober ?? defaultProber
   }
+
+  /**
+   * Force-kill every tracked live serve process. Called during Node's
+   * synchronous exit phase, where awaiting or reporting is impossible; a
+   * target that cannot be killed must not stop the remaining kills.
+   */
+  terminateForHostExit(): void {
+    for (const child of this.live) {
+      try {
+        killServeProcess(child)
+      } catch (_hostExitCannotAwaitOrRecoverOneTarget) {
+        // Host exit cannot await or report one target; continue with the rest.
+      }
+    }
+    this.live.clear()
+  }
+
+  /**
+   * Register the synchronous host-exit finalization for this provider's live
+   * serve processes.
+   * @returns the disposer that detaches the listener.
+   */
+  installHostExitFinalization(): () => void {
+    const onHostExit = (): void => { this.terminateForHostExit() }
+    process.prependListener('exit', onHostExit)
+    return () => {
+      process.off('exit', onHostExit)
+    }
+  }
+
+  /** Track one spawned child until its kill; removal keeps the set authoritative. */
+  private track(child: SpawnedProcess): SpawnedProcess {
+    const tracked: SpawnedProcess = {
+      pid: child.pid,
+      kill: (): void => {
+        this.live.delete(tracked)
+        killServeProcess(child)
+      },
+    }
+    this.live.add(tracked)
+    return tracked
+  }
+
   /**
    * Cheap local usability check: the configured binary exists and runs. The
    * probe runs at most once per provider instance.
@@ -78,6 +126,8 @@ export class MoliBrowserProvider implements BrowserProvider {
    * Launch one isolated browser session: reserve a port, spawn `moli serve`,
    * wait for CDP readiness, attach to a page target, and enable the Page
    * domain. Any failure after the spawn tears the child down before throwing.
+   * Discovery and the WebSocket open share the startup budget and the abort
+   * signal, so neither phase can stall past it.
    *
    * @param signal - aborts startup; the spawned child is killed on abort.
    * @returns the launched session; the caller owns its `close()`.
@@ -87,20 +137,34 @@ export class MoliBrowserProvider implements BrowserProvider {
       throw new BrowserError(`the moli binary is not usable at "${this.options.binaryPath}"`, 'BROWSER_PROVIDER_UNAVAILABLE')
     }
     const port = await reserveEphemeralPort()
-    const child = this.spawnFn(this.options.binaryPath, buildServeArgv({
+    const child = this.track(this.spawnFn(this.options.binaryPath, buildServeArgv({
       port,
       extraServeArgs: this.options.extraServeArgs,
-    }))
+    })))
+    // Discovery and open ride the same startup budget as readiness polling:
+    // without it, a hung fetch or WebSocket open stalls launch indefinitely.
+    const startupScope = signal !== undefined
+      ? AbortSignal.any([signal, AbortSignal.timeout(this.options.startupTimeoutMs)])
+      : AbortSignal.timeout(this.options.startupTimeoutMs)
     try {
       const baseUrl = `http://${SERVE_HOST}:${port}`
       await this.awaitReadiness(baseUrl, signal)
-      const target = await discoverPageTarget(this.fetchFn, baseUrl)
+      let target: CdpTarget
+      try {
+        target = await discoverPageTarget(this.fetchFn, baseUrl, startupScope)
+      } catch (error: unknown) {
+        throw this.classifyStartupScopeFailure(error, signal, startupScope)
+      }
       const wsUrl = target.webSocketDebuggerUrl
       if (wsUrl === undefined) {
         throw new BrowserError('the discovered moli CDP target has no debugger URL', 'BROWSER_PROVIDER_ERROR')
       }
       const connection = new CdpConnection(wsUrl, this.wsFactory)
-      await connection.open()
+      const opened = await this.openWithinStartupScope(connection, startupScope)
+      if (!opened) {
+        connection.close()
+        throw this.classifyStartupScopeFailure(new Error('the WebSocket open did not settle within the startup budget'), signal, startupScope)
+      }
       try {
         await connection.send('Page.enable')
       } catch (error: unknown) {
@@ -112,12 +176,55 @@ export class MoliBrowserProvider implements BrowserProvider {
         connection,
       }, {
         navigationTimeoutMs: this.options.navigationTimeoutMs,
+        cdpTimeoutMs: this.options.cdpTimeoutMs,
         maxContentChars: this.options.maxContentChars,
+        settleMs: this.options.settleMs,
       })
     } catch (error: unknown) {
-      killServeProcess(child)
+      child.kill()
       throw error
     }
+  }
+
+  /**
+   * Resolve `true` when the connection opened first, `false` once the startup
+   * scope expired while open was still pending. A genuine open failure
+   * rejects with its own error; the scope listener detaches on every settle.
+   */
+  private openWithinStartupScope(connection: CdpConnection, startupScope: AbortSignal): Promise<boolean> {
+    if (startupScope.aborted) {
+      return Promise.resolve(false)
+    }
+    return new Promise((resolve, reject) => {
+      const onScopeAbort = (): void => {
+        resolve(false)
+      }
+      const detach = (): void => {
+        startupScope.removeEventListener('abort', onScopeAbort)
+      }
+      startupScope.addEventListener('abort', onScopeAbort, { once: true })
+      connection.open().then(
+        () => {
+          detach()
+          resolve(true)
+        },
+        (error: unknown) => {
+          detach()
+          reject(error)
+        },
+      )
+    })
+  }
+
+  /** Map a discovery/open failure inside the startup scope to abort or timeout. */
+  private classifyStartupScopeFailure(error: unknown, signal: AbortSignal | undefined, startupScope: AbortSignal): BrowserError {
+    if (signal?.aborted) {
+      return new BrowserError('the moli browser session launch was aborted', 'BROWSER_ABORTED', { cause: error })
+    }
+    if (startupScope.aborted) {
+      return new BrowserError(`the moli serve endpoint did not become ready within ${this.options.startupTimeoutMs}ms`, 'BROWSER_STARTUP_TIMEOUT', { cause: error })
+    }
+    return error instanceof BrowserError ? error : new BrowserError(`moli CDP target discovery failed: ${String(error)}`, 'BROWSER_PROVIDER_ERROR', { cause: error })
   }
 
   /**

@@ -39,8 +39,12 @@ export interface Config {
   startupTimeoutMs?: number
   /** Budget for one page navigation in milliseconds. */
   navigationTimeoutMs?: number
+  /** Budget for one CDP command or event wait outside navigation (evaluate, screenshot) in milliseconds. */
+  cdpTimeoutMs?: number
   /** Character cap on returned page text content. */
   maxContentChars?: number
+  /** Settle delay after a DOM interaction before the state read, in milliseconds. */
+  settleMs?: number
   /** Budget for the one-time `--version` availability probe in milliseconds. */
   probeTimeoutMs?: number
   /** Interval between readiness polls in milliseconds. */
@@ -53,7 +57,9 @@ export const Config: z<Config> = z.object({
   binaryPath: z.string().default(''),
   startupTimeoutMs: z.number().default(15_000),
   navigationTimeoutMs: z.number().default(30_000),
+  cdpTimeoutMs: z.number().default(30_000),
   maxContentChars: z.number().default(100_000),
+  settleMs: z.number().default(150),
   probeTimeoutMs: z.number().default(5_000),
   pollEveryMs: z.number().default(100),
   extraServeArgs: z.array(z.string()).default([]),
@@ -75,19 +81,27 @@ export function apply(ctx: Context, config: Config): void {
   const resolved = config as ResolvedConfig
   assertPositiveFinite('startupTimeoutMs', resolved.startupTimeoutMs)
   assertPositiveFinite('navigationTimeoutMs', resolved.navigationTimeoutMs)
+  assertPositiveFinite('cdpTimeoutMs', resolved.cdpTimeoutMs)
   assertPositiveFinite('maxContentChars', resolved.maxContentChars)
+  assertPositiveFinite('settleMs', resolved.settleMs)
   assertPositiveFinite('probeTimeoutMs', resolved.probeTimeoutMs)
   assertPositiveFinite('pollEveryMs', resolved.pollEveryMs)
   const binaryPath = resolved.binaryPath.length > 0
     ? resolved.binaryPath
     : launchEnvironmentOf(ctx).get('MOLI_BINARY')?.value ?? 'moli'
-  ctx.browser.registerProvider(new MoliBrowserProvider({
+  const provider = new MoliBrowserProvider({
     binaryPath,
     startupTimeoutMs: resolved.startupTimeoutMs,
     navigationTimeoutMs: resolved.navigationTimeoutMs,
+    cdpTimeoutMs: resolved.cdpTimeoutMs,
     maxContentChars: resolved.maxContentChars,
+    settleMs: resolved.settleMs,
     probeTimeoutMs: resolved.probeTimeoutMs,
     pollEveryMs: resolved.pollEveryMs,
     extraServeArgs: resolved.extraServeArgs,
-  }))
+  })
+  // Synchronous host-exit finalization: serve processes a crash or hard exit
+  // leaves behind are force-killed; graceful session close stays caller-owned.
+  ctx.effect(() => provider.installHostExitFinalization(), 'browser-moli host-exit finalization')
+  ctx.browser.registerProvider(provider)
 }

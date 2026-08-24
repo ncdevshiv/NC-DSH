@@ -24,8 +24,9 @@
 | `navigationTimeoutMs` | `30000` | `browser_navigate` 的协作预算。 |
 | `actionTimeoutMs` | `15000` | 页内动作与截图的协作预算。 |
 | `maxOutputChars` | `20000` | 单个工具完整渲染输出的上限。 |
+| `maxScreenshotBytes` | `5242880` | 单张截图编码后 PNG 的字节上限；超限的截图直接失败且不写文件。 |
 
-超时以 `ToolDefinition.timeoutMs` 附着并由 [`dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.md) 强制执行；不存在面向模型的超时参数。
+超时以 `ToolDefinition.timeoutMs` 附着并由 [`dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.md) 强制执行；不存在面向模型的超时参数。写出的 PNG 按设计保留在系统临时目录——模型可能在后续调用中读取该路径——因此保留不设上限，由字节上限约束单个文件大小。
 
 ```yaml
 - id: tool-browser

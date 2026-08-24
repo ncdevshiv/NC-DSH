@@ -24,8 +24,9 @@ Each tool is registered independently; a product disables an action via config (
 | `navigationTimeoutMs` | `30000` | Cooperative budget for `browser_navigate`. |
 | `actionTimeoutMs` | `15000` | Cooperative budget for in-page actions and screenshots. |
 | `maxOutputChars` | `20000` | Cap on one tool's complete rendered output. |
+| `maxScreenshotBytes` | `5242880` | Cap on one screenshot's encoded PNG size; a larger capture fails without writing a file. |
 
-Timeouts attach as `ToolDefinition.timeoutMs` and are enforced by [`dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.md); no model-facing timeout argument exists.
+Timeouts attach as `ToolDefinition.timeoutMs` and are enforced by [`dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.md); no model-facing timeout argument exists. Written PNGs persist under the OS temp directory by design — a model may read the path in a later call — so retention is unbounded while the byte cap bounds each file's size.
 
 ```yaml
 - id: tool-browser

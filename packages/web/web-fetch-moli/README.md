@@ -14,7 +14,7 @@ The provider's `timeoutMs` is a resource backstop for direct `ctx.web.fetch()` c
 
 ## Transport hygiene
 
-- Accepts only `http:` and `https:` URLs; rejects credentials in URLs (`WEB_BLOCKED_URL`) and over-long/malformed URLs (`WEB_INVALID_URL`) before any process starts. An already-aborted caller signal also rejects before the subprocess spawns.
+- Accepts only `http:` and `https:` URLs; rejects credentials in URLs (`WEB_BLOCKED_URL`) and over-long/malformed URLs (`WEB_INVALID_URL`, beyond the configured `maxUrlLength`) before any process starts. An already-aborted caller signal also rejects before the subprocess spawns.
 - Runs moli shell-free with abort propagation into the subprocess.
 - Browser-grade by design: page JavaScript executes, and redirects are followed natively per browser semantics — the same-origin-only redirect rule of [`dsh-web-fetch-http`](../web-fetch-http/README.md) does not apply here.
 - Emits rendered markdown classified as the seam's `kind: 'text'` body (markdown IS text; the tool passes text through untouched) until the closed `WebFetchBody` union gains a markdown arm.
@@ -24,6 +24,7 @@ The provider's `timeoutMs` is a resource backstop for direct `ctx.web.fetch()` c
 | Key | Default | Meaning |
 |---|---|---|
 | `binaryPath` | `$MOLI_BINARY` ?? `'moli'` | The moli executable: a PATH name or a path. Unresolved at probe time makes the provider unavailable. |
+| `maxUrlLength` | `2048` | Maximum accepted request URL length in characters. |
 | `maxBodyChars` | `100_000` | Maximum returned markdown length in characters; a longer body is truncated and flagged. |
 | `timeoutMs` | `30_000` | Fetch timeout within Node's timer range — a resource backstop for direct callers, not the model-facing budget. |
 | `probeTimeoutMs` | `5_000` | Budget for the one-time `--version` availability probe. |

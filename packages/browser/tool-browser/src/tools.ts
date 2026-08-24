@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { BrowserError } from '@deepseek-ai/dsh-browser'
 import type { BrowserPageState, BrowserSession } from '@deepseek-ai/dsh-browser'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type { SharedBrowserSession } from './session-holder.ts'
@@ -152,13 +153,20 @@ let screenshotCounter = 0
 /**
  * Register `browser_screenshot`: capture the current page as a PNG saved under
  * the OS temp directory; inline pixel delivery waits on attachment-backed
- * image blocks (documented deferred work).
+ * image blocks (documented deferred work). Captures beyond the configured
+ * byte cap reject as `BROWSER_SCREENSHOT_TOO_LARGE` and write nothing.
  *
  * @param ctx - registration scope.
  * @param session - the shared serialized session.
  * @param timeoutMs - cooperative tool-call budget.
+ * @param maxScreenshotBytes - encoded-size cap on one capture.
  */
-export function applyBrowserScreenshotTool(ctx: Context, session: SharedBrowserSession, timeoutMs: number): void {
+export function applyBrowserScreenshotTool(
+  ctx: Context,
+  session: SharedBrowserSession,
+  timeoutMs: number,
+  maxScreenshotBytes: number,
+): void {
   ctx.tools.register(defineTool({
     name: 'browser_screenshot',
     description: 'Capture a PNG screenshot of the browser\'s current page and save it to a temp file; returns the file path and size.',
@@ -180,6 +188,12 @@ export function applyBrowserScreenshotTool(ctx: Context, session: SharedBrowserS
     isConcurrencySafe: () => false,
     async execute(args, exec) {
       const shot = await session.run(browser => browser.screenshot({ ...(args.full_page === true ? { fullPage: true } : {}) }, exec.signal))
+      if (shot.data.byteLength > maxScreenshotBytes) {
+        throw new BrowserError(
+          `the screenshot is ${shot.data.byteLength} bytes, above the ${maxScreenshotBytes}-byte cap (maxScreenshotBytes)`,
+          'BROWSER_SCREENSHOT_TOO_LARGE',
+        )
+      }
       screenshotCounter += 1
       const path = join(tmpdir(), `dsh-tool-browser-${Date.now()}-${screenshotCounter}.png`)
       await writeFile(path, shot.data)

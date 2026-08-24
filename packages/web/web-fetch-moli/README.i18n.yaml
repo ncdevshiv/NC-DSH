@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write packages/web/web-fetch-moli/README.md
-README.md: 64439265bc44eb46a2a657e5326c89d4bb60ad01
-README.zh.md: a0f4913fcf789e5afe497e55b314362d5c1a6e41
+README.md: 5cceabfdb64205713b44a9aac080041fafdd0586
+README.zh.md: a1049c459e74e1e6aaa4e001c37c182c39360c26

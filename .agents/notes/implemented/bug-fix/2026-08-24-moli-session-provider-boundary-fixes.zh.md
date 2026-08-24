@@ -36,4 +36,4 @@ schema 模式会把契约复制到远离其归属 provider 的地方，而直连
 
 ## 后果
 
-快速页面即时解析导航而不再超时；拆除在连接结算范围内完成而不受等待者期限约束；交互不再静默假成功，代价是新增一个实现自有代码（`BROWSER_EVALUATION_FAILED`），由开放式代码契约下的容忍未知规则覆盖。凭据配置错误只失败一次、在加载时、带明确修复指引。暂缓加固保持开放并有文档：贯穿会话操作的端到端 `AbortSignal` 传播、防孤儿 serve 进程的宿主退出收尾、可配置的 evaluate/截图期限与交互后 settle 延迟、截图临时文件清理，以及跨 seam JSDoc、两个 moli provider 与子系统页面的 `available()` 探测措辞统一。
+快速页面即时解析导航而不再超时；拆除在连接结算范围内完成而不受等待者期限约束；交互不再静默假成功，代价是新增一个实现自有代码（`BROWSER_EVALUATION_FAILED`），由开放式代码契约下的容忍未知规则覆盖。凭据配置错误只失败一次、在加载时、带明确修复指引。后续加固波次补齐了审计清单的其余项：`AbortSignal` 贯穿每条 CDP 命令与事件等待（`BROWSER_ABORTED`）、启动发现与 WebSocket 打开共享启动预算、存活 serve 进程在 Node 同步退出阶段被强制终止、`cdpTimeoutMs`/`settleMs`/`maxUrlLength` 取代写死的期限与 settle 延迟，消费方对截图字节设上限（`BROWSER_SCREENSHOT_TOO_LARGE`）并将临时文件保留明确为有意行为。仍未完成：兄弟 web provider 文档中残余的 `available()` 措辞统一，以及对真实安装 moli 二进制的端到端运行。
