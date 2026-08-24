@@ -516,6 +516,67 @@
         "@deepseek-ai/dsh-invariants": "workspace:^",
       },
     },
+    "packages/browser/browser": {
+      "name": "@deepseek-ai/dsh-browser",
+      "version": "0.1.0-rc.8",
+      "dependencies": {
+        "@deepseek-ai/schemastery": "workspace:^",
+      },
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-llm": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-llm": "workspace:^",
+      },
+    },
+    "packages/browser/browser-moli": {
+      "name": "@deepseek-ai/dsh-browser-moli",
+      "version": "0.1.0-rc.8",
+      "dependencies": {
+        "@deepseek-ai/schemastery": "workspace:^",
+      },
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-browser": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-launch-environment": "workspace:^",
+        "@deepseek-ai/dsh-llm": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-browser": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-launch-environment": "workspace:^",
+        "@deepseek-ai/dsh-llm": "workspace:^",
+      },
+    },
+    "packages/browser/tool-browser": {
+      "name": "@deepseek-ai/dsh-tool-browser",
+      "version": "0.1.0-rc.8",
+      "dependencies": {
+        "@deepseek-ai/schemastery": "workspace:^",
+      },
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-browser": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-llm": "workspace:^",
+        "@deepseek-ai/dsh-system-prompt": "workspace:^",
+        "@deepseek-ai/dsh-tool-call-timeout-policy": "workspace:^",
+        "@deepseek-ai/dsh-tools": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-browser": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-system-prompt": "workspace:^",
+        "@deepseek-ai/dsh-tools": "workspace:^",
+      },
+    },
     "packages/bundle/base": {
       "name": "@deepseek-ai/dsh-base",
       "version": "0.1.0-rc.8",
@@ -529,6 +590,7 @@
         "@deepseek-ai/dsh-api-gateway": "workspace:^",
         "@deepseek-ai/dsh-attachment-local": "workspace:^",
         "@deepseek-ai/dsh-bash-sandbox": "workspace:^",
+        "@deepseek-ai/dsh-browser": "workspace:^",
         "@deepseek-ai/dsh-command-compact": "workspace:^",
         "@deepseek-ai/dsh-command-feedback": "workspace:^",
         "@deepseek-ai/dsh-command-goal": "workspace:^",
@@ -596,6 +658,7 @@
         "@deepseek-ai/dsh-user-questions": "workspace:^",
         "@deepseek-ai/dsh-web": "workspace:^",
         "@deepseek-ai/dsh-web-search-deepseek": "workspace:^",
+        "@deepseek-ai/dsh-web-search-searxng": "workspace:^",
         "@deepseek-ai/dsh-workflow-worker-thread": "workspace:^",
       },
       "devDependencies": {
@@ -1521,6 +1584,7 @@
         "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
         "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
         "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-llm": "workspace:^",
         "@deepseek-ai/schemastery": "workspace:^",
         "@types/react": "~18.3.1",
         "react": "^18.2.0",
@@ -1533,6 +1597,7 @@
         "@deepseek-ai/dsh-client-runtime": "workspace:^",
         "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
         "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-llm": "workspace:^",
       },
     },
     "packages/client/ui-settings-plugin-inventory": {
@@ -5998,6 +6063,26 @@
         "@deepseek-ai/dsh-web": "workspace:^",
       },
     },
+    "packages/web/web-fetch-moli": {
+      "name": "@deepseek-ai/dsh-web-fetch-moli",
+      "version": "0.1.0-rc.8",
+      "dependencies": {
+        "@deepseek-ai/dsh-native-command": "workspace:^",
+        "@deepseek-ai/schemastery": "workspace:^",
+      },
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-launch-environment": "workspace:^",
+        "@deepseek-ai/dsh-web": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-launch-environment": "workspace:^",
+        "@deepseek-ai/dsh-web": "workspace:^",
+      },
+    },
     "packages/web/web-search-deepseek": {
       "name": "@deepseek-ai/dsh-web-search-deepseek",
       "version": "0.1.0-rc.8",
@@ -6047,6 +6132,25 @@
     },
     "packages/web/web-search-perplexity": {
       "name": "@deepseek-ai/dsh-web-search-perplexity",
+      "version": "0.1.0-rc.8",
+      "dependencies": {
+        "@deepseek-ai/schemastery": "workspace:^",
+      },
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-launch-environment": "workspace:^",
+        "@deepseek-ai/dsh-web": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-launch-environment": "workspace:^",
+        "@deepseek-ai/dsh-web": "workspace:^",
+      },
+    },
+    "packages/web/web-search-searxng": {
+      "name": "@deepseek-ai/dsh-web-search-searxng",
       "version": "0.1.0-rc.8",
       "dependencies": {
         "@deepseek-ai/schemastery": "workspace:^",
@@ -6227,6 +6331,8 @@
         "@deepseek-ai/dsh-attachment": "workspace:^",
         "@deepseek-ai/dsh-bash-local": "workspace:^",
         "@deepseek-ai/dsh-brand": "workspace:^",
+        "@deepseek-ai/dsh-browser": "workspace:^",
+        "@deepseek-ai/dsh-browser-moli": "workspace:^",
         "@deepseek-ai/dsh-code-runtime": "workspace:^",
         "@deepseek-ai/dsh-code-runtime-worker-thread": "workspace:^",
         "@deepseek-ai/dsh-command-compact": "workspace:^",
@@ -6300,6 +6406,7 @@
         "@deepseek-ai/dsh-tool-ask-user": "workspace:^",
         "@deepseek-ai/dsh-tool-bash": "workspace:^",
         "@deepseek-ai/dsh-tool-bash-persistent": "workspace:^",
+        "@deepseek-ai/dsh-tool-browser": "workspace:^",
         "@deepseek-ai/dsh-tool-call-timeout-policy": "workspace:^",
         "@deepseek-ai/dsh-tool-cordis": "workspace:^",
         "@deepseek-ai/dsh-tool-fs": "workspace:^",
@@ -6320,9 +6427,11 @@
         "@deepseek-ai/dsh-user-questions": "workspace:^",
         "@deepseek-ai/dsh-web": "workspace:^",
         "@deepseek-ai/dsh-web-fetch-http": "workspace:^",
+        "@deepseek-ai/dsh-web-fetch-moli": "workspace:^",
         "@deepseek-ai/dsh-web-search-deepseek": "workspace:^",
         "@deepseek-ai/dsh-web-search-exa": "workspace:^",
         "@deepseek-ai/dsh-web-search-perplexity": "workspace:^",
+        "@deepseek-ai/dsh-web-search-searxng": "workspace:^",
         "@deepseek-ai/dsh-workflow": "workspace:^",
         "@deepseek-ai/dsh-workflow-worker-thread": "workspace:^",
         "@deepseek-ai/schemastery": "workspace:^",
@@ -6715,6 +6824,10 @@
 
     "@deepseek-ai/dsh-brand": ["@deepseek-ai/dsh-brand@workspace:packages/util/brand"],
 
+    "@deepseek-ai/dsh-browser": ["@deepseek-ai/dsh-browser@workspace:packages/browser/browser"],
+
+    "@deepseek-ai/dsh-browser-moli": ["@deepseek-ai/dsh-browser-moli@workspace:packages/browser/browser-moli"],
+
     "@deepseek-ai/dsh-client-connection": ["@deepseek-ai/dsh-client-connection@workspace:packages/client/connection"],
 
     "@deepseek-ai/dsh-client-hmr": ["@deepseek-ai/dsh-client-hmr@workspace:packages/client/hmr"],
@@ -7053,6 +7166,8 @@
 
     "@deepseek-ai/dsh-tool-bash-persistent": ["@deepseek-ai/dsh-tool-bash-persistent@workspace:packages/shell/tool-bash-persistent"],
 
+    "@deepseek-ai/dsh-tool-browser": ["@deepseek-ai/dsh-tool-browser@workspace:packages/browser/tool-browser"],
+
     "@deepseek-ai/dsh-tool-call-timeout-policy": ["@deepseek-ai/dsh-tool-call-timeout-policy@workspace:packages/guard/timeout-policy"],
 
     "@deepseek-ai/dsh-tool-cordis": ["@deepseek-ai/dsh-tool-cordis@workspace:packages/extensions/tool-cordis"],
@@ -7113,6 +7228,8 @@
 
     "@deepseek-ai/dsh-web-fetch-http": ["@deepseek-ai/dsh-web-fetch-http@workspace:packages/web/web-fetch-http"],
 
+    "@deepseek-ai/dsh-web-fetch-moli": ["@deepseek-ai/dsh-web-fetch-moli@workspace:packages/web/web-fetch-moli"],
+
     "@deepseek-ai/dsh-web-frontend": ["@deepseek-ai/dsh-web-frontend@workspace:apps/web"],
 
     "@deepseek-ai/dsh-web-search-deepseek": ["@deepseek-ai/dsh-web-search-deepseek@workspace:packages/web/web-search-deepseek"],
@@ -7120,6 +7237,8 @@
     "@deepseek-ai/dsh-web-search-exa": ["@deepseek-ai/dsh-web-search-exa@workspace:packages/web/web-search-exa"],
 
     "@deepseek-ai/dsh-web-search-perplexity": ["@deepseek-ai/dsh-web-search-perplexity@workspace:packages/web/web-search-perplexity"],
+
+    "@deepseek-ai/dsh-web-search-searxng": ["@deepseek-ai/dsh-web-search-searxng@workspace:packages/web/web-search-searxng"],
 
     "@deepseek-ai/dsh-workflow": ["@deepseek-ai/dsh-workflow@workspace:packages/workflow/workflow"],
 

@@ -1242,6 +1242,32 @@ describe('dsh-workflow-worker-thread', () => {
       await ctx.fiber.dispose()
     })
 
+    it('drops a never-awaited member pair whose agent-start crosses after workflow/end', async () => {
+      // Fire-and-forget agent(): the script settles before the ChildStarted
+      // round-trip returns, so the worker's AgentStart deterministically
+      // arrives after Result claimed the outcome. Admitting it would dangle
+      // both halves past workflow/end; the run must end without them.
+      const { ctx, parent } = await setup({ manual: true })
+      const members: string[] = []
+      let ends = 0
+      ctx.on('workflow/agent-start', () => { members.push('agent-start') })
+      ctx.on('workflow/agent-end', () => { members.push('agent-end') })
+      ctx.on('workflow/end', () => { ends += 1 })
+      const handle = ctx.workflowEngine.start({
+        ...scripted(`
+          agent('never awaited')
+          return 'done'
+        `),
+        parent,
+      })
+      const result = await handle.result
+      expect(result.stopReason).toBe('completed')
+      expect(result.value).toBe('done')
+      await handle.dispose()
+      await waitFor(() => { expect(ends).toBe(1) }, 1000)
+      expect(members).toEqual([])
+    })
+
     it('a worker that exits before settling reports an error result and reaps its children', async () => {
       const ctx = new Context()
       await ctx.plugin(SubagentRuntime)

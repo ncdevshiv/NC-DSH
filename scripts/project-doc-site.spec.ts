@@ -13,6 +13,21 @@ import {
 const roots: string[] = []
 const repositoryRoot = resolve(import.meta.dirname, '..')
 
+// Creating symlinks on Windows requires Developer Mode or elevation. Probe once
+// so the escape test skips with cause instead of failing EPERM; the provisioned
+// CI enables Developer Mode before running this suite, so nothing is skipped there.
+const symlinksWritable = await (async (): Promise<boolean> => {
+  const probeDir = mkdtempSync(join(tmpdir(), 'dsh-doc-site-link-probe-'))
+  try {
+    symlinkSync(join(probeDir, 'target'), join(probeDir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true })
+  }
+})()
+
 function unexpectedWebsiteMarkdown(files: readonly string[]): string[] {
   return files.filter(file => file.endsWith('.md') && file !== 'website/AGENTS.md').sort()
 }
@@ -72,7 +87,7 @@ describe('publishableImage', () => {
     expect(publishableImage(join(root, 'packages/logo.svg'), realpathSync(root))).toBe(real)
   })
 
-  it('refuses a target whose real path escapes the repository', () => {
+  it.skipIf(!symlinksWritable)('refuses a target whose real path escapes the repository', () => {
     // Publication copies the bytes onto the site, so a reference reaching a
     // build-machine file must not be treated as an image the repository owns.
     const { root } = fixture()

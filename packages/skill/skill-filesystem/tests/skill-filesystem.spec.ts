@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { mkdir, readdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -406,7 +406,28 @@ describe('FileSystemSkillProvider', () => {
     expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['good-skill'])
   })
 
-  it('discovers symlinked skill directories and flat files', async () => {
+  // Creating symlinks on Windows requires Developer Mode or elevation; probe once
+  // so capability-gated tests skip with cause instead of failing EPERM. The
+  // provisioned Windows CI enables Developer Mode before running this suite.
+  let symlinksWritable: boolean
+  beforeAll(async () => {
+    const probeDir = await tempDir('skill-link-probe')
+    try {
+      await symlink(join(probeDir, 'target'), join(probeDir, 'link'))
+      symlinksWritable = true
+    } catch {
+      symlinksWritable = false
+    } finally {
+      await rm(probeDir, { recursive: true, force: true })
+    }
+  })
+
+  /** Directory link that needs no privilege on Windows (junction). */
+  async function linkDirectory(target: string, linkPath: string): Promise<void> {
+    await symlink(target, linkPath, process.platform === 'win32' ? 'junction' : undefined)
+  }
+  it('discovers symlinked skill directories and flat files', async (testCtx) => {
+    if (symlinksWritable !== true) testCtx.skip()
     const home = await tempDir('skill-symlink-home')
     const external = await tempDir('skill-symlink-external')
     await writeSkill(external, 'linked-dir', 'Linked directory')
@@ -782,7 +803,7 @@ describe('FileSystemSkillProvider', () => {
     const root = join(home, '.dsh/skills')
     await writeSkill(external, 'linked-skill', 'First linked description')
     await mkdir(root, { recursive: true })
-    await symlink(join(external, 'linked-skill'), join(root, 'linked-skill'))
+    await linkDirectory(join(external, 'linked-skill'), join(root, 'linked-skill'))
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)
     const fiber = await ctx.plugin(SkillFileSystem, {

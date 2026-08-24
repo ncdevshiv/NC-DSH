@@ -588,6 +588,35 @@ describe('goal tool state transitions', () => {
     expect(block.text).toContain("Do not call any more tools in this run; further work waits for the user's next instruction.")
   })
 
+  it('reports budget exhaustion before the armed state when resuming an active armed goal', async () => {
+    const { ctx, root } = await harness()
+    let turn = openTurn(root, { kind: 'user' })
+    const created = resultGoal(await execute(ctx, 'create_goal', {
+      objective: 'capped', max_goal_rounds: 2,
+    }, root.agent))
+    closeTurn(root, turn)
+    const ref: GoalRef = { id: GoalId(created.id as string), revision: created.revision as number }
+
+    // Admit one round, then lower the cap below it through direct-human edit:
+    // active + armed + exhausted is reachable durable state.
+    turn = openTurn(root, { kind: 'goal', goalId: ref.id, revision: ref.revision, round: 1 })
+    closeTurn(root, turn)
+    turn = openTurn(root, { kind: 'user' })
+    const edited = resultGoal(await execute(ctx, 'update_goal', {
+      goal_id: ref.id, revision: ref.revision, action: 'edit', max_goal_rounds: 1,
+    }, root.agent))
+    expect(edited).toMatchObject({ phase: 'active', roundsStarted: 1, maxGoalRounds: 1 })
+
+    const resumed = await execute(ctx, 'update_goal', {
+      goal_id: edited.id as string, revision: edited.revision as number, action: 'resume',
+    }, root.agent)
+    expect(resumed.error?.info?.code).toBe('GOAL_INVALID_TRANSITION')
+    const block = resumed.content[0]
+    if (block?.type !== 'text') throw new Error('expected text tool result')
+    expect(block.text).toContain('exhausted 1 goal rounds')
+    expect(block.text).not.toContain('already active and armed')
+  })
+
   it('lets direct human authority block before the model threshold', async () => {
     const { ctx, root } = await harness({ blockedAfterConsecutiveRounds: 9 })
     openTurn(root, { kind: 'user' })

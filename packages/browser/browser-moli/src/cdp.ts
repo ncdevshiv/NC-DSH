@@ -303,12 +303,18 @@ export class CdpConnection {
   }
 }
 
-/** The one rejection every blocked call sees after teardown. */
+/**
+ * The one rejection every blocked call sees after teardown.
+ * @returns the session-closed `BrowserError`.
+ */
 export function sessionClosedError(): BrowserError {
   return new BrowserError('the moli browser session was closed', 'BROWSER_SESSION_CLOSED')
 }
 
-/** The rejection a caller-cancelled CDP operation sees. */
+/**
+ * The rejection a caller-cancelled CDP operation sees.
+ * @returns the aborted-operation `BrowserError`.
+ */
 export function operationAbortedError(): BrowserError {
   return new BrowserError('the moli browser operation was aborted', 'BROWSER_ABORTED')
 }

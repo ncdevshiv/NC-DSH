@@ -458,6 +458,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'browser',
+    summary: 'The browser-automation service.',
+    description: 'The browser-automation service. Registered as `ctx.browser` (one instance per context).\n\nSelection semantics (resolved at launch time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `BROWSER_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `BROWSER_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `BROWSER_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `BROWSER_PROVIDER_UNAVAILABLE`.',
+    methods: [
+      {
+        signature: 'registerProvider(provider: BrowserProvider): () => void',
+        description: 'Register a browser provider. Throws BrowserError `BROWSER_DUPLICATE_PROVIDER` if its id is already registered. Returns a disposer; disposed with the calling fiber.',
+        parameters: [{ name: 'provider', description: 'the provider; its `id` is the registry key.' }],
+        returns: 'the disposer that unregisters the provider.',
+      },
+      {
+        signature: 'async launch(signal?: AbortSignal): Promise<BrowserSession>',
+        description: 'Launch a session through the selected provider. Resolves the provider at call time with the selection rules above; throws BrowserError when no provider can run. The caller owns the returned session and must eventually call its `close()`.',
+        parameters: [{ name: 'signal', description: 'optional cancellation signal for the startup phase.' }],
+        returns: 'the launched session.',
+      },
+    ],
+  },
+  {
     key: 'clientModules',
     summary: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index tap.',
     description: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index tap. Construction runs the activation scan synchronously — a malformed declaration or missing bundle among the already-loaded entries aggregates into one loud throw (FAILED fiber; the boot activation audit reports it).',
@@ -2845,6 +2864,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type Branded<B extends string> = string & {\n    readonly [BRAND]: B;\n};',
   },
   {
+    name: 'BrowserClickRequest',
+    declaration: 'export interface BrowserClickRequest {\n    readonly selector: string;\n}',
+  },
+  {
+    name: 'BrowserNavigateRequest',
+    declaration: 'export interface BrowserNavigateRequest {\n    readonly url: string;\n}',
+  },
+  {
+    name: 'BrowserPageState',
+    declaration: 'export interface BrowserPageState {\n    readonly url: string;\n    readonly title?: string;\n    readonly content?: string;\n}',
+  },
+  {
+    name: 'BrowserProvider',
+    declaration: 'export interface BrowserProvider {\n    readonly id: string;\n    available(): boolean;\n    launch(signal?: AbortSignal): Promise<BrowserSession>;\n}',
+  },
+  {
+    name: 'BrowserScreenshot',
+    declaration: 'export interface BrowserScreenshot {\n    readonly mediaType: \'image/png\';\n    readonly data: Uint8Array;\n}',
+  },
+  {
+    name: 'BrowserScreenshotRequest',
+    declaration: 'export interface BrowserScreenshotRequest {\n    readonly fullPage?: boolean;\n}',
+  },
+  {
+    name: 'BrowserSession',
+    declaration: 'export interface BrowserSession {\n    navigate(request: BrowserNavigateRequest, signal?: AbortSignal): Promise<BrowserPageState>;\n    snapshot(signal?: AbortSignal): Promise<BrowserPageState>;\n    click(request: BrowserClickRequest, signal?: AbortSignal): Promise<BrowserPageState>;\n    type(request: BrowserTypeRequest, signal?: AbortSignal): Promise<BrowserPageState>;\n    screenshot(request: BrowserScreenshotRequest, signal?: AbortSignal): Promise<BrowserScreenshot>;\n    close(): Promise<void>;\n}',
+  },
+  {
+    name: 'BrowserTypeRequest',
+    declaration: 'export interface BrowserTypeRequest {\n    readonly selector: string;\n    readonly text: string;\n    readonly submit?: boolean;\n}',
+  },
+  {
     name: 'CancelOptions',
     declaration: 'export interface CancelOptions {\n    keepInbox?: boolean | undefined;\n}',
   },
@@ -3402,7 +3453,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    inputModalities?: readonly ModelModality[];\n}',
   },
   {
     name: 'LlmFailure',

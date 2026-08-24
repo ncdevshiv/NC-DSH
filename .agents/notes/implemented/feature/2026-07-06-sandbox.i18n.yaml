@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write .agents/notes/implemented/feature/2026-07-06-sandbox.md
-2026-07-06-sandbox.md: 62c46c99a2283b03cf75d8823783367dd6b3473a
-2026-07-06-sandbox.zh.md: 82c2e7962800c007a207f0204bf47cef01f79a36
+2026-07-06-sandbox.md: 686120ae1f0b397ba9a21bd4fa24c4ac4c651b3d
+2026-07-06-sandbox.zh.md: 9cab7f49a2fedbac53467b29c1c3f396d0831622

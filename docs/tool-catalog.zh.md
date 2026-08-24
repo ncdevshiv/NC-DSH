@@ -43,6 +43,7 @@
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
+| `@deepseek-ai/dsh-tool-browser` | `browser_click`、`browser_navigate`、`browser_screenshot`、`browser_snapshot`、`browser_type` | `ctx.tools`、`ctx.browser`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | browser_* 工具将提供方选择置于 ctx.browser 之后；每个上下文一个串行会话，在 agent 运行内的多次调用间保持。 |
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -2223,3 +2224,112 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 来源：[`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。
+
+<a id="deepseek-aidsh-tool-browser"></a>
+
+## `@deepseek-ai/dsh-tool-browser`
+
+### `browser_click`
+
+点击浏览器当前页面上第一个匹配 CSS 选择器的元素，并返回结果页面状态。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "selector": {
+      "type": "string",
+      "description": "CSS selector of the element to click."
+    }
+  },
+  "required": [
+    "selector"
+  ]
+}
+```
+
+来源：[`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_navigate`
+
+将浏览器导航到 HTTP(S) URL 并返回加载后的页面状态（url、标题、文本内容）。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "The HTTP(S) URL to navigate to."
+    }
+  },
+  "required": [
+    "url"
+  ]
+}
+```
+
+来源：[`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_screenshot`
+
+捕获浏览器当前页面的 PNG 截图并保存到临时文件；返回文件路径与大小。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "full_page": {
+      "type": "boolean",
+      "description": "Capture the full scrollable page instead of the viewport."
+    }
+  }
+}
+```
+
+来源：[`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_snapshot`
+
+不导航，读取浏览器当前页面状态（url、标题、文本内容）。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_type`
+
+向浏览器当前页面上第一个匹配 CSS 选择器的输入框输入文本，可选在输入后按回车，并返回结果页面状态。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "selector": {
+      "type": "string",
+      "description": "CSS selector of the input to fill."
+    },
+    "text": {
+      "type": "string",
+      "description": "Text to enter after clearing the existing value."
+    },
+    "submit": {
+      "type": "boolean",
+      "description": "Press Enter after typing."
+    }
+  },
+  "required": [
+    "selector",
+    "text"
+  ]
+}
+```
+
+来源：[`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+browser_* 工具将提供方选择置于 ctx.browser 之后；每个上下文一个串行会话，在 agent 运行内的多次调用间保持。

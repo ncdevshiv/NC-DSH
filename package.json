@@ -123,6 +123,9 @@
     "verify-cordis-config": "tsx scripts/verify-cordis-config.ts",
     "rescope-vendor": "tsx scripts/rescope-vendor.ts",
     "rescope-vendor:check": "tsx scripts/rescope-vendor.ts --check",
+    "coredeps:check": "node core-deps/sync.mjs check",
+    "coredeps:update": "node core-deps/sync.mjs update",
+    "coredeps:status": "node core-deps/sync.mjs status",
     "verify-client-domain-graph": "tsx scripts/verify-client-domain-graph.ts",
     "gen-cordis-catalog": "tsx scripts/gen-cordis-catalog.ts",
     "verify-cordis-catalog": "tsx scripts/gen-cordis-catalog.ts --check",
@@ -148,7 +151,7 @@
     "verify-module-graph": "tsx scripts/gen-module-graph.ts --check",
     "constraints": "tsx scripts/check-workspace-constraints.ts",
     "doc-sync": "tsx scripts/run-gates.ts doc-sync",
-    "hygiene": "bun run rescope-vendor:check && bun run knip && bun run publint && bun run constraints && bun run verify-dsh-package-licenses && bun run verify-package-invariants && bun run verify-built-package-invariants && bun run verify-cordis-config && bun run verify-node-next-types && bun run verify-optional-dependency-imports && bun run verify-runtime-closure && bun run verify-client-packages && bun run verify-vendored-links",
+    "hygiene": "bun run rescope-vendor:check && bun run knip && bun run publint && bun run constraints && bun run verify-dsh-package-licenses && bun run verify-package-invariants && bun run verify-built-package-invariants && bun run verify-cordis-config && bun run verify-composition-references && bun run verify-node-next-types && bun run verify-optional-dependency-imports && bun run verify-runtime-closure && bun run verify-client-packages && bun run verify-vendored-links",
     "publish:npm-baseline": "tsx scripts/publish-npm-baseline.ts",
     "release:dsh": "tsx scripts/release/bump.ts --family dsh",
     "release:vendor": "tsx scripts/release/bump.ts --family vendor",
@@ -164,7 +167,8 @@
     "dev:web": "tsx scripts/dev-web.ts --poll",
     "desktop": "node scripts/dev-desktop.mjs",
     "dev:desktop": "node scripts/dev-desktop.mjs --hmr",
-    "postinstall": "node scripts/install-lefthook.mjs"
+    "postinstall": "node scripts/install-lefthook.mjs",
+    "verify-composition-references": "tsx scripts/verify-composition-references.ts"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",

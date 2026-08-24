@@ -27,6 +27,27 @@ import type { LocalTarget } from '../src/fsio.ts'
 import { copyFileDaclWin32, readFileDaclWin32 } from '../src/win32.ts'
 import { FsError, FsTargetKey } from '@deepseek-ai/dsh-fs'
 
+// Creating symlinks on Windows requires Developer Mode or elevation. Probe once
+// so capability-gated tests skip with cause instead of failing EPERM; the
+// provisioned CI enables Developer Mode before running this suite, so nothing
+// is skipped there.
+const symlinksWritable = await (async (): Promise<boolean> => {
+  const probeDir = await mkdtemp(join(tmpdir(), 'dsh-fsio-link-probe-'))
+  try {
+    await symlink(join(probeDir, 'target'), join(probeDir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(probeDir, { recursive: true, force: true })
+  }
+})()
+
+/** Directory link that needs no privilege on Windows (junction). */
+const linkDirectory = async (target: string, linkPath: string): Promise<void> => {
+  await symlink(target, linkPath, process.platform === 'win32' ? 'junction' : undefined)
+}
+
 let dir: string
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'dsh-fsio-'))
@@ -57,7 +78,7 @@ describe('resolveLocalTarget', () => {
     expect(target.targetKey).toBe(join(await realpath(dir), 'missing.txt'))
   })
 
-  it('two paths to the same file via a symlink share one targetKey', async () => {
+  it.skipIf(!symlinksWritable)('two paths to the same file via a symlink share one targetKey', async () => {
     const real = join(dir, 'real.txt')
     await writeFile(real, 'hi')
     const link = join(dir, 'link.txt')
@@ -80,7 +101,7 @@ describe('resolveLocalTarget', () => {
     const realRoot = join(dir, 'real-root')
     await mkdir(realRoot)
     const linkRoot = join(dir, 'link-root')
-    await symlink(realRoot, linkRoot)
+    await linkDirectory(realRoot, linkRoot)
 
     const before = await resolveLocalTarget(linkRoot, 'sub/file.txt')
     await mkdir(join(realRoot, 'sub'), { recursive: true })
@@ -150,7 +171,7 @@ describe('probe', () => {
 })
 
 describe('probeNoFollow', () => {
-  it('reports symlinks without following them', async () => {
+  it.skipIf(!symlinksWritable)('reports symlinks without following them', async () => {
     const real = join(dir, 'real.txt')
     const link = join(dir, 'link.txt')
     await writeFile(real, 'hi')
@@ -171,7 +192,7 @@ describe('probeNoFollow', () => {
 })
 
 describe('listDirectory', () => {
-  it('lists direct children in stable order without reading content', async () => {
+  it.skipIf(!symlinksWritable)('lists direct children in stable order without reading content', async () => {
     const root = join(dir, 'skills')
     await mkdir(join(root, 'dir-skill'), { recursive: true })
     await writeFile(join(root, 'zeta.md'), 'zeta')
@@ -199,11 +220,11 @@ describe('listDirectory', () => {
     await mkdir(realTwo)
     await writeFile(join(realOne, 'same.txt'), 'one')
     await writeFile(join(realTwo, 'same.txt'), 'different two')
-    await symlink(realOne, link)
+    await linkDirectory(realOne, link)
     const target = await resolveLocalTarget(dir, 'link')
 
     await unlink(link)
-    await symlink(realTwo, link)
+    await linkDirectory(realTwo, link)
 
     const entries = await listDirectory(target)
     expect(entries).toHaveLength(1)
@@ -240,13 +261,13 @@ describe('listDirectory', () => {
     }
   })
 
-  it('translates preflight metadata IO failures into FS_IO_ERROR', async () => {
+  it.skipIf(!symlinksWritable)('translates preflight metadata IO failures into FS_IO_ERROR', async () => {
     const loop = join(dir, 'loop')
     await symlink(loop, loop)
     await expect(listDirectory(localTarget(loop))).rejects.toMatchObject({ code: 'FS_IO_ERROR' })
   })
 
-  it('translates child resolution failures into structured listing errors', async () => {
+  it.skipIf(!symlinksWritable)('translates child resolution failures into structured listing errors', async () => {
     const root = join(dir, 'listed')
     await mkdir(root)
     const loop = join(root, 'loop')
@@ -260,7 +281,7 @@ describe('listDirectory', () => {
     const secret = join(protectedRoot, 'secret')
     await mkdir(root)
     await mkdir(secret, { recursive: true })
-    await symlink(secret, join(root, 'secret-link'))
+    await linkDirectory(secret, join(root, 'secret-link'))
     await chmod(protectedRoot, 0o000)
     try {
       const error = await listDirectory(localTarget(root)).then(() => undefined, (caught: unknown) => caught)

@@ -160,8 +160,23 @@ describe('stat', () => {
   })
 })
 
+// Creating symlinks on Windows requires Developer Mode or elevation; probe once
+// so capability-gated tests skip with cause instead of failing EPERM. The
+// provisioned Windows CI enables Developer Mode before running this suite.
+const symlinksWritable = await (async (): Promise<boolean> => {
+  const probeDir = await mkdtemp(join(tmpdir(), 'dsh-link-probe-'))
+  try {
+    await symlink(join(probeDir, 'target'), join(probeDir, 'link'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(probeDir, { recursive: true, force: true })
+  }
+})()
+
 describe('lstat', () => {
-  it('reports path metadata without following the final symlink component', async () => {
+  it.skipIf(!symlinksWritable)('reports path metadata without following the final symlink component', async () => {
     await writeFile(join(dir, 'real.txt'), 'hello')
     await symlink(join(dir, 'real.txt'), join(dir, 'link.txt'))
 
@@ -303,7 +318,7 @@ describe('readBytes', () => {
 })
 
 describe('listDir', () => {
-  it('lists files and directories in stable name order with resolved child targets', async () => {
+  it.skipIf(!symlinksWritable)('lists files and directories in stable name order with resolved child targets', async () => {
     await mkdir(join(dir, 'skills', 'dir-skill'), { recursive: true })
     await writeFile(join(dir, 'skills', 'zeta.md'), 'zeta')
     await writeFile(join(dir, 'skills', 'alpha.md'), 'alpha')
@@ -397,7 +412,7 @@ describe('writeText', () => {
     expect((await stat(path)).isDirectory()).toBe(true)
   })
 
-  it('createIfAbsent rejects and preserves a dangling symbolic link', async () => {
+  it.skipIf(!symlinksWritable)('createIfAbsent rejects and preserves a dangling symbolic link', async () => {
     const path = join(dir, 'dangling')
     await symlink(join(dir, 'missing-target'), path)
     const target = await fs.resolve('dangling')
@@ -746,7 +761,7 @@ describe('editText', () => {
 })
 
 describe('symlink targetKey identity', () => {
-  it('two paths to the same file via a symlink share one version and write the real target', async () => {
+  it.skipIf(!symlinksWritable)('two paths to the same file via a symlink share one version and write the real target', async () => {
     await writeFile(join(dir, 'real.txt'), 'hello')
     await symlink(join(dir, 'real.txt'), join(dir, 'link.txt'))
     const viaReal = await fs.resolve('real.txt')
@@ -758,7 +773,7 @@ describe('symlink targetKey identity', () => {
     expect(await readFile(join(dir, 'real.txt'), 'utf8')).toBe('bye') // link preserved
   })
 
-  it('a stale change is detected across both paths', async () => {
+  it.skipIf(!symlinksWritable)('a stale change is detected across both paths', async () => {
     await writeFile(join(dir, 'real.txt'), 'hello')
     await symlink(join(dir, 'real.txt'), join(dir, 'link.txt'))
     const viaReal = await fs.resolve('real.txt')

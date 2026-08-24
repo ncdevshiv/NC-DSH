@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-08-23-completing-the-pnpm-to-bun-migration.zh.md)
+
 ## Problem
 
 The repository switched its package manager to bun (`packageManager: bun@1.4.0`, `bun.lock`, root-level `overrides`, `patchedDependencies`, and `trustedDependencies`) but only the local toolchain surface moved with it. Every automation lane that installs or spawns through a package manager still drove pnpm: five ci.yml jobs, ten other GitHub workflows, the GitLab Python-runtime wheel lane, the Wine Windows gate script, and most of `scripts/`. Because `pnpm-lock.yaml` was deleted, none of those lanes could install at all — `actions/setup-node cache: pnpm` hard-fails without it, `pnpm/action-setup` cannot parse a `packageManager` field naming bun, and `pnpm install --frozen-lockfile` has nothing to freeze against. Two code paths also re-spawned child scripts through `process.env.npm_execpath`, which under bun points at the standalone `bun.exe`: launching that file under node dies with a SyntaxError on the PE bytes, breaking `bun run build` and every gate aggregate. The result was a repository where local development worked, `bun run build` failed on a verified path, and every CI lane and both release pipelines were dead on arrival.

@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, link, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -51,7 +51,11 @@ describe('writeFileAtomic', () => {
     const victim = join(dir, 'victim')
     await writeFile(victim, 'victim-content')
     const target = join(dir, 'doc.yaml')
-    await symlink(victim, target)
+    // A hardlink stands in for the symlink on Windows: both let the atomic
+    // replace swap the entry itself without writing through to the referent,
+    // but creating a symlink needs Developer Mode there.
+    if (process.platform === 'win32') await link(victim, target)
+    else await symlink(victim, target)
     await writeFileAtomic(target, 'replaced', { mode: 0o600 })
     expect((await lstat(target)).isSymbolicLink()).toBe(false)
     expect(await readFile(target, 'utf8')).toBe('replaced')

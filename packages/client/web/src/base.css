@@ -65,3 +65,35 @@ select,
 textarea {
   font-family: inherit;
 }
+
+/* Desktop window chrome (Electron shell: titleBarStyle 'hidden' +
+   titleBarOverlay). The OS draws only the native caption buttons over the
+   page; the app's own top chrome — sidebar brand row, session header,
+   details header — is the draggable title bar. Surfaces opt in with
+   data-dsh-drag-region and interactive controls inside them stay clickable
+   through the descendant no-drag rule. apps/web marks the shell with
+   html[data-dsh-desktop]; browsers never set the attribute and stay
+   untouched. The caption-inset custom properties reserve the native
+   buttons' width on whichever header currently reaches the window's right
+   edge: the session header while the details column is closed, the details
+   header while it is open. env() resolves only while an overlay is active
+   and reports the full window width in fullscreen, so both insets collapse
+   to 0 there. */
+html[data-dsh-desktop] [data-dsh-drag-region] {
+  -webkit-app-region: drag;
+}
+
+html[data-dsh-desktop] [data-dsh-drag-region] :is(button, a, input, textarea, select, label, [data-dsh-no-drag]) {
+  -webkit-app-region: no-drag;
+}
+
+html[data-dsh-desktop] [data-dsh-frame] {
+  --dsh-caption-inset: calc(100vw - env(titlebar-area-width, 100vw));
+}
+
+/* With the details column open the session header no longer touches the
+   window's right edge; the reservation moves to the details header. */
+html[data-dsh-desktop] [data-dsh-frame]:not([data-details-collapsed]) {
+  --dsh-caption-inset: 0px;
+  --dsh-details-caption-inset: calc(100vw - env(titlebar-area-width, 100vw));
+}

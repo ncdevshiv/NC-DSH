@@ -11,7 +11,9 @@
  * entries are that emit, not `src`), tsdown bundles `lib/index.js` and
  * `lib/client.js`, and `vite build` rewrites `apps/web/dist`, which `dsh web`
  * serves. A missing stage does not fail — it silently shows the previous
- * artifact, so an edit appears to do nothing.
+ * artifact, so an edit appears to do nothing. A transiently crashed stage
+ * restarts with backoff instead of killing the chain; only persistent
+ * crash-looping fails loud (see {@link spawnStage}).
  *
  * MUST NOT run concurrently with `bun run build`: both write the same
  * `lib/` and `apps/web/dist/` trees.
@@ -144,10 +146,14 @@ export async function watchClientPlugins(
 const stages: StageHandle[] = []
 
 /**
- * Spawn one watcher stage, inheriting stdio, registering it for teardown, and
- * failing loud if it ever exits: a dead stage leaves the artifact chain silently
- * stale, which reads as "my edit did nothing" — the one failure this script
- * exists to prevent.
+ * Spawn one watcher stage under a bounded restart supervisor. A transient
+ * crash (the observed case: Windows EBUSY when two writers touch the same
+ * `apps/web/dist` asset during vite's public-dir copy) restarts that one
+ * stage after exponential backoff instead of killing the whole chain;
+ * consecutive crashes past the budget, or a stage that was alive well under
+ * the reset window each time, still fail loud — a permanently dead stage
+ * leaves the artifact chain silently stale, which reads as "my edit did
+ * nothing", the one failure this script exists to prevent.
  * @param stage - command label used in the exit diagnostic.
  * @param command - executable, resolved from the workspace bin when local.
  * @param args - command arguments.
@@ -155,23 +161,56 @@ const stages: StageHandle[] = []
  * @param workingDir - working directory for the stage; defaults to the repository root.
  */
 function spawnStage(stage: string, command: string, args: readonly string[], local: boolean, workingDir: string = repoRoot): void {
-  const child = execa(command, [...args], {
-    cwd: workingDir,
-    stdio: 'inherit',
-    preferLocal: local,
-    reject: false,
-  })
-  stages.push({ kill: () => { child.kill() } })
-  void child.then((result) => {
-    console.error(`dev-web: ${stage} exited (code ${String(result.exitCode)}); the artifact chain is now stale`)
-    process.exit(1)
-  })
+  let attempts = 0
+  const launch = (): void => {
+    if (shuttingDown) return
+    const startedAt = Date.now()
+    const child = execa(command, [...args], {
+      cwd: workingDir,
+      stdio: 'inherit',
+      preferLocal: local,
+      reject: false,
+    })
+    const handle: StageHandle = { kill: () => { child.kill() } }
+    stages.push(handle)
+    void child.then((result) => {
+      const registered = stages.indexOf(handle)
+      if (registered >= 0) stages.splice(registered, 1)
+      if (shuttingDown || result.exitCode === 0) return
+      if (Date.now() - startedAt > STAGE_CRASH_BUDGET_RESET_MS) attempts = 0
+      attempts += 1
+      if (attempts > STAGE_MAX_CONSECUTIVE_CRASHES) {
+        console.error(
+          `dev-web: ${stage} exited (code ${String(result.exitCode)}) `
+          + `${String(attempts)} times in a row; giving up — the artifact chain is now stale`,
+        )
+        process.exit(1)
+        return
+      }
+      const delayMs = Math.min(30_000, 1000 * 2 ** (attempts - 1))
+      console.error(
+        `dev-web: ${stage} exited (code ${String(result.exitCode)}); `
+        + `restarting in ${String(delayMs)}ms (attempt ${String(attempts)} of ${String(STAGE_MAX_CONSECUTIVE_CRASHES)})`,
+      )
+      setTimeout(launch, delayMs)
+    })
+  }
+  launch()
 }
 
 /** The only capability this script needs from a live watcher process. */
 interface StageHandle {
   readonly kill: () => void
 }
+
+/** Consecutive crashes tolerated per stage before the script gives up loudly. */
+const STAGE_MAX_CONSECUTIVE_CRASHES = 5
+
+/** Stable uptime that resets a stage's consecutive-crash budget. */
+const STAGE_CRASH_BUDGET_RESET_MS = 5 * 60_000
+
+/** Set by the signal handler so an intentional stop never schedules a restart. */
+let shuttingDown = false
 
 const invokedPath = process.argv[1]
 const isMain = invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href
@@ -201,7 +240,10 @@ if (isMain) {
 
   // Registered before any stage starts: `stages` is read at signal time, so an
   // interrupt during tsdown's initial builds still kills whatever is running.
-  const stop = (): void => { for (const stage of stages) stage.kill() }
+  const stop = (): void => {
+    shuttingDown = true
+    for (const stage of stages) stage.kill()
+  }
   process.once('SIGINT', stop)
   process.once('SIGTERM', stop)
 

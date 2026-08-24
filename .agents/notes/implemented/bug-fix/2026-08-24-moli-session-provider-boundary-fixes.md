@@ -1,8 +1,8 @@
 # Agent Note: moli session teardown and provider-boundary fixes
 
-English | [中文](2026-08-24-moli-session-provider-boundary-fixes.zh.md)
-
 Status: implemented
+
+English | [中文](2026-08-24-moli-session-provider-boundary-fixes.zh.md)
 
 ## Problem
 

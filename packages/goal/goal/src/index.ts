@@ -315,14 +315,17 @@ export class GoalService extends TypertRemoteService {
     if (!resumable.includes(current.phase)) {
       throw this.transitionError(current, 'resume', resumable)
     }
-    if (current.phase === 'active' && cache.activation === 'armed') {
-      throw new GoalError(`goal "${current.id}" is already active and armed`, 'GOAL_INVALID_TRANSITION')
-    }
+    // Exhaustion is checked before the armed guard: an active+armed goal at
+    // its round cap must report the actionable fix (raise maxGoalRounds), not
+    // the redundant armed state it cannot resume through anyway.
     if (cache.state.roundsStarted >= current.maxGoalRounds) {
       throw new GoalError(
         `goal "${current.id}" exhausted ${current.maxGoalRounds} goal rounds; increase maxGoalRounds before resuming`,
         'GOAL_INVALID_TRANSITION',
       )
+    }
+    if (current.phase === 'active' && cache.activation === 'armed') {
+      throw new GoalError(`goal "${current.id}" is already active and armed`, 'GOAL_INVALID_TRANSITION')
     }
     return this.commitCurrent(agent, cache, 'resume', this.withPhase(current, 'active'), 'armed')
   }

@@ -391,6 +391,56 @@ export type Config = LocalConfig
 
 来源：[`packages/shell/bash-sandbox/src/index.ts:35`](../packages/shell/bash-sandbox/src/index.ts)
 
+<a id="deepseek-aidsh-browser"></a>
+
+## `@deepseek-ai/dsh-browser`
+
+```ts config-catalog
+/**
+ * Config for the browser seam. `provider` pins which registered backend wins; it is optional (a
+ * single registered usable provider auto-selects). Operational overrides feed this same field
+ * rather than introduce a hidden priority chain.
+ */
+export interface BrowserRuntimeConfig {
+  /** Explicit provider id. Omitted = auto-select when exactly one usable. */
+  readonly provider?: string
+}
+```
+
+来源：[`packages/browser/browser/src/index.ts:51`](../packages/browser/browser/src/index.ts)
+
+<a id="deepseek-aidsh-browser-moli"></a>
+
+## `@deepseek-ai/dsh-browser-moli`
+
+需要：`browser`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
+export interface Config {
+  /** The moli binary. Falls back to `$MOLI_BINARY`, then `'moli'` on PATH. */
+  binaryPath?: string
+  /** Budget for one session's server startup in milliseconds. */
+  startupTimeoutMs?: number
+  /** Budget for one page navigation in milliseconds. */
+  navigationTimeoutMs?: number
+  /** Budget for one CDP command or event wait outside navigation (evaluate, screenshot) in milliseconds. */
+  cdpTimeoutMs?: number
+  /** Character cap on returned page text content. */
+  maxContentChars?: number
+  /** Settle delay after a DOM interaction before the state read, in milliseconds. */
+  settleMs?: number
+  /** Budget for the one-time `--version` availability probe in milliseconds. */
+  probeTimeoutMs?: number
+  /** Interval between readiness polls in milliseconds. */
+  pollEveryMs?: number
+  /** Extra argv appended to the `moli serve` invocation verbatim. */
+  extraServeArgs?: string[]
+}
+```
+
+来源：[`packages/browser/browser-moli/src/index.ts:35`](../packages/browser/browser-moli/src/index.ts)
+
 <a id="deepseek-aidsh-client-connection"></a>
 
 ## `@deepseek-ai/dsh-client-connection`
@@ -755,10 +805,17 @@ export interface Config {
   defaultTimeoutMs?: number
   /** Character cap for the `hook/result` event's persisted stderr summary. */
   stderrSummaryMaxChars?: number
+  /**
+   * Cap on blocking Stop outcomes per turn: after this many forced
+   * continuations, a further block logs a warning and lets the turn close.
+   * The count covers the whole continuation chain since the turn first tried
+   * to stop, so an alternating block/allow hook cannot stay under it forever.
+   */
+  maxConsecutiveStopBlocks?: number
 }
 ```
 
-来源：[`packages/hooks/hooks-claude-code/src/index.ts:45`](../packages/hooks/hooks-claude-code/src/index.ts)
+来源：[`packages/hooks/hooks-claude-code/src/index.ts:47`](../packages/hooks/hooks-claude-code/src/index.ts)
 
 <a id="deepseek-aidsh-hooks-codex"></a>
 
@@ -782,10 +839,17 @@ export interface Config {
   defaultTimeoutMs?: number
   /** Character cap for the `hook/result` event's persisted stderr summary. */
   stderrSummaryMaxChars?: number
+  /**
+   * Cap on blocking Stop outcomes per turn: after this many forced
+   * continuations, a further block logs a warning and lets the turn close.
+   * The count covers the whole continuation chain since the turn first tried
+   * to stop, so an alternating block/allow hook cannot stay under it forever.
+   */
+  maxConsecutiveStopBlocks?: number
 }
 ```
 
-来源：[`packages/hooks/hooks-codex/src/index.ts:44`](../packages/hooks/hooks-codex/src/index.ts)
+来源：[`packages/hooks/hooks-codex/src/index.ts:46`](../packages/hooks/hooks-codex/src/index.ts)
 
 <a id="deepseek-aidsh-host-apiproxy"></a>
 
@@ -910,12 +974,12 @@ export interface Config {
 
 ```ts config-catalog
 /**
- * Plugin config, validated by the same-named schemastery schema and doubling
- * as the `llm-deepseek` settings-section shape. Every field is optional in
- * yml: a missing API key resolves through {@link Config.apiKeyEnv} at each
- * request (a request without any key fails with `MISSING_CREDENTIAL`, not at
- * plugin load), omitted thinking mode uses the provider default, and omitted
- * reasoning effort resolves to `high`.
+ * Connection and request facts for the one provider route this plugin owns.
+ * Every field is optional in yml: a missing API key resolves through
+ * {@link Config.apiKeyEnv} at each request (a request without
+ * any key fails with `MISSING_CREDENTIAL`, not at plugin load), omitted
+ * thinking mode uses the provider default, and omitted reasoning effort
+ * resolves to `high`.
  */
 export interface Config {
   /** Credential reference (environment-variable name) resolved per request; defaults to `DEEPSEEK_API_KEY`. */
@@ -2511,6 +2575,38 @@ export interface Config {
 
 来源：[`packages/shell/tool-bash-persistent/src/index.ts:432`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-browser"></a>
+
+## `@deepseek-ai/dsh-tool-browser`
+
+需要：`tools` · `browser` · `systemPrompt`
+
+```ts config-catalog
+/** Plugin config: which browser tools to register and their budgets. */
+export interface Config {
+  /** Register `browser_navigate`. Defaults to true. */
+  navigate?: boolean
+  /** Register `browser_snapshot`. Defaults to true. */
+  snapshot?: boolean
+  /** Register `browser_click`. Defaults to true. */
+  click?: boolean
+  /** Register `browser_type`. Defaults to true. */
+  typing?: boolean
+  /** Register `browser_screenshot`. Defaults to true. */
+  screenshot?: boolean
+  /** Cooperative budget (ms) for `browser_navigate`. Defaults to 30000. */
+  navigationTimeoutMs?: number
+  /** Cooperative budget (ms) for in-page actions and screenshots. Defaults to 15000. */
+  actionTimeoutMs?: number
+  /** Cap on one tool's complete rendered output characters. Defaults to 20000. */
+  maxOutputChars?: number
+  /** Cap on one screenshot's encoded PNG size in bytes. Defaults to 5242880 (5 MiB). */
+  maxScreenshotBytes?: number
+}
+```
+
+来源：[`packages/browser/tool-browser/src/index.ts:63`](../packages/browser/tool-browser/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`
@@ -3080,6 +3176,30 @@ export interface Config {
 
 来源：[`packages/web/web-fetch-http/src/index.ts:34`](../packages/web/web-fetch-http/src/index.ts)
 
+<a id="deepseek-aidsh-web-fetch-moli"></a>
+
+## `@deepseek-ai/dsh-web-fetch-moli`
+
+需要：`web`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
+export interface Config {
+  /** The moli binary. Falls back to `$MOLI_BINARY`, then `'moli'` on PATH. */
+  binaryPath?: string
+  /** Maximum accepted request URL length in characters. */
+  maxUrlLength?: number
+  /** Maximum decoded markdown length in characters. */
+  maxBodyChars?: number
+  /** Resource-backstop fetch budget in milliseconds, within Node's timer range. */
+  timeoutMs?: number
+  /** Budget for the one-time `--version` availability probe in milliseconds. */
+  probeTimeoutMs?: number
+}
+```
+
+来源：[`packages/web/web-fetch-moli/src/index.ts:34`](../packages/web/web-fetch-moli/src/index.ts)
+
 <a id="deepseek-aidsh-web-search-deepseek"></a>
 
 ## `@deepseek-ai/dsh-web-search-deepseek`
@@ -3155,6 +3275,26 @@ export interface Config {
 ```
 
 来源：[`packages/web/web-search-perplexity/src/index.ts:32`](../packages/web/web-search-perplexity/src/index.ts)
+
+<a id="deepseek-aidsh-web-search-searxng"></a>
+
+## `@deepseek-ai/dsh-web-search-searxng`
+
+需要：`web`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills the env-var default). */
+export interface Config {
+  /** SearXNG instance base; `/search` is appended. Falls back to `$SEARXNG_BASE_URL`. Empty → provider unavailable. */
+  baseURL?: string
+  /** Basic-auth username for instances behind an authenticated reverse proxy. Defaults to ''. */
+  username?: string
+  /** Basic-auth password; set together with `username` or the provider stays unavailable. Defaults to ''. */
+  password?: string
+}
+```
+
+来源：[`packages/web/web-search-searxng/src/index.ts:31`](../packages/web/web-search-searxng/src/index.ts)
 
 <a id="deepseek-aidsh-workflow-worker-thread"></a>
 

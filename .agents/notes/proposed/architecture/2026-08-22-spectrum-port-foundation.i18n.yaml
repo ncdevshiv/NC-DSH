@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-08-22-spectrum-port-foundation.md
+2026-08-22-spectrum-port-foundation.md: db2a8816715740f7ee5ac9a5981aa29bfb2db0dd
+2026-08-22-spectrum-port-foundation.zh.md: 51ce223ac89917d756e966de9752640db0488dbe

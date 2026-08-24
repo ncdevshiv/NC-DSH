@@ -287,6 +287,13 @@ export class WorkerRun implements WorkflowRun {
         if (this.cancelReason === undefined) this.observer.log(message.message)
         break
       case WorkerToHostType.AgentStart:
+        // A member whose start is reported after the outcome was claimed has
+        // no live run to join (its call was never awaited, so the script
+        // settled before the ChildStarted round-trip returned): admitting it
+        // would dangle the pair past workflow/end. Refuse it like a
+        // post-terminal ChildStart; endAgent's ledger lookup drops the paired
+        // end that arrives afterward.
+        if (this.terminalClaimed) break
         this.liveAgents.set(message.info.seq, message.info)
         this.observer.agentStart(message.info)
         break

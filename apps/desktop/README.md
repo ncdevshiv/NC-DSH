@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-desktop
 
+English | [中文](README.zh.md)
+
 Electron desktop shell over the web profile. The main process renders the loopback server `dsh web` already provides — no business logic moves: sessions, tools, and the client-plugin module table stay on the host, and the window is a native chrome plus a hardened (`contextIsolation`, no node integration) renderer.
 
 ## Run

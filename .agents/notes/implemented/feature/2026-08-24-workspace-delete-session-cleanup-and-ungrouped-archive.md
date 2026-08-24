@@ -19,3 +19,13 @@ Unit tests in `packages/client/ui-workspace` pin:
 - Checking/unchecking the session archive option during workspace deletion.
 - Opening the Ungrouped group menu and archiving all ungrouped sessions.
 - Full typecheck and component test coverage.
+
+## Alternatives considered
+
+**Deleting the workspace's sessions outright.** Rejected: workspace removal deliberately preserves persisted session logs; archiving declutters the browser while keeping every log on disk.
+
+**Archiving unconditionally on confirm.** Rejected in favor of an explicit, default-checked option: the bulk state change stays visible in the deletion dialog, and a user who wants the raw registry-only deletion can opt out in the same gesture.
+
+## Consequences
+
+Deleting a project no longer spills its sessions into Ungrouped, and the Ungrouped header carries a one-gesture bulk archive once sessions do accumulate there. The archive runs client-side through the same `archiveSession` path as manual archiving, so it is reversible per session; the cost is a default-checked bulk action inside a destructive dialog, which a user must notice to decline.

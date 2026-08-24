@@ -27,7 +27,7 @@ Status: implemented
 
 ## 测试
 
-在 Windows 上实机验证：`--replace` 接管、干净启动到已渲染帧（经 PrintWindow 像素采集）、组合门禁对注入悬空引用的通过与失败、完整客户端 typecheck。PR 前欠账：boundary-reset 路径的单元测试，以及全天改动仍需拆分为干净提交。
+在 Windows 上实机验证：`--replace` 接管、干净启动到已渲染帧（经 PrintWindow 像素采集）、组合门禁对注入悬空引用的通过与失败、完整客户端 typecheck。boundary-reset 路径的单元测试仍然欠账。
 
 ## 已考虑的替代方案
 
@@ -36,3 +36,7 @@ Status: implemented
 **用每实例独立 dist 目录替代单实例守卫。** 否决：为一个没有已知用例的工作流（两个并发开发栈）付出双倍磁盘与构建时间；`--replace` 已覆盖真实场景。
 
 **改用 Vite dev-server HMR 替代 build + stat-poll 链。** 暂时否决：宿主按设计服务构建产物（插件 bundle 经客户端模块系统到达）；把 shell 切到 dev server 是比加固现有机制大得多的改动。
+
+## 后果
+
+三层各自无需人工介入即可自愈渲染进程故障；悬空插件类失败从宿主启动时提前到编写期；EBUSY 不再终结 watch 会话。代价与边界：watchdog 看不见最小化或隐藏的窗口（其空白截图与死亡无法区分），各层修复尝试受重载预算约束，单实例守卫只保护开发启动器——已发布应用的生命周期仍无监督。
