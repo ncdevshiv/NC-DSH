@@ -19,6 +19,7 @@ import {
   loadOptionalPatches,
   PROFILE_PATCH_FILENAME,
   watchUserPatches,
+  watchUserPatchesAcrossHmrSwaps,
 } from '../src/index.ts'
 
 const NAME = 'dsh-test-bin'
@@ -417,6 +418,67 @@ describe('boot with user patches', () => {
       await dispose()
     } finally {
       await ctx.fiber.dispose()
+    }
+  })
+})
+
+describe('watchUserPatchesAcrossHmrSwaps', () => {
+  it('re-registers the watches against each hmr instance that mounts', { timeout: 20_000 }, async () => {
+    const dir = tmp()
+    const userDir = tmp()
+    const filename = join(userDir, PROFILE_PATCH_FILENAME)
+    const basePatches = [{ id: 'noop', config: { value: 'generated' } }]
+    const compose = (userPatches: PatchOptions[]) => [...basePatches, ...userPatches]
+    const ctx = await boot(NAME, writeTree(dir))
+    try {
+      await ctx.plugin(Timer)
+      // HMR instances arrive through loader entries — the same path a
+      // settings-toggle swap takes — instead of a fixed ctx.plugin mount.
+      ctx.loader.builtins.hmr = Hmr
+      const firstId = await ctx.loader.create({
+        name: 'cordis:hmr',
+        config: { root: [], ignored: [], debounce: 0 },
+      })
+      await watchUserPatchesAcrossHmrSwaps(ctx, [{ binName: NAME, filename, compose }])
+
+      writeFileSync(filename, '- id: noop\n  config:\n    value: before-swap\n')
+      await eventually(
+        () => (entryConfig(ctx, 'noop') as { value?: string }).value === 'before-swap',
+        'the initial instance did not apply user patches',
+      )
+      await settleChokidarChangeThrottle()
+
+      // Swap instances the way the plugin inventory does: disable the running
+      // entry (its watchers die with its fiber), then mount a replacement.
+      await ctx.loader.update(firstId, { disabled: true })
+      const secondId = await ctx.loader.create({
+        name: 'cordis:hmr',
+        config: { root: [], ignored: [], debounce: 0 },
+      })
+      expect(secondId).not.toBe(firstId)
+
+      writeFileSync(filename, '- id: noop\n  config:\n    value: after-swap\n')
+      await eventually(
+        () => (entryConfig(ctx, 'noop') as { value?: string }).value === 'after-swap',
+        'the watches did not follow the swapped hmr instance',
+      )
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('fails loud on the first application when the include is absent', async () => {
+    const withoutInclude = new Context()
+    withoutInclude.baseUrl = pathToFileURL(`${tmp()}/`).href
+    await withoutInclude.plugin(Loader)
+    await withoutInclude.plugin(Timer)
+    await withoutInclude.plugin(Hmr, { root: [], ignored: [], debounce: 0 })
+    try {
+      await expect(watchUserPatchesAcrossHmrSwaps(withoutInclude, [
+        { binName: NAME, filename: join(tmp(), PROFILE_PATCH_FILENAME) },
+      ])).rejects.toThrow('requires the root Include entry')
+    } finally {
+      await withoutInclude.fiber.dispose()
     }
   })
 })

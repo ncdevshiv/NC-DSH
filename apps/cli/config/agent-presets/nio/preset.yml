@@ -1,0 +1,3 @@
+name: NIO Orchestrator
+description: 'Autonomous orchestration agent with the full standard-mode surface: goals, subagents, workflows, background jobs, and skills, running under an evidence-driven self-modification charter.'
+order: 5

@@ -26,7 +26,7 @@ import {
   loadOverlayPatches,
   loadProfile,
   PROFILE_PATCH_FILENAME,
-  watchUserPatches,
+  watchUserPatchesAcrossHmrSwaps,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -282,16 +282,23 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
         }
         await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-hmr', config: { root: [] } })
       }
-      await watchUserPatches(ctx, {
-        binName: NAME,
-        filename: composed.profile.patchPath,
-        compose: composeLive,
-      })
-      await watchUserPatches(ctx, {
-        binName: NAME,
-        filename: homePatchPath(),
-        compose: composeLive,
-      })
+      // The watchers ride a dedicated plugin that requires `hmr`: when a
+      // settings toggle swaps HMR entries, the plugin-inventory gateway
+      // disables the previous entry before enabling another, and this plugin
+      // re-registers the watches against whichever instance mounts next —
+      // cordis.patch.yml edits stay live across the swap without a restart.
+      await watchUserPatchesAcrossHmrSwaps(ctx, [
+        {
+          binName: NAME,
+          filename: composed.profile.patchPath,
+          compose: composeLive,
+        },
+        {
+          binName: NAME,
+          filename: homePatchPath(),
+          compose: composeLive,
+        },
+      ])
     } catch (error) {
       suppressShutdownError(ctx, signalShutdown.signal, error)
     }

@@ -265,6 +265,39 @@ export async function watchUserPatches(
 }
 
 /**
+ * Watch user patch layers through whichever `hmr` service instance is live.
+ * The registrations require `hmr`, so Cordis unloads them together with each
+ * instance they were registered on and re-runs them against the next instance
+ * that mounts — a settings toggle that swaps HMR entries (the plugin
+ * inventory disables the previous entry before enabling another) keeps patch
+ * watching alive without a restart. Callers must guarantee an `hmr` service is
+ * resolvable now (create the watch-only fallback first), so the initial
+ * application settles here and fails loud through the caller's boot error
+ * path; later re-applications surface failures through their fiber state.
+ * @param ctx - settled app context containing the root Include.
+ * @param optionsList - per-file watch inputs, registered in order on every application.
+ * @throws when the first application fails: missing include or service, watcher setup, or path resolution.
+ */
+export async function watchUserPatchesAcrossHmrSwaps(
+  ctx: Context,
+  optionsList: readonly UserPatchWatchOptions[],
+): Promise<void> {
+  // An `hmr` service is resolvable by contract here, so the first application
+  // starts during this mount; the fiber's await rejects when it fails, making
+  // this call the single reporter for setup failures.
+  const mount = ctx.plugin({
+    name: 'user-patch-watch',
+    inject: ['hmr'],
+    async apply(): Promise<void> {
+      for (const options of optionsList) {
+        await watchUserPatches(ctx, options)
+      }
+    },
+  })
+  await mount
+}
+
+/**
  * Load an optional patch-list file: a top-level YAML array of loader patch
  * entries (`@deepseek-ai/cordis-plugin-include`'s `PatchOptions`): id-targeted config
  * overrides and `insert` lists, with `!!js` expressions allowed. A missing
