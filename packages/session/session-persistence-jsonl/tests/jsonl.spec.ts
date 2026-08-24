@@ -638,6 +638,55 @@ describe('JsonlSessionPersistence: durability and crash semantics', () => {
     expect(after.startsWith(committedPrefix)).toBe(true)
   })
 
+  it('rejects an append when another writer grew the durable log behind its back', async () => {
+    const m = meta('foreign-writer', '/proj')
+    await ctx.sessionPersistence.create(m)
+    await ctx.sessionPersistence.append(m.id, oneTurnLog())
+    const path = rawLogPath(root, '/proj', m.id)
+
+    // A second process appends a well-formed closed turn while this backend
+    // still holds its own cursor: exactly the interleaving that previously
+    // produced duplicate sequence numbers and an unreadable log.
+    await appendFile(path, [
+      JSON.stringify({ type: 'turn/start', seq: 6, time: 20, data: { turn: 2 } }),
+      JSON.stringify({ type: 'turn/end', seq: 7, time: 21, data: { turn: 2, reason: { kind: 'completed' } } }),
+    ].join('\n') + '\n')
+
+    // The batch continues THIS backend's cursor (seq 6), so the coordinator's
+    // logical contiguity check passes; the durable-size verification is what
+    // refuses the write.
+    await expectFlushError(ctx.sessionPersistence.append(m.id, [
+      { type: 'turn/start', seq: 6, time: 22, data: { turn: 3 } },
+    ] as SessionEvent[]), /another writer appended concurrently/)
+
+    // The refusal left the foreign bytes untouched for diagnosis.
+    const content = await readFile(path, 'utf8')
+    expect(content).toContain('"seq":7')
+  })
+
+  it('a fresh backend instance resumes appending after adopting the stored log', async () => {
+    const m = meta('resume-seed', '/proj')
+    await ctx.sessionPersistence.create(m)
+    await ctx.sessionPersistence.append(m.id, oneTurnLog())
+    await ctx.fiber.dispose()
+
+    const next = new Context()
+    await next.plugin(SessionStore)
+    await next.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+    try {
+      // The first append of the new instance adopts the stored log; its size
+      // baseline comes from the adoption read, so this must not false-positive.
+      await next.sessionPersistence.append(m.id, [
+        { type: 'turn/start', seq: 6, time: 9, data: { turn: 2 } },
+        { type: 'turn/end', seq: 7, time: 10, data: { turn: 2, reason: { kind: 'completed' } } },
+      ] as SessionEvent[])
+      const loaded = await next.sessionPersistence.load(m.id)
+      expect(loaded.events.map(event => event.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    } finally {
+      await next.fiber.dispose()
+    }
+  })
+
   it('a failed appendLines truncates partial bytes so a retry has no seq gap', async () => {
     const m = meta('truncate-retry')
     await ctx.sessionPersistence.create(m)

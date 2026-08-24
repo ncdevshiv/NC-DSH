@@ -50,6 +50,11 @@ function assertZstdHeaderFrame(plaintext: Buffer): void {
   }
 }
 
+/** Encoded size of one physical batch, independent of string-or-buffer form. */
+function encodedByteLength(content: Buffer | string): number {
+  return typeof content === 'string' ? Buffer.byteLength(content) : content.byteLength
+}
+
 /** Loader schema for the JSONL artifact's physical encoding. */
 export const JsonlCompressionSchema: z<JsonlCompression> = z.union([
   z.const('zstd'),
@@ -144,6 +149,15 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   private compression: JsonlCompression
   private coordinator: PersistenceCoordinator<JsonlTornMarker>
   private rootEncodingCheck: Promise<void> | undefined
+  /**
+   * Durable byte size last written or revision-stably read by THIS backend
+   * instance, per session id. Every append verifies the file still matches
+   * before writing, so a concurrent writer outside this coordinator turns
+   * into a loud refusal instead of silently interleaved sequence numbers.
+   * Absent for an id until this instance materializes, appends, or stably
+   * reads its log; the first append after such a read seeds from that read.
+   */
+  private readonly verifiedSizes = new Map<SessionId, number>()
 
   constructor(ctx: Context, public config: Config) {
     super(ctx)
@@ -341,6 +355,9 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     signal?.throwIfAborted()
     await this.assertStoredIdentity(path, prefix.meta, expectedId, signal)
     signal?.throwIfAborted()
+    // The revision-stable read doubles as the size baseline a later append
+    // verifies against: bytes beyond it mean a writer outside this backend.
+    this.verifiedSizes.set(prefix.meta.id, buffer.byteLength)
     return { ...prefix, revision }
   }
 
@@ -438,7 +455,11 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     tornMarker: JsonlTornMarker | undefined,
     closers: readonly SessionEvent[],
   ): Promise<void> {
-    if (tornMarker !== undefined) await this.repair(meta, tornMarker.truncateTo)
+    if (tornMarker !== undefined) {
+      await this.repair(meta, tornMarker.truncateTo)
+      // The truncate redefines the durable tail; appends verify against it.
+      this.verifiedSizes.set(meta.id, tornMarker.truncateTo)
+    }
     const repairedEvents = [...(tornMarker?.recoveredEvents ?? []), ...closers]
     if (repairedEvents.length > 0) await this.appendLines(meta, repairedEvents)
   }
@@ -523,6 +544,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     } else {
       await this.materializePosix(project, dir, finalPath, meta.id, content)
     }
+    this.verifiedSizes.set(meta.id, encodedByteLength(content))
   }
 
   /* v8 ignore start -- Windows uses the Win32 durable-publish path; POSIX coverage exercises this peer. */
@@ -644,9 +666,13 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   /* v8 ignore stop */
 
   /**
-   * Append and fsync event lines. On a partial write or sync failure, restore the
-   * previous size before rethrowing because the unchanged cursor will retry the
-   * batch; leaving partial bytes would create duplicate sequence numbers.
+   * Append and fsync event lines. Before writing, the file size must still
+   * match what this backend last wrote or revision-stably read: a mismatch
+   * means a writer outside this coordinator appended concurrently, and
+   * continuing would interleave duplicate sequence numbers that make the log
+   * unreadable. On a partial write or sync failure, restore the previous size
+   * before rethrowing because the unchanged cursor will retry the batch;
+   * leaving partial bytes would create duplicate sequence numbers.
    */
   private async appendLines(meta: SessionHeader, events: readonly SessionEvent[]): Promise<void> {
     const content = await this.encodeEventBatch(events)
@@ -661,6 +687,14 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
     try {
       const { size: before } = await handle.stat()
+      const verified = this.verifiedSizes.get(meta.id)
+      if (verified !== undefined && verified !== before) {
+        throw new Error(
+          `session "${meta.id}" durable log diverged before append at "${path}": `
+          + `found ${before} bytes, last verified ${verified} `
+          + '(another writer appended concurrently); refusing to interleave',
+        )
+      }
       try {
         await handle.writeFile(content)
         await handle.sync()
@@ -673,6 +707,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
         }
         throw error
       }
+      this.verifiedSizes.set(meta.id, before + encodedByteLength(content))
     } finally {
       await closeAppendHandle()
     }
