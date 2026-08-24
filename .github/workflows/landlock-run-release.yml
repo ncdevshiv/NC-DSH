@@ -66,10 +66,14 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
-      - name: Install musl toolchain
+      - name: Install native toolchain
         run: |
           sudo apt-get update -q
           sudo apt-get install -yq musl-tools
+          # cargo builds against the bundled static musl target (self-contained
+          # CRT objects; the host compiler only drives linking), so installing
+          # the std target is all the Rust side needs.
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
       - name: Build native binaries
         run: bun run build:native

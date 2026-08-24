@@ -91,6 +91,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -yq musl-tools
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
           (cd native/landlock-run && bun run build:ts && bun run build:native)
 
       # The unit suite runs on ubuntu in `checks`; this is the one darwin leg

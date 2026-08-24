@@ -21,7 +21,8 @@
     "README.md",
     "lib/",
     "!lib/*.tsbuildinfo",
-    "src/main.c"
+    "native/",
+    "!native/target/"
   ],
   "scripts": {
     "build:js": "tsc -b",

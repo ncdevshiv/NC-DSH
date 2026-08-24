@@ -10,15 +10,15 @@ The project is pre-1.0. Prefer the correct public API over compatibility shims: 
 
 - Every tool must fail closed. If a ruleset cannot be created or the kernel does not enforce it, exit non-zero WITHOUT exec'ing the wrapped command. Never run unconfined as a fallback.
 - Runtime binaries and the entry packages take NO environment-variable overrides: which binary confines a process must never be decidable by the ambient environment. Test injection is by function parameter; the `NALR_*` prefix is for build/test orchestration only.
-- Kernel UAPI is self-defined in the C source (verbatim from the kernel headers), keeping builds independent of toolchain header vintage and making the definitions part of the audit record.
-- No libraries beyond libc, linked statically against musl. The audit surface of a tool is its C source plus the kernel's stable syscall contract.
+- Kernel UAPI is self-defined in the launcher source (verbatim from the kernel headers), keeping builds independent of dependency vintage and making the definitions part of the audit record.
+- The launcher is single-file Rust whose only dependency is the `libc` crate's syscall shims, linked statically against musl. The audit surface of a tool is its source file plus the kernel's stable syscall contract.
 - The CLI contract of each tool ([docs/cli-contract.md](docs/cli-contract.md)) is the cross-repo compatibility contract: argv grammar, exit codes, and report lines change only with a version bump and a changelog entry, and consumers parse them only through the entry package.
 - There is deliberately NO install-time build fallback: a host without a matching platform package gets a nonexistent launcher path, the consumer's probe fails, and the consumer falls closed — that degradation is part of the design, not a gap to fill with node-gyp.
 
 ## Repository layout
 
 ```text
-packages/entry/     Published entry package: JavaScript API (resolve/probe/grants) + the C source.
+packages/entry/     Published entry package: JavaScript API (resolve/probe/grants) + the launcher source as a Rust crate under native/.
 packages/linux-*/   Published per-platform packages: one prebuilt static binary, no JavaScript.
 scripts/            Build, matrix derivation, prepack gates, and release orchestration.
 test/               Plain-node behavioral tests (entry API + real-kernel launcher proofs).
@@ -30,7 +30,7 @@ docs/               Architecture, packaging, CLI contract, release, support matr
 ```sh
 bun install
 bun run build:ts     # entry packages → lib/
-bun run build:native # this Linux architecture's binaries (needs musl-tools); fails fast elsewhere
+bun run build:native # this Linux architecture's binaries (needs cargo + `rustup target add <musl triple>`); fails fast elsewhere
 bun run typecheck
 bun test             # entry tests everywhere; launcher tests need linux + built binary
 ```

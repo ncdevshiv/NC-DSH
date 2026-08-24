@@ -36,7 +36,7 @@ if (process.platform !== 'linux') {
 const launcher = launcherPath();
 assert.ok(
   fs.existsSync(launcher),
-  `launcher.test: no built launcher at ${launcher} — run \`bun run build:native\` (apt-get install musl-tools) first`,
+  `launcher.test: no built launcher at ${launcher} — run \`bun run build:native\` (cargo with the musl target: \`rustup target add ${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-unknown-linux-musl\`) first`,
 );
 
 const run = (args, options = {}) => spawnSync(launcher, args, { encoding: 'utf8', ...options });

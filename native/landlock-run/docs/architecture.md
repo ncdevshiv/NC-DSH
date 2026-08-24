@@ -6,7 +6,7 @@ This repository owns confinement *mechanism*, not policy: consumers (agent harne
 
 The family is one entry package plus per-platform binary packages:
 
-- **Entry package** (`@deepseek-ai/node-addon-landlock-run`): ESM JavaScript. Owns the tool's CLI contract — path resolution (`launcherPath`), the functional probe (`probe`), grant-argv construction (`grantArgs`), and the contract constants. Ships the C source in its tarball for auditability. Lists every platform package as an `optionalDependency`.
+- **Entry package** (`@deepseek-ai/node-addon-landlock-run`): ESM JavaScript. Owns the tool's CLI contract — path resolution (`launcherPath`), the functional probe (`probe`), grant-argv construction (`grantArgs`), and the contract constants. Ships the launcher source in its tarball for auditability. Lists every platform package as an `optionalDependency`.
 - **Platform packages** (`@deepseek-ai/node-addon-landlock-run-linux-{x64,arm64}`): one prebuilt static binary under `bin/`, a `prebuilds.json` declaring it, and no JavaScript at all. npm's `os`/`cpu` fields select the matching one at install time; the entry package resolves it to a file path — there is nothing to import.
 
 Because the CLI parser and binary are versioned together in one package family, the parser cannot fall behind that binary version. Preventing that mismatch is why the package split exists.
@@ -25,7 +25,7 @@ The launcher exits `125` without exec'ing the command on any launcher-level fail
 
 ## Build and release model
 
-Builds are native-only. `scripts/build.ts` compiles the running architecture's binaries with the distro `musl-gcc` (static: no loader or libc expectations on consumers, one binary for glibc and musl distros); CI's per-architecture runners are the builders of record, and no cross toolchain exists in the repo. Review covers the C source and the CI job that built each binary, enforced by three gates: platform prepack refuses missing/wrong-ELF binaries, entry prepack refuses unbuilt `lib/`, and the release pipeline byte-pins installed binaries against the workspace builds they were packed from.
+Builds are native-only. `scripts/build.ts` compiles the running architecture's binaries with cargo against Rust's bundled static musl target (static: no loader or libc expectations on consumers, one binary for glibc and musl distros; the host C compiler only drives linking); CI's per-architecture runners are the builders of record, and no cross toolchain exists in the repo. Review covers the launcher source and the CI job that built each binary, enforced by three gates: platform prepack refuses missing/wrong-ELF binaries, entry prepack refuses unbuilt `lib/`, and the release pipeline byte-pins installed binaries against the workspace builds they were packed from.
 
 The package matrix is checked-in metadata (`prebuilds.json` + `os`/`cpu` fields); `scripts/github-matrix.mjs` derives the CI and Release matrices from it, so adding a platform extends automation without editing workflows.
 

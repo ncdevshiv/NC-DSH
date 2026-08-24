@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 A [Landlock](https://landlock.io/) self-restrict-then-exec launcher for confining subprocesses on Linux, distributed as prebuilt per-platform npm packages plus a thin JS entry package that resolves the binary and speaks its CLI contract. Built for agent harnesses and other hosts that need to run untrusted commands under a filesystem allow-list without confining themselves.
 
-The tool is **`landlock-run`** — a self-restrict-then-exec [Landlock](https://landlock.io/) launcher (~300 lines of C11 over the raw kernel UAPI, statically linked against musl). It installs a Landlock ruleset on itself and `exec`s the wrapped command; the ruleset is inherited across `execve`, so the command and every process it spawns run confined while the invoking process stays unrestricted. Fail-closed: if the kernel cannot enforce, it exits without running the command.
+The tool is **`landlock-run`** — a self-restrict-then-exec [Landlock](https://landlock.io/) launcher (a single-file Rust implementation over the raw kernel UAPI, statically linked against musl). It installs a Landlock ruleset on itself and `exec`s the wrapped command; the ruleset is inherited across `execve`, so the command and every process it spawns run confined while the invoking process stays unrestricted. Fail-closed: if the kernel cannot enforce, it exits without running the command.
 
 ## Install
 
@@ -52,7 +52,7 @@ linux-x64 and linux-arm64, kernel with Landlock enabled (5.13+; ABI level determ
 ```sh
 bun install
 bun run build:ts     # entry packages → lib/
-bun run build:native # this Linux architecture's binaries (apt-get install musl-tools)
+bun run build:native # this Linux architecture's binaries (rustup target add x86_64-unknown-linux-musl)
 bun test
 ```
 

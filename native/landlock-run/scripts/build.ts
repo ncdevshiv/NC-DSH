@@ -4,35 +4,50 @@
  *
  * Targets are derived from the checked-in matrix: each
  * `packages/<name>/prebuilds.json` whose `platform` matches this host names
- * the binaries to produce; the TOOLS table below maps each `tool` to its C
- * source. Builds are NATIVE-ONLY — each Linux architecture compiles its own
- * binary with the distro's `musl-gcc` (static musl: runs on glibc and musl
- * distros alike, no loader or libc expectations on the consumer host), and
- * CI's per-arch runners are the builders of record. No cross toolchain
- * exists here on purpose: native runners replace it, and the audit surface
- * is the reviewed C source plus the CI job that built the binary.
+ * the binaries to produce; the TOOLS table below maps each `tool` to its Rust
+ * crate. Builds are NATIVE-ONLY — each Linux architecture compiles its own
+ * binary with cargo against the bundled static musl target
+ * (`rustup target add <triple>`; rustc ships self-contained CRT objects for
+ * the musl targets and uses the host C compiler only as the linker driver).
+ * The result runs on glibc and musl distros alike, with no loader or libc
+ * expectations on the consumer host. CI's per-arch runners are the builders
+ * of record; no cross toolchain exists here on purpose: native runners
+ * replace it, and the audit surface is the reviewed launcher source plus the
+ * CI job that built the binary.
  *
- * Binaries land in `packages/<name>/bin/` — git-ignored (root
+ * Binaries land in `packages/<name>/bin/` — git-ignored (workspace
  * `.gitignore`), packed into the platform package's npm tarball behind its
  * `prepack` gate (`scripts/verify-launcher-binary.mjs`).
  *
- * Run: `bun run build:native` (Linux with musl-gcc on PATH:
- * `apt-get install musl-tools`). Non-Linux hosts fail fast — no platform
+ * Run: `bun run build:native` (Linux with cargo on PATH and the musl std
+ * target installed: `rustup target add x86_64-unknown-linux-musl` or
+ * `aarch64-unknown-linux-musl`). Non-Linux hosts fail fast — no platform
  * package exists for them to build.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
-/** Each native tool's C source, keyed by the `tool` field in prebuilds.json. */
-const TOOLS: Record<string, { source: string }> = {
-  'landlock-run': { source: 'packages/entry/src/main.c' },
+/** Each native tool's crate manifest, keyed by the `tool` field in prebuilds.json. */
+const TOOLS: Record<string, { manifestPath: string }> = {
+  'landlock-run': { manifestPath: 'packages/entry/native/Cargo.toml' },
+}
+
+/** The Rust target triple this build produces for each supported host arch. */
+const RUST_TARGETS: Record<string, string> = {
+  x64: 'x86_64-unknown-linux-musl',
+  arm64: 'aarch64-unknown-linux-musl',
 }
 
 const repoRoot = resolve(import.meta.dirname, '..')
 
 if (process.platform !== 'linux') {
   console.error(`build: native tools are built natively per Linux architecture (no cross toolchain) — nothing to build on ${process.platform}. CI's per-arch runners build and rehearse every platform package.`)
+  process.exit(1)
+}
+const rustTarget = RUST_TARGETS[process.arch]
+if (rustTarget === undefined) {
+  console.error(`build: no Rust musl target is mapped for ${process.arch} — extend RUST_TARGETS together with the package matrix.`)
   process.exit(1)
 }
 const hostPlatform = `linux-${process.arch}`
@@ -70,17 +85,22 @@ for (const target of targets) {
   const binary = join(target.packageDir, target.binaryPath)
   mkdirSync(dirname(binary), { recursive: true })
 
-  // -static against musl: self-contained, no loader/libc expectations on the
-  // consumer host. -Werror is safe to keep hard: CI pins the builder images,
-  // and a new warning on a toolchain bump deserves a look, not a pass.
-  const result = spawnSync('musl-gcc', [
-    '-std=c11', '-Os', '-Wall', '-Wextra', '-Werror', '-static', '-s',
-    '-o', binary, join(repoRoot, tool.source),
+  // Static against the bundled musl: self-contained, no loader/libc
+  // expectations on the consumer host. Release profile pins lto, panic=abort,
+  // and symbol stripping so a new toolchain default cannot quietly change the
+  // shipped artifact's shape.
+  const result = spawnSync('cargo', [
+    'build', '--release', '--target', rustTarget,
+    '--manifest-path', join(repoRoot, tool.manifestPath),
   ], { stdio: ['ignore', 'inherit', 'inherit'] })
   if (result.error !== undefined || result.status !== 0) {
-    console.error('build: musl-gcc failed' +
-      (result.error ? ` (${result.error.message} — is musl-tools installed?)` : ''))
+    console.error('build: cargo failed' +
+      (result.error ? ` (${result.error.message} — is cargo installed with the ${rustTarget} target? \`rustup target add ${rustTarget}\`)` : ''))
     process.exit(1)
   }
+  const built = join(repoRoot, tool.manifestPath, '..', 'target', rustTarget, 'release', 'landlock-run')
+  copyFileSync(built, binary)
+  // copyFileSync does not preserve the executable bit; pack-time gates assert it.
+  chmodSync(binary, 0o755)
   console.log(`build: built ${basename(target.packageDir)}/${target.binaryPath}`)
 }

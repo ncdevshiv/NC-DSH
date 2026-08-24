@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write native/landlock-run/packages/entry/README.md
-README.md: fff722428c5d213d9fcce0ee87a1d48cdc189884
-README.zh.md: cbf867d9dd3551a12b74b19a6ceaf2be3e1c53a6
+README.md: 6d95ef3883e9cbcb4575735c6464385a4d245bcd
+README.zh.md: 574b0f74e3b8e778f1a3d9f8597a585101cdcae6

@@ -1,0 +1,20 @@
+# The launcher crate lives inside the entry npm package so the audited source
+# ships in the same tarball as the JS contract API (`files: ["native/"]`).
+[package]
+name = "landlock-run"
+version = "0.1.1"
+edition = "2021"
+license = "BSD-3-Clause"
+publish = false
+
+[dependencies]
+# Deliberately the only dependency: the audit surface is this crate's single
+# source file plus libc's syscall shims and the kernel's stable UAPI contract.
+libc = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
