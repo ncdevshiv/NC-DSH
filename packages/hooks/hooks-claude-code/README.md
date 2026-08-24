@@ -16,6 +16,7 @@ const config: Config = {
   projectDir: '/path/to/project',    // optional: replaces ${CLAUDE_PROJECT_DIR} AND sets the hook env var; defaults to the session cwd when omitted
   defaultTimeoutMs: 600_000,         // optional: per-hook timeout when a hook sets none (CC default)
   stderrSummaryMaxChars: 500,        // optional: char cap on the hook/result event's persisted stderr summary
+  maxConsecutiveStopBlocks: 25,      // optional: blocking Stop outcomes allowed per turn before further blocks close the turn
 }
 ```
 
@@ -40,7 +41,7 @@ The hooks **themselves** run in the agent's session workspace: for the agent-sco
 | `UserPromptSubmit` | `agent/pre-step` (waterfall) | `deny` → `PreStepDecision.reject`; additionalContext-only → delegate via `next()` then append a separately sourced message to a downstream `enter` decision (a later outer listener can still reject/rewrite) |
 | `PreToolUse` | `tools/pre-execute` (waterfall) | `deny` → `PreToolDecision.deny`; `ask` → `PreToolDecision.ask` |
 | `PostToolUse` | `tools/post-execute` (waterfall) | `deny` → `block` with feedback; additionalContext-only → delegate via `next()` then prepend a separately sourced context to the downstream decision; Code Mode defers sub-call contexts until the outer `run_code` result |
-| `Stop` | `agent/turn-stopping` (serial) | a blocking Stop hook feeds its reason through `steer()`, forcing another step |
+| `Stop` | `agent/turn-stopping` (serial) | a blocking Stop hook feeds its reason through `steer()`, forcing another step; the per-turn `maxConsecutiveStopBlocks` cap closes the turn once spent, and the payload's `stop_hook_active` is `true` after the first forced continuation |
 | `SubagentStart` | `subagent/start` (emit) | additionalContext → `agent.inject()` into a live in-process child; a remote child has no local injection target |
 | `SubagentStop` | `subagent/end` (emit) | observe-only |
 
@@ -78,7 +79,7 @@ Provider-supplied reasons pass through verbatim. When absent, a blocked prompt u
 
 #### Token effect
 
-Blocking a prompt removes that prompt's request tokens; denial or feedback adds the retained fallback or provider text; forced continuation pays another full request.
+Blocking a prompt removes that prompt's request tokens; denial or feedback adds the retained fallback or provider text; forced continuation pays another full request, bounded per turn by `maxConsecutiveStopBlocks`.
 
 #### KV Cache effect
 
@@ -92,6 +93,6 @@ A blocked prompt sends no request and invalidates nothing. Denial, feedback, and
 - **`PreToolUse` is partial:** `deny` and `ask` decisions work; `allow` does not pre-approve, `defer` is unsupported, `additionalContext` is ignored, and `updatedInput` is logged + warned but not honored ([the pre-tool-input-rewrite Agent Note](../../../.agents/notes/proposed/feature/2026-06-30-pre-tool-input-rewrite.md)).
 - **`PostToolUse` is partial:** blocking feedback and JSON `additionalContext` work, but `updatedToolOutput` and `updatedMCPToolOutput` are unsupported and `tool_response` is flattened to text.
 - **`SubagentStart` and `SubagentStop` are partial:** both report a constant `agent_type` of `general-purpose` and use the child session id where Claude Code reports the parent session. Start context is best-effort and can only reach a live in-process child, while stop is observe-only and cannot block the subagent or feed it context. Start omits `transcript_path`; stop also omits `agent_transcript_path`, `last_assistant_message`, `background_tasks`, and `session_crons` and always reports `stop_hook_active: false`.
-- **`Stop` is partial:** blocking forces another model turn, but `stop_hook_active` is always `false`, `last_assistant_message`, `background_tasks`, and `session_crons` are omitted, and the consecutive-block cap is not implemented (`TODO(stop-loop-guard)`). An unconditionally blocking hook therefore force-continues every step unless it self-limits.
+- **`Stop` is partial:** blocking forces another model turn, bounded per turn by `maxConsecutiveStopBlocks` (`stop_hook_active` reports `true` after the first forced continuation); `last_assistant_message`, `background_tasks`, and `session_crons` are omitted.
 - **Common payload and output fields are partial:** mapped event payloads omit `prompt_id`, `transcript_path`, `permission_mode`, and `effort` where Claude Code would provide them. `systemMessage` is logged + warned but not surfaced; `{"continue": false}` is recorded but does not halt the run; `suppressOutput`, `stopReason`, and `terminalSequence` are not applied (`TODO(hook-continue-false)`).
 - **Handler and config support is partial:** only shell-form command handlers run. `http`, `mcp_tool`, `prompt`, and `agent` handlers are skipped; command-handler options such as `args`, `async`, `asyncRewake`, `shell`, `if`, `once`, and `statusMessage` are not honored. Matching handlers run serially and are not deduplicated, whereas Claude Code runs them in parallel and deduplicates identical handlers. One process-level `configPath` is parsed once at load; Claude Code's layered project, user, plugin, and policy discovery and live reload are not implemented (`TODO(per-session-hook-config)`).

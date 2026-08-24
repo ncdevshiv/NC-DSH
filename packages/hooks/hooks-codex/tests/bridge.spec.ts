@@ -89,8 +89,8 @@ describe('hooks-codex bridge', () => {
 
   it('a Stop hook (exit 2) forces the turn to continue with the reason as steering', async () => {
     const dir = configDir()
-    // Stop ignores its malformed matcher field. Block once with a marker;
-    // until the loop guard lands, an always-blocking hook would never finish.
+    // Stop ignores its malformed matcher field. The script blocks once
+    // (marker-gated) so the test ends without spending the continuation cap.
     const marker = join(dir, 'fired')
     const cont = script(dir, 'cont.sh', `#!/usr/bin/env bash\nif [ -e "${marker}" ]; then exit 0; fi\ntouch "${marker}"\necho "keep going: address the goal" >&2\nexit 2\n`)
     writeHooks(dir, { Stop: [{ matcher: '[', hooks: [{ type: 'command', command: cont }] }] })

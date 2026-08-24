@@ -23,3 +23,5 @@ export { appendHookInvoked, appendHookResult, DEFAULT_STDERR_SUMMARY_MAX_CHARS, 
 export type { HookInvocation, HookResultRecord } from './events.ts'
 export { createDetachedRuns } from './detached.ts'
 export type { DetachedRuns } from './detached.ts'
+export { createStopBlockLedger, DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS } from './stop-guard.ts'
+export type { StopBlockLedger } from './stop-guard.ts'

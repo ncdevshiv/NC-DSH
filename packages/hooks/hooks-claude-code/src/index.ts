@@ -23,7 +23,9 @@ import {
   appendHookResult,
   createDetachedRuns,
   DEFAULT_HOOK_TIMEOUT_MS,
+  DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS,
   DEFAULT_STDERR_SUMMARY_MAX_CHARS,
+  createStopBlockLedger,
   matchesMatcher,
   mergeHookOutputs,
   runHook,
@@ -67,6 +69,13 @@ export interface Config {
   defaultTimeoutMs?: number
   /** Character cap for the `hook/result` event's persisted stderr summary. */
   stderrSummaryMaxChars?: number
+  /**
+   * Cap on blocking Stop outcomes per turn: after this many forced
+   * continuations, a further block logs a warning and lets the turn close.
+   * The count covers the whole continuation chain since the turn first tried
+   * to stop, so an alternating block/allow hook cannot stay under it forever.
+   */
+  maxConsecutiveStopBlocks?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -75,6 +84,7 @@ export const Config: z<Config> = z.object({
   projectDir: z.string(),
   defaultTimeoutMs: z.number().default(DEFAULT_HOOK_TIMEOUT_MS),
   stderrSummaryMaxChars: z.number().default(DEFAULT_STDERR_SUMMARY_MAX_CHARS),
+  maxConsecutiveStopBlocks: z.number().default(DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS),
 })
 
 /** A stable per-handler id so an invoked/result pair correlates in the log. */
@@ -98,6 +108,8 @@ export function apply(ctx: Context, config: Config): void {
   const stderrSummaryMaxChars = config.stderrSummaryMaxChars ?? DEFAULT_STDERR_SUMMARY_MAX_CHARS
   assertPositiveInteger('stderrSummaryMaxChars', stderrSummaryMaxChars)
   const defaultTimeoutMs = config.defaultTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
+  const maxConsecutiveStopBlocks = config.maxConsecutiveStopBlocks ?? DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS
+  assertPositiveInteger('maxConsecutiveStopBlocks', maxConsecutiveStopBlocks)
   // Parse once at load. A read or parse failure logs and registers nothing.
   let parsed: ClaudeCodeHookConfig = {}
   try {
@@ -188,6 +200,9 @@ export function apply(ctx: Context, config: Config): void {
 
   // TODO(hook-continue-false): `merged.stop` is logged but needs a run-level halt mechanism.
 
+  /** Per-turn Stop-block ledger backing the continuation cap and `stop_hook_active`. */
+  const stopBlocks = createStopBlockLedger()
+
   /** Build additional model context from hook output, or return undefined when empty. */
   function contextFrom(merged: MergedHookOutcome): UserMessage | undefined {
     if (merged.additionalContext.length === 0) return undefined
@@ -265,16 +280,24 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   // A blocking Stop hook steers at the stopping boundary, which makes the
-  // machine observe pending input and run another step.
-  // TODO(stop-loop-guard): cap consecutive forced continuations; hooks must self-limit meanwhile.
+  // machine observe pending input and run another step. The payload's
+  // `stop_hook_active` is true once this turn already followed a forced
+  // continuation, so a well-behaved hook can self-limit before the cap does.
+  /* jscpd:ignore-start */
   ctx.on('agent/turn-stopping', async ({ agent, turn, signal }): Promise<void> => {
-    const merged = await runPoint('Stop', '', stopPayload(ctx, agent), { agent, turn, signal })
-    if (merged.decision === 'deny') {
-      // A blocking Stop hook forces continuation.
-      const text = merged.reason ?? 'continue: blocked by Stop hook'
-      agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: PLUGIN_SOURCE }))
+    const priorBlocks = stopBlocks.blocks(agent, turn)
+    const merged = await runPoint('Stop', '', stopPayload(ctx, agent, priorBlocks > 0), { agent, turn, signal })
+    if (merged.decision !== 'deny') return
+    if (priorBlocks >= maxConsecutiveStopBlocks) {
+      ctx.logger.warn(`hooks-claude-code: Stop hook has forced ${priorBlocks} continuations this turn (maxConsecutiveStopBlocks=${maxConsecutiveStopBlocks}); closing the turn`)
+      return
     }
+    stopBlocks.recordBlock(agent, turn)
+    // A blocking Stop hook forces continuation.
+    const text = merged.reason ?? 'continue: blocked by Stop hook'
+    agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: PLUGIN_SOURCE }))
   })
+  /* jscpd:ignore-end */
 
   // SubagentStart may inject child context; SubagentStop only observes. Both
   // use the live child's workspace and the generic agent-type matcher subject.
@@ -342,8 +365,8 @@ function preToolPayload(ctx: Context, exec: ToolExecution): Record<string, unkno
 function postToolPayload(ctx: Context, exec: ToolExecution, result: ToolExecutionResult): Record<string, unknown> {
   return { ...base(ctx, exec.agent, 'PostToolUse'), tool_name: exec.name, tool_input: exec.arguments, tool_use_id: exec.callId, tool_response: blocksToText(result.content) }
 }
-function stopPayload(ctx: Context, agent: Agent): Record<string, unknown> {
-  return { ...base(ctx, agent, 'Stop'), stop_hook_active: false }
+function stopPayload(ctx: Context, agent: Agent, stopHookActive: boolean): Record<string, unknown> {
+  return { ...base(ctx, agent, 'Stop'), stop_hook_active: stopHookActive }
 }
 /**
  * Build a SubagentStart/SubagentStop payload from the CC base (the child's

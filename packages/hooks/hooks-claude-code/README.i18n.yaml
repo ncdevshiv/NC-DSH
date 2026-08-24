@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write packages/hooks/hooks-claude-code/README.md
-README.md: 5e6924da1206ff26311c6b7edf4ea73c6476ed87
-README.zh.md: 5ac45e3fbd19ed70e39f0d135a53e77a51b341ac
+README.md: 0b243f944a5c690d69d82132bf94e3746d5cda99
+README.zh.md: ac64dd8f1886b83d480912992865e334ec11c52e

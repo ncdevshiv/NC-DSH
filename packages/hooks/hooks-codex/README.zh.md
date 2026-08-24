@@ -23,6 +23,7 @@ const config: Config = {
   model: 'deepseek-v4',                      // optional: stamped on every payload (Codex includes `model`)
   defaultTimeoutMs: 600_000,                 // optional: per-hook timeout when a hook sets none
   stderrSummaryMaxChars: 500,                // optional: char cap on the hook/result event's persisted stderr summary
+  maxConsecutiveStopBlocks: 25,              // optional: blocking Stop outcomes allowed per turn before further blocks close the turn
 }
 ```
 
@@ -46,7 +47,7 @@ hook 本身会在 agent（智能体）的会话工作区中运行：对 agent sc
 | `UserPromptSubmit` | `agent/pre-step`（waterfall，瀑布式事件） | `block`（退出码 2）→ `PreStepDecision.reject`；仅 additionalContext → 通过 `next()` 委托，再向下游 `enter` 决策追加一条单独标记来源的消息 |
 | `PreToolUse` | `tools/pre-execute`（waterfall） | `block` → `PreToolDecision.deny`（没有 `allow`／`ask`） |
 | `PostToolUse` | `tools/post-execute`（waterfall） | `block` → 带反馈的 `block`；仅 additionalContext → 通过 `next()` 委托，再将一个单独标记源的上下文前置到下游决策；Code Mode 将子调用上下文延迟到外层 `run_code` 结果 |
-| `Stop` | `agent/turn-stopping`（serial） | 阻塞 Stop hook 通过 `steer()` 送入其原因，强制再执行一步 |
+| `Stop` | `agent/turn-stopping`（serial） | 阻塞 Stop hook 通过 `steer()` 送入其原因，强制再执行一步；每轮次由 `maxConsecutiveStopBlocks` 上限约束，额度用尽后进一步阻塞会关闭轮次，且首次强制 continuation 之后 payload 的 `stop_hook_active` 为 `true` |
 
 工具调用的 payload 携带真实 `tool_name`（matcher 测试的相同值）与 Codex `tool_input: { command }` 形状（存在 `command` arg 时使用该值，否则使用 `''`）。matcher subject 是工具名称（`PreToolUse`／`PostToolUse`）或会话源（`SessionStart`）；`UserPromptSubmit`／`Stop` 忽略 matcher。
 
@@ -82,7 +83,7 @@ hook 不返回上下文时没有成本。Hook 文本取决于数据，会被记�
 
 #### Token 影响
 
-阻塞提示词不会产生该提示词对应的模型请求 token；拒绝或反馈会添加保留的回退或提供方文本；强制 continuation 需要另一个完整请求。
+阻塞提示词不会产生该提示词对应的模型请求 token；拒绝或反馈会添加保留的回退或提供方文本；强制 continuation 需要另一个完整请求，每轮次由 `maxConsecutiveStopBlocks` 约束。
 
 #### KV Cache 影响
 
@@ -95,6 +96,6 @@ hook 不返回上下文时没有成本。Hook 文本取决于数据，会被记�
 - **`UserPromptSubmit` 只支持部分功能：** 支持阻塞加纯 stdout 或 JSON 上下文，但不会强制执行通用 `systemMessage` 和 `{"continue": false}` 控制。
 - **`PreToolUse` 只支持部分功能：** 支持阻塞，但会忽略 `additionalContext`、`permissionDecision: "allow"` 和 `updatedInput`。每个工具都表示为 `tool_input: { command }`，因此非 shell 工具参数不会如实公开给 hook。
 - **`PostToolUse` 只支持部分功能：** 支持阻塞反馈与 JSON `additionalContext`，但不会强制执行 `{"continue": false}`，非 shell 工具参数会缩减为 `{ command }`，结构化工具输出会在 `tool_response` 中展平为文本。
-- **`Stop` 只支持部分功能：** 阻塞会强制另一个模型轮次，但 `stop_hook_active` 始终为 `false`，`last_assistant_message` 始终为 `null`，且不会强制执行 `{"continue": false}`。因此，无条件阻塞 hook 会在每个步骤中强制 continuation，除非它自我限制（`TODO(stop-loop-guard)`）。
+- **`Stop` 只支持部分功能：** 阻塞会强制另一个模型轮次，每轮次由 `maxConsecutiveStopBlocks` 约束（首次强制 continuation 之后 `stop_hook_active` 报告为 `true`）；`last_assistant_message` 始终为 `null`，且不会强制执行 `{"continue": false}`。
 - **通用 payload 与输出字段只支持部分功能：** 每个已映射事件都报告静态配置的 `model` 与 `permission_mode: "default"`，而非当前 Codex 运行时值。`systemMessage` 会被记录并触发警告，但不呈现，`{"continue": false}` 会被记录但不会应用 Codex 事件特定停止行为（`TODO(hook-continue-false)`）。
 - **配置加载与执行只支持部分功能：** 一个进程级 `configPath` 会在加载时解析；尚未实现 Codex 的活动用户层、项目层、会话层、系统／托管层和插件层、信任控制与内联 `config.toml` hook 形式（`TODO(per-session-hook-config)`）。只运行同步 `command` handler，忽略 `statusMessage` 与 `commandWindows` 等当前元数据，匹配 handler 串行运行，而非使用 Codex 的并发启动语义。

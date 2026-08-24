@@ -26,7 +26,9 @@ import {
   appendHookResult,
   createDetachedRuns,
   DEFAULT_HOOK_TIMEOUT_MS,
+  DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS,
   DEFAULT_STDERR_SUMMARY_MAX_CHARS,
+  createStopBlockLedger,
   matchesMatcher,
   mergeHookOutputs,
   runHook,
@@ -55,6 +57,13 @@ export interface Config {
   defaultTimeoutMs?: number
   /** Character cap for the `hook/result` event's persisted stderr summary. */
   stderrSummaryMaxChars?: number
+  /**
+   * Cap on blocking Stop outcomes per turn: after this many forced
+   * continuations, a further block logs a warning and lets the turn close.
+   * The count covers the whole continuation chain since the turn first tried
+   * to stop, so an alternating block/allow hook cannot stay under it forever.
+   */
+  maxConsecutiveStopBlocks?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -62,6 +71,7 @@ export const Config: z<Config> = z.object({
   model: z.string().default(''),
   defaultTimeoutMs: z.number().default(DEFAULT_HOOK_TIMEOUT_MS),
   stderrSummaryMaxChars: z.number().default(DEFAULT_STDERR_SUMMARY_MAX_CHARS),
+  maxConsecutiveStopBlocks: z.number().default(DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS),
 })
 
 let handlerCounter = 0
@@ -83,6 +93,8 @@ export function apply(ctx: Context, config: Config): void {
   const stderrSummaryMaxChars = config.stderrSummaryMaxChars ?? DEFAULT_STDERR_SUMMARY_MAX_CHARS
   assertPositiveInteger('stderrSummaryMaxChars', stderrSummaryMaxChars)
   const defaultTimeoutMs = config.defaultTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
+  const maxConsecutiveStopBlocks = config.maxConsecutiveStopBlocks ?? DEFAULT_MAX_CONSECUTIVE_STOP_BLOCKS
+  assertPositiveInteger('maxConsecutiveStopBlocks', maxConsecutiveStopBlocks)
   let parsed: CodexHookConfig = {}
   try {
     const raw: unknown = JSON.parse(readFileSync(config.configPath, 'utf8'))
@@ -171,6 +183,9 @@ export function apply(ctx: Context, config: Config): void {
 
   // TODO(hook-continue-false): `merged.stop` is logged but needs a run-level halt mechanism.
 
+  /** Per-turn Stop-block ledger backing the continuation cap and `stop_hook_active`. */
+  const stopBlocks = createStopBlockLedger()
+
   function contextFrom(merged: MergedHookOutcome): UserMessage | undefined {
     if (merged.additionalContext.length === 0) return undefined
     const content: ContentBlock[] = merged.additionalContext.map(text => ({ type: 'text', text }))
@@ -250,24 +265,30 @@ export function apply(ctx: Context, config: Config): void {
       ...downstream,
       additionalContexts: prependContext(context, downstream.additionalContexts),
     }
+    /* jscpd:ignore-end */
   })
 
   // A blocking Stop hook steers at the stopping boundary, which makes the
-  // machine observe pending input and run another step.
-  // TODO(stop-loop-guard): Codex supplies `stop_hook_active` so a Stop hook can
-  // avoid continuing the same turn indefinitely. It is always false here, so an
-  // unconditionally blocking hook force-continues every step until it self-limits.
+  // machine observe pending input and run another step. The payload's
+  // `stop_hook_active` is true once this turn already followed a forced
+  // continuation, so a well-behaved hook can self-limit before the cap does.
+  /* jscpd:ignore-start */
   ctx.on('agent/turn-stopping', async ({ agent, turn, signal }): Promise<void> => {
-    const merged = await runPoint('Stop', '', { ...turnBase(ctx, agent, 'Stop', model), stop_hook_active: false, last_assistant_message: null }, { agent, turn, signal })
-    /* jscpd:ignore-end */
-    if (merged.decision === 'deny') {
-      // A blocking Stop hook forces continuation; a block with no reason (exit 2,
-      // empty stderr) still forces it — fall back to a generic steering line
-      // rather than letting the turn stop.
-      const text = merged.reason ?? 'continue: blocked by Stop hook'
-      agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: PLUGIN_SOURCE }))
+    const priorBlocks = stopBlocks.blocks(agent, turn)
+    const merged = await runPoint('Stop', '', { ...turnBase(ctx, agent, 'Stop', model), stop_hook_active: priorBlocks > 0, last_assistant_message: null }, { agent, turn, signal })
+    if (merged.decision !== 'deny') return
+    if (priorBlocks >= maxConsecutiveStopBlocks) {
+      ctx.logger.warn(`hooks-codex: Stop hook has forced ${priorBlocks} continuations this turn (maxConsecutiveStopBlocks=${maxConsecutiveStopBlocks}); closing the turn`)
+      return
     }
+    stopBlocks.recordBlock(agent, turn)
+    // A blocking Stop hook forces continuation; a block with no reason (exit 2,
+    // empty stderr) still forces it — fall back to a generic steering line
+    // rather than letting the turn stop.
+    const text = merged.reason ?? 'continue: blocked by Stop hook'
+    agent.steer(createUserMessage({ content: [{ type: 'text', text }], source: PLUGIN_SOURCE }))
   })
+  /* jscpd:ignore-end */
 }
 
 // --- Codex DIALECT payloads: snake_case, model on every event, turn_id on

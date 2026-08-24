@@ -23,6 +23,7 @@ const config: Config = {
   model: 'deepseek-v4',                      // optional: stamped on every payload (Codex includes `model`)
   defaultTimeoutMs: 600_000,                 // optional: per-hook timeout when a hook sets none
   stderrSummaryMaxChars: 500,                // optional: char cap on the hook/result event's persisted stderr summary
+  maxConsecutiveStopBlocks: 25,              // optional: blocking Stop outcomes allowed per turn before further blocks close the turn
 }
 ```
 
@@ -46,7 +47,7 @@ The hooks themselves run in the agent's session workspace: for the agent-scoped 
 | `UserPromptSubmit` | `agent/pre-step` (waterfall) | `block` (exit 2) → `PreStepDecision.reject`; additionalContext-only → delegate via `next()` then append a separately sourced message to a downstream `enter` decision |
 | `PreToolUse` | `tools/pre-execute` (waterfall) | `block` → `PreToolDecision.deny` (no `allow`/`ask`) |
 | `PostToolUse` | `tools/post-execute` (waterfall) | `block` → `block` with feedback; additionalContext-only → delegate via `next()` then prepend a separately sourced context to the downstream decision; Code Mode defers sub-call contexts until the outer `run_code` result |
-| `Stop` | `agent/turn-stopping` (serial) | a blocking Stop hook feeds its reason through `steer()`, forcing another step |
+| `Stop` | `agent/turn-stopping` (serial) | a blocking Stop hook feeds its reason through `steer()`, forcing another step; the per-turn `maxConsecutiveStopBlocks` cap closes the turn once spent, and the payload's `stop_hook_active` is `true` after the first forced continuation |
 
 A tool call's payload carries the real `tool_name` (the same value the matcher tests) and Codex's `tool_input: { command }` shape (the `command` arg when present, else `''`). The matcher subject is the tool name (`PreToolUse`/`PostToolUse`) or the session source (`SessionStart`); `UserPromptSubmit`/`Stop` ignore matchers.
 
@@ -82,7 +83,7 @@ Provider-supplied reasons pass through verbatim. When absent, a blocked prompt u
 
 #### Token effect
 
-Blocking a prompt removes its request tokens; denial or feedback adds the retained fallback or provider text; forced continuation pays another full request.
+Blocking a prompt removes its request tokens; denial or feedback adds the retained fallback or provider text; forced continuation pays another full request, bounded per turn by `maxConsecutiveStopBlocks`.
 
 #### KV Cache effect
 
@@ -95,6 +96,6 @@ A blocked prompt sends no request and invalidates nothing. Denial, feedback, and
 - **`UserPromptSubmit` is partial:** blocking plus plain-stdout or JSON context work, but the common `systemMessage` and `{"continue": false}` controls are not enforced.
 - **`PreToolUse` is partial:** blocking works, but `additionalContext`, `permissionDecision: "allow"`, and `updatedInput` are ignored. Every tool is represented as `tool_input: { command }`, so non-shell tool arguments are not faithfully exposed to the hook.
 - **`PostToolUse` is partial:** blocking feedback and JSON `additionalContext` work, but `{"continue": false}` is not enforced, non-shell tool arguments are reduced to `{ command }`, and structured tool output is flattened to text in `tool_response`.
-- **`Stop` is partial:** blocking forces another model turn, but `stop_hook_active` is always `false`, `last_assistant_message` is always `null`, and `{"continue": false}` is not enforced. An unconditionally blocking hook therefore force-continues every step unless it self-limits (`TODO(stop-loop-guard)`).
+- **`Stop` is partial:** blocking forces another model turn, bounded per turn by `maxConsecutiveStopBlocks` (`stop_hook_active` reports `true` after the first forced continuation); `last_assistant_message` is always `null`, and `{"continue": false}` is not enforced.
 - **Common payload and output fields are partial:** every mapped event reports the statically configured `model` and `permission_mode: "default"` instead of current Codex runtime values. `systemMessage` is logged + warned but not surfaced, and `{"continue": false}` is recorded but does not apply Codex's event-specific stop behavior (`TODO(hook-continue-false)`).
 - **Config loading and execution are partial:** one process-level `configPath` is parsed at load; Codex's active user, project, session, system/managed, and plugin layers, trust controls, and inline `config.toml` hook form are not implemented (`TODO(per-session-hook-config)`). Only synchronous `command` handlers run, current metadata such as `statusMessage` and `commandWindows` is ignored, and matching handlers run serially rather than with Codex's concurrent launch semantics.
