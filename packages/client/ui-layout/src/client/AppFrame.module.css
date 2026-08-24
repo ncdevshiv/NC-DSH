@@ -4,7 +4,10 @@
   grid-template-rows: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--dsw-alias-bg-base);
+  /* Chrome color: the sidebar fill reads as the background frame, and the rounded
+     top corners of the content panels (conversation column, details column)
+     reveal this fill in their curved notches. */
+  background: var(--dsw-specific-sidebar-fill);
   /* Collapse/expand animates the tracks on the deepsuite sider curve
      (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
   transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
@@ -26,7 +29,6 @@
   min-width: 0;
   overflow: hidden;
   background: var(--dsw-specific-sidebar-fill);
-  border-right: 1px solid var(--dsw-alias-border-l1);
 }
 
 .centerCol {
@@ -34,12 +36,16 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-top-left-radius: 10px;
 }
 
 .detailsCol {
   min-width: 0;
   overflow: hidden;
   border-left: 1px solid var(--dsw-alias-border-l2);
+  /* Curve the details panel into the chrome like the conversation column:
+     the frame's sidebar fill shows in the rounded notch. */
+  border-top-left-radius: 10px;
 }
 
 /* The details subtree stays mounted at zero width, so its border must not paint

@@ -17,6 +17,10 @@ function bootThemeScript(preference: ThemePreference): string {
   const dark = preference === 'dark' || systemDark
   document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
   document.body.toggleAttribute('data-ds-dark-theme', dark)
+  try {
+    const api = typeof window !== 'undefined' ? window.dshDesktop : undefined
+    if (api?.setTheme) api.setTheme(dark ? '#151517' : '#ffffff', dark ? '#f9fafb' : '#0f1115')
+  } catch {}
 })()</script>`
 }
 
