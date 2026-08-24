@@ -154,6 +154,10 @@ flowchart LR
   cfg --> plugin_dsh_base_web_search_deepseek
   plugin_dsh_base_tool_web["tool-web<br/>@deepseek-ai/dsh-tool-web"]
   cfg --> plugin_dsh_base_tool_web
+  plugin_dsh_base_web_search_searxng["web-search-searxng<br/>@deepseek-ai/dsh-web-search-searxng"]
+  cfg --> plugin_dsh_base_web_search_searxng
+  plugin_dsh_base_browser["browser<br/>@deepseek-ai/dsh-browser"]
+  cfg --> plugin_dsh_base_browser
   plugin_dsh_base_tools["tools<br/>@deepseek-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
   plugin_dsh_base_system_prompt["system-prompt<br/>@deepseek-ai/dsh-system-prompt"]
@@ -241,6 +245,8 @@ flowchart LR
 | `web` | `@deepseek-ai/dsh-web` |
 | `web-search-deepseek` | `@deepseek-ai/dsh-web-search-deepseek` |
 | `tool-web` | `@deepseek-ai/dsh-tool-web` |
+| `web-search-searxng` | `@deepseek-ai/dsh-web-search-searxng` |
+| `browser` | `@deepseek-ai/dsh-browser` |
 | `tools` | `@deepseek-ai/dsh-tools` |
 | `system-prompt` | `@deepseek-ai/dsh-system-prompt` |
 | `agent-loop` | `@deepseek-ai/dsh-agent-loop` |

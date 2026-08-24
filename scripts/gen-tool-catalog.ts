@@ -29,8 +29,11 @@ import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, St
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import PlanModeController from '@deepseek-ai/dsh-plan-mode'
 import WebRuntime from '@deepseek-ai/dsh-web'
+import BrowserRuntime from '@deepseek-ai/dsh-browser'
+import type { BrowserProvider } from '@deepseek-ai/dsh-browser'
 import * as WebSearchExa from '@deepseek-ai/dsh-web-search-exa'
 import * as WebFetchLocal from '@deepseek-ai/dsh-web-fetch-http'
+import * as ToolBrowser from '@deepseek-ai/dsh-tool-browser'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider, SubagentReportDelivery } from '@deepseek-ai/dsh-subagent'
 import * as ToolSubagentControl from '@deepseek-ai/dsh-tool-subagent-control'
@@ -111,6 +114,19 @@ function registerCatalogSubagentProvider(ctx: Context, name: string): void {
     prepareContinuable: () => Promise.reject(new Error('tool-catalog provider cannot prepare a child')),
   }
   ctx.subagents.registerProvider(provider)
+}
+
+/**
+ * Register a usable browser provider so tool-browser mounts under its shipped
+ * all-enabled defaults. Schema harvest never executes tools, so launch rejects.
+ */
+function registerCatalogBrowserProvider(ctx: Context): void {
+  const provider: BrowserProvider = {
+    id: 'catalog',
+    available: () => true,
+    launch: () => Promise.reject(new Error('tool-catalog provider cannot launch a browser')),
+  }
+  ctx.browser.registerProvider(provider)
 }
 
 /** Minted child-scope keys for packages whose tools are never global. */
@@ -605,6 +621,22 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-browser',
+    dir: 'tool-browser',
+    source: 'packages/browser/tool-browser/src/index.ts',
+    requires: ['ctx.tools', 'ctx.browser', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // Mount a usable provider so the all-enabled defaults register; the
+      // shared session launches on first execution, never at schema harvest.
+      await ctx.plugin(BrowserRuntime)
+      registerCatalogBrowserProvider(ctx)
+      await ctx.plugin(ToolBrowser)
+    },
+    note:
+      'browser_* tools keep provider selection behind ctx.browser; one serialized session per context persists across calls within an agent run.',
   },
 ]
 

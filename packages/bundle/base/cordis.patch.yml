@@ -417,6 +417,23 @@
         fetch: false
         searchTimeoutMs: 60000
 
+    # Self-hosted backends ship mounted but dormant: SearXNG stays unavailable
+    # until $SEARXNG_BASE_URL names a private instance (public ones usually
+    # disable format=json). Availability gates
+    # selection, so dormant rows change nothing for deployments that never
+    # configure them; activating searxng for search additionally repins
+    # `web.searchProvider` (or sets $DSH_WEB_SEARCH_PROVIDER), and enabling
+    # fetch at all is an explicit overlay decision (`tool-web.fetch: true`)
+    # because every fetch provider remains a deferred-SSRF primitive whose
+    # target the model chooses.
+    - id: web-search-searxng
+      name: '@deepseek-ai/dsh-web-search-searxng'
+
+
+    - id: browser
+      name: '@deepseek-ai/dsh-browser'
+
+
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
     # The tool registry. Presentation mode is a deployment choice; omitting it here

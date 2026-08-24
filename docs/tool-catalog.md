@@ -41,6 +41,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+| `@deepseek-ai/dsh-tool-browser` | `browser_click`, `browser_navigate`, `browser_screenshot`, `browser_snapshot`, `browser_type` | `ctx.tools`, `ctx.browser`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | browser_* tools keep provider selection behind ctx.browser; one serialized session per context persists across calls within an agent run. |
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -2219,3 +2220,112 @@ Search the web for current information. Provide 1–4 queries in the required qu
 Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps.
+
+<a id="deepseek-aidsh-tool-browser"></a>
+
+## `@deepseek-ai/dsh-tool-browser`
+
+### `browser_click`
+
+Click the first element matching a CSS selector on the browser's current page and return the resulting page state.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "selector": {
+      "type": "string",
+      "description": "CSS selector of the element to click."
+    }
+  },
+  "required": [
+    "selector"
+  ]
+}
+```
+
+Source: [`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_navigate`
+
+Navigate the browser to an HTTP(S) URL and return the loaded page state (url, title, text content).
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "The HTTP(S) URL to navigate to."
+    }
+  },
+  "required": [
+    "url"
+  ]
+}
+```
+
+Source: [`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_screenshot`
+
+Capture a PNG screenshot of the browser's current page and save it to a temp file; returns the file path and size.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "full_page": {
+      "type": "boolean",
+      "description": "Capture the full scrollable page instead of the viewport."
+    }
+  }
+}
+```
+
+Source: [`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_snapshot`
+
+Read the browser's current page state (url, title, text content) without navigating.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+### `browser_type`
+
+Type text into the first input matching a CSS selector on the browser's current page, optionally pressing Enter, and return the resulting page state.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "selector": {
+      "type": "string",
+      "description": "CSS selector of the input to fill."
+    },
+    "text": {
+      "type": "string",
+      "description": "Text to enter after clearing the existing value."
+    },
+    "submit": {
+      "type": "boolean",
+      "description": "Press Enter after typing."
+    }
+  },
+  "required": [
+    "selector",
+    "text"
+  ]
+}
+```
+
+Source: [`packages/browser/tool-browser/src/index.ts`](../packages/browser/tool-browser/src/index.ts)
+
+browser_* tools keep provider selection behind ctx.browser; one serialized session per context persists across calls within an agent run.
