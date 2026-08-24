@@ -18,7 +18,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { assertUsableApiKey, LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
+import { assertUsableApiKey, inferModelModalities, LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { ModelModality, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
@@ -150,7 +150,16 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
         `llm-deepseek: catalog model "${model.id}" maxTokens must be a positive integer`,
       )
     }
-    const inputModalities = model.inputModalities ?? ['text']
+    // The field is the row's explicit declaration; when absent, infer from
+    // the model's id and name so a well-known multimodal model defaults to
+    // accepting images without a hand edit. Inference wins over the schema's
+    // text-only default so a newly-added multimodal id is not stuck text-only;
+    // an explicit user edit of inputModalities still lands in settings and the
+    // adapter reads what the user wrote. Unrecognized ids keep the text-only
+    // default (fail closed; an unverified capability would persist input the
+    // endpoint rejects on every turn).
+    const inputModalities = inferModelModalities(model.id, model.name)
+      ?? (model.inputModalities ?? ['text'])
     if (inputModalities.length === 0) {
       throw new Error(`llm-deepseek: catalog model "${model.id}" inputModalities must not be empty`)
     }

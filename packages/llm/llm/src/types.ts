@@ -227,6 +227,12 @@ export interface LlmDiscoveredModel {
   contextWindow?: number
   /** Maximum output tokens, when disclosed. */
   maxTokens?: number
+  /**
+   * Request modalities the answering source declares for this model, when it
+   * declares any. A catalog-backed answer carries the installed entry's
+   * declaration; a listing endpoint discloses none and omits the field.
+   */
+  inputModalities?: readonly ModelModality[]
 }
 
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */

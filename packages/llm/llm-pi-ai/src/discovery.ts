@@ -22,9 +22,8 @@
  * @module dsh-llm-pi-ai/discovery
  */
 
-import { INVALID_CREDENTIAL_CODE, LlmError, normalizeApiKey } from '@deepseek-ai/dsh-llm'
+import { attributionHeaders, inferModelModalities, INVALID_CREDENTIAL_CODE, LlmError, normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest } from '@deepseek-ai/dsh-llm'
-import { attributionHeaders } from '@deepseek-ai/dsh-llm'
 import { catalogModels } from './catalog.ts'
 
 /**
@@ -206,6 +205,9 @@ export async function discoverModels(
         name: model.name,
         contextWindow: model.contextWindow,
         maxTokens: model.maxTokens,
+        // The catalog's own modality declaration rides along, so adopting a
+        // candidate carries its vision capability without a hand edit.
+        inputModalities: [...model.input],
       }))
     }
   }
@@ -280,5 +282,17 @@ export async function discoverModels(
   } catch (error: unknown) {
     throw new LlmError(`${url} did not answer with JSON`, 'DISCOVERY_FAILED', { cause: error })
   }
-  return readListing(body)
+  return readListing(body).map(model =>
+    model.inputModalities !== undefined ? model
+      : (() => {
+        const inferred = inferModelModalities(model.id, model.name)
+        // Only carry modalities when the inference is actually informative
+        // (image support). Text-only is the wire default for an absent field,
+        // so leaving it empty keeps the response shape identical for models
+        // this build doesn't recognize as multimodal.
+        return inferred !== undefined
+          ? { ...model, inputModalities: inferred }
+          : model
+      })(),
+  )
 }

@@ -55,7 +55,11 @@ export async function mockServer(script: {
         response.end(behavior.body ?? '{}')
         return
       }
-      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      // A client that cancels mid-body (an idle-watchdog abort) destroys the
+      // socket between our queued writes; the disconnect outcome belongs to
+      // the aborter, so the response's write errors are swallowed.
+      response.on('error', () => {})
+      response.writeHead(200, { 'content-type': 'text/event-stream', ...behavior.headers })
       let index = 0
       const writeNext = (): void => {
         const event = behavior.events?.[index++]

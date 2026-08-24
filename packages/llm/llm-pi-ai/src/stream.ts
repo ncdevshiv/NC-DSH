@@ -40,11 +40,15 @@ function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
   if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
+  // gRPC-speaking gateways (e.g. NVIDIA NIM) report throttling as the
+  // `RESOURCE_EXHAUSTED` status or its exception-class spelling.
+  if (/resource[\s_-]*exhausted/i.test(message)) return 'RATE_LIMIT'
   // A rejected request body (gateway or provider size cap): resending the
   // same request cannot succeed, so it is invalid, not transient.
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
-  if (/\b5\d\d\b/.test(message)) return 'SERVER'
+  // Some gateways emit the availability wording without a numeric status.
+  if (/\b5\d\d\b|service.?unavailable/i.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
   // throws its own wording when the wire closes mid-response without a terminal
@@ -53,8 +57,15 @@ function classifyPiAiError(message: string): string {
   // finish_reason`). The connection dropped mid-response, so this is a transport
   // truncation, not a model-level error.
   if (/stream ended (?:before|without)\b/i.test(message)) return 'TRANSPORT'
-  if (/\b(?:network|connection|socket|fetch)\b|\bECONN[A-Z]+\b/i.test(message)
-    || /\b(?:other side closed|HTTP2 request did not get a response|WebSocket closed unexpectedly)\b/i.test(message)
+  // The remaining wordings mirror pi-ai's own transient-error pattern table
+  // (dist/utils/retry.ts): this adapter pins pi-ai's internal retries off
+  // (`maxRetries: 0`), so this classifier alone decides their retryability.
+  if (/\bupstream.?connect\b|\breset before headers\b|\bprovider.?returned.?error\b/i.test(message)
+    || /\bwebsocket.?closed\b|\bwebsocket.?error\b/i.test(message)
+    || /\bgetaddrinfo\b|\bENOTFOUND\b|\bEAI_AGAIN\b/.test(message)
+    || /\byou can retry your request\b|\btry your request again\b|\bplease retry your request\b/i.test(message)
+    || /\b(?:network|connection|socket|fetch)\b|\bECONN[A-Z]+\b/i.test(message)
+    || /\bother side closed\b|\bHTTP2 request did not get a response\b/i.test(message)
     // undici renders a mid-stream socket drop as a bare `terminated` (its
     // `cause` — the real SocketError — was flattened away upstream); Node's
     // stream layer says `Premature close`.

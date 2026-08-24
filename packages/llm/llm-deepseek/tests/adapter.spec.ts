@@ -938,6 +938,24 @@ describe('plugin registration and config', () => {
       .resolves.toMatchObject({ context: { contextWindow: 256_000 } })
   })
 
+  it('infers image support for a multimodal model added without an explicit modality', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmDeepSeek, {
+      baseURL: 'http://127.0.0.1:1',
+      models: [
+        { id: 'gemini-2.5-flash' },
+        { id: 'some-text-only-model' },
+      ],
+    })
+    await expect(ctx.llm.listModels('deepseek-official')).resolves.toEqual([
+      { provider: 'deepseek-official', id: 'gemini-2.5-flash', name: 'gemini-2.5-flash', inputModalities: ['text', 'image'] },
+      { provider: 'deepseek-official', id: 'some-text-only-model', name: 'some-text-only-model', inputModalities: ['text'] },
+    ])
+    await expect(ctx.llm.resolveModelInfo('deepseek-official', 'gemini-2.5-flash'))
+      .resolves.toMatchObject({ inputModalities: ['text', 'image'] })
+  })
+
   it('allows an explicit empty model catalog', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

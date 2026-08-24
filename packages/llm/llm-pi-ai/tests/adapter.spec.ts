@@ -331,6 +331,8 @@ describe('PiAiAdapter provider routing', () => {
       failure: {
         message: `pi-ai detected context overflow for model "${model.id}"`,
         code: CONTEXT_WINDOW_EXCEEDED_CODE,
+        // Captured at the response boundary by the adapter's onResponse hook.
+        status: 200,
       },
     })
   })
@@ -948,5 +950,66 @@ describe('abort wiring', () => {
     }
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(server.requests).toHaveLength(1)
+  })
+})
+
+describe('PiAiAdapter provider metadata capture', () => {
+  it('enriches a truncated stream error finish with the captured request id and status', async () => {
+    // The body ends before any finish_reason chunk — pi-ai's exact
+    // "Stream ended without finish_reason" truncation path.
+    const server = await mockServer([{
+      headers: { 'X-Request-Id': 'req-truncated' },
+      events: ['{"choices":[{"delta":{"content":"partial"},"index":0,"finish_reason":null}]}'],
+    }])
+    const adapter = adapterOf({ deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url } })
+    const chunks = []
+    for await (const chunk of adapter.stream({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      messages: [],
+    })) chunks.push(chunk)
+    expect(chunks.at(-1)).toMatchObject({
+      type: 'finish',
+      reason: {
+        kind: 'error',
+        failure: { code: 'TRANSPORT', status: 200, requestId: 'req-truncated' },
+      },
+    })
+  })
+
+  it('enriches the idle-timeout LlmError with captured provider facts', async () => {
+    // Headers arrive immediately; the first body event stalls past the idle
+    // timeout, so the abort path throws with the boundary facts attached.
+    const server = await mockServer([{
+      headers: { 'x-request-id': 'req-stalled' },
+      events: ['{"choices":[{"delta":{"content":"late"},"index":0,"finish_reason":null}]}'],
+      delayMs: 200,
+    }])
+    const adapter = adapterOf({ deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url, streamIdleTimeoutMs: 50 } })
+    const drain = async (): Promise<void> => {
+      for await (const _chunk of adapter.stream({
+        provider: 'deepseek',
+        model: 'deepseek-v4-flash',
+        messages: [],
+      })) { /* drain */ }
+    }
+    await expect(drain()).rejects.toMatchObject({
+      code: 'TIMEOUT',
+      failure: { status: 200, requestId: 'req-stalled' },
+    })
+  })
+
+  it('leaves successful finishes and caller aborts unenriched', async () => {
+    const server = await mockServer([{ headers: { 'x-request-id': 'req-ok' }, events: textEvents }])
+    const adapter = adapterOf({ deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url } })
+    const chunks = []
+    for await (const chunk of adapter.stream({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      messages: [],
+    })) chunks.push(chunk)
+    const finish = chunks.at(-1) as { type: string; reason: Record<string, unknown> }
+    expect(finish).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+    expect('failure' in finish.reason).toBe(false)
   })
 })

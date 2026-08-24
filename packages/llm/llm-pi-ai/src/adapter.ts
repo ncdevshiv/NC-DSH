@@ -36,6 +36,7 @@ import {
   contentHasImage,
   LlmAdapter,
   LlmError,
+  ProviderRequestId,
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
 import type {
@@ -183,6 +184,58 @@ function requestHeaders(headers: Readonly<Record<string, string>> | undefined): 
   }
 }
 
+/** Response-header names that carry a provider request id, in lookup precedence. */
+const REQUEST_ID_HEADERS: readonly string[] = ['x-request-id', 'x-deepseek-request-id']
+
+/**
+ * Extract a provider request id from one response's headers.
+ * @param headers - headers as pi-ai's onResponse delivers them (mixed-case names).
+ * @returns the branded id from the first known header carrying a non-empty value.
+ */
+function requestIdOf(headers: Record<string, string>): ProviderRequestId | undefined {
+  const byLowerName = new Map(Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]))
+  for (const name of REQUEST_ID_HEADERS) {
+    const value = byLowerName.get(name)
+    if (value !== undefined && value.length > 0) return ProviderRequestId(value)
+  }
+  return undefined
+}
+
+/**
+ * Fill absent provider facts on an error or aborted finish from the response
+ * boundary. pi-ai fires its onResponse hook when headers arrive — before body
+ * consumption — so the facts survive a mid-body truncation and attach to
+ * whatever failure that truncation produces.
+ * @param chunk - the finish chunk about to be yielded.
+ * @param status - HTTP status observed at the boundary, when any.
+ * @param requestId - provider request id observed there, when any.
+ * @returns the chunk unchanged when nothing applies or every field is already
+ *   present; otherwise a copy whose failure gains only the absent fields.
+ */
+function withObservedProviderFacts(
+  chunk: Extract<StreamChunk, { type: 'finish' }>,
+  status: number | undefined,
+  requestId: ProviderRequestId | undefined,
+): Extract<StreamChunk, { type: 'finish' }> {
+  const { reason } = chunk
+  if ((reason.kind !== 'error' && reason.kind !== 'aborted')
+    || (status === undefined && requestId === undefined)
+    || (reason.failure.status !== undefined && reason.failure.requestId !== undefined)) {
+    return chunk
+  }
+  return {
+    ...chunk,
+    reason: {
+      ...reason,
+      failure: {
+        ...reason.failure,
+        ...(reason.failure.status === undefined && status !== undefined ? { status } : {}),
+        ...(reason.failure.requestId === undefined && requestId !== undefined ? { requestId } : {}),
+      },
+    },
+  }
+}
+
 /**
  * pi-ai-backed multi-provider adapter. Each operation reads the current
  * profiles, so a configuration change reaches the next request without a
@@ -302,6 +355,11 @@ export class PiAiAdapter extends LlmAdapter {
       : AbortSignal.any([options.signal, consumer.signal])
     const streamIdleTimeoutMs = profile.streamIdleTimeoutMs
     using watchdog = idleWatchdog(upstream, streamIdleTimeoutMs, 'LLM_STREAM_IDLE_TIMEOUT')
+    // Captured by pi-ai's onResponse hook when response headers arrive, before
+    // body consumption, so both a mid-body truncation's error finish and an
+    // idle-timeout abort can carry the boundary facts for diagnostics.
+    let observedStatus: number | undefined
+    let observedRequestId: ProviderRequestId | undefined
 
     try {
       const containsImage = options.messages.some(message => contentHasImage(message.content))
@@ -327,6 +385,10 @@ export class PiAiAdapter extends LlmAdapter {
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
         headers: requestHeaders(profile.headers),
+        onResponse: ({ status, headers }) => {
+          observedStatus = status
+          observedRequestId = requestIdOf(headers)
+        },
       })
       const iterator = toStreamChunks(events, model.contextWindow)[Symbol.asyncIterator]()
       let exhausted = false
@@ -339,7 +401,10 @@ export class PiAiAdapter extends LlmAdapter {
             exhausted = true
             return
           }
-          yield result.value
+          const chunk = result.value
+          yield chunk.type === 'finish'
+            ? withObservedProviderFacts(chunk, observedStatus, observedRequestId)
+            : chunk
         }
       } finally {
         if (!exhausted) {
@@ -353,7 +418,11 @@ export class PiAiAdapter extends LlmAdapter {
       }
     } catch (error: unknown) {
       if (timeoutOf(watchdog.signal, 'LLM_STREAM_IDLE_TIMEOUT') !== undefined) {
-        throw new LlmError(`pi-ai stream idle timeout after ${streamIdleTimeoutMs}ms`, 'TIMEOUT', { cause: error })
+        throw new LlmError(`pi-ai stream idle timeout after ${streamIdleTimeoutMs}ms`, 'TIMEOUT', {
+          cause: error,
+          ...observedStatus === undefined ? {} : { status: observedStatus },
+          ...observedRequestId === undefined ? {} : { requestId: observedRequestId },
+        })
       }
       if (options.signal?.aborted) {
         throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })

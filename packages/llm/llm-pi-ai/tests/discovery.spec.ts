@@ -84,6 +84,10 @@ describe('catalog-route model discovery', () => {
     expect(models.map(model => model.id).sort())
       .toEqual(getBuiltinModels('deepseek').map(model => model.id).sort())
     expect(models.every(model => (model.contextWindow ?? 0) > 0 && (model.maxTokens ?? 0) > 0)).toBe(true)
+    // The installed modality declaration rides along, so an adopting surface
+    // carries each model's vision capability without a hand edit.
+    expect(models.map(model => [model.id, model.inputModalities]))
+      .toEqual(getBuiltinModels('deepseek').map(model => [model.id, [...model.input]]))
     expect(server.paths).toEqual([])
   })
 

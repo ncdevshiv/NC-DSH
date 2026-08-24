@@ -17,6 +17,7 @@ The detail loss is upstream and unrecoverable in the adapter: pi-ai reduces a ca
   - a stream truncated before its terminal event, which each pi-ai provider throws with its own wording (`Anthropic stream ended before message_stop`, `… before a terminal response event`, `… ended without a terminal event`, `Stream ended without finish_reason`), matched on `stream ended before/without`.
 - The classifier carries an `XXX(pi-ai upstream)` note naming the flattening site and stating the intended fix: classify on `code`/`cause` if pi-ai ever forwards the original `Error` or a hook that lets us capture the `cause`. Classification stays best-effort text matching until then.
 - `llm-pi-ai/README.md` gains a Known-Limitations bullet recording that pi-ai flattens the cause chain and that harness codes are therefore classified from message text.
+- [Tracking pi-ai's transient-error wording table](2026-08-23-pi-ai-transient-wording-parity.md) extends the recognized set to full parity with pi-ai's own transient pattern table; this note's decision and rationale remain current.
 
 Classification stays on message text because that is the only signal pi-ai delivers; the `XXX` marks it as a workaround, not the desired end state.
 
