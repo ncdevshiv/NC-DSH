@@ -118,6 +118,20 @@ Apart from the scoped staged-record verification, the hooks intentionally do not
 
 Contributors can opt into the comprehensive local gate set with `bun run check:all`. The command is independent of the Git hooks and is not an agent instruction.
 
+### Code style and formatting
+
+The repository does not run a formatter in CI or in the lefthook chain. The current style contract is convention plus the `@stylistic` ruleset inside `oxlint` (enforced by the pre-commit `lint:contracts-ready` gate): line length, indentation, quote style, and other whitespace choices stay consistent by convention and by what the linter accepts. The pre-commit hook does not apply or enforce a one-shot reformat.
+
+**Adopting a formatter is an open decision.** The three real options:
+
+- **Stay as-is.** Cheapest and defensible while the team is small. The downside is review noise when contributors hit the same lint surface differently across editors.
+- **Adopt [Biome 2](https://biomejs.dev/).** Rust-native, fast, opinionated, separate ecosystem from oxlint. Mature today.
+- **Adopt [oxfmt](https://oxc.rs/).** The oxc project's own formatter; still maturing. This is the natural endgame because it completes the oxlint/oxfmt/oxc suite the rest of the toolchain already runs on (`oxlint`, `oxlint-tsgolint`, `tsdown` on Rolldown, `bun`).
+
+Hold for **oxfmt stabilization**, then adopt it: it is the only option that doesn't introduce a second lint/format vendor alongside oxlint, and the cross-package cost of maintaining two style policies is the only argument that would justify a one-off large formatting commit.
+
+For Python, `ruff format` covers the same role and is already wired in by `bun run python:format` (see [Python contributor workflows](development.md#lint-and-type-check)).
+
 ### CI gates
 
 The keyless [CI workflow](../.github/workflows/ci.yml) groups independent gates into broad lanes and runs a smaller compatibility signal across supported Node versions. Artifact consumers wait for one build within their lane. The separate real-API workflow runs `bun run test:e2e` with its configured worker bound. See [scripts/run-gates.ts](../scripts/run-gates.ts) and the workflow files for the current gate and job inventory.

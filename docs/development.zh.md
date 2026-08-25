@@ -118,6 +118,20 @@ vendor manifest 守卫检查 `vendor/*/src` 下的改动是否连同对应的 `v
 
 贡献者可以选择运行 `bun run check:all`，执行全面的本地门禁集。该命令独立于 Git 钩子，也不是对 agent 的指令。
 
+### 代码风格与格式化
+
+仓库在 CI 和 lefthook 链中不跑格式化器。当前的风格契约是约定俗成，外加 `oxlint` 内的 `@stylistic` 规则集（由 pre-commit 的 `lint:contracts-ready` 门禁强制）：行长、缩进、引号风格等空白选择靠约定和 linter 的接受面来保持一致。pre-commit 钩子不会应用或强制一次性重排。
+
+**是否引入格式化器是一个开放决策。** 三个真正可选的方案：
+
+- **保持现状。** 在团队规模小的时候成本最低、可辩护。代价是当贡献者在编辑器里对同一 lint 表面采取不同写法时，评审噪音会增加。
+- **采用 [Biome 2](https://biomejs.dev/)。** Rust 内核、速度快、观点鲜明，与 oxlint 来自不同生态。已成熟。
+- **采用 [oxfmt](https://oxc.rs/)。** oxc 项目自己的格式化器；仍在成熟。这是自然终局，因为它补齐了工具链其余部分已经运行的 oxlint/oxfmt/oxc 套件（`oxlint`、`oxlint-tsgolint`、Rolldown 上的 `tsdown`、`bun`）。
+
+**等 oxfmt 稳定后再采用它**：它是唯一不会在 oxlint 之外引入第二个 lint/format 供应商的选项，而同时维护两套风格策略的跨包成本是唯一能证明一次性大型格式化 commit 合理的论据。
+
+Python 端由 `ruff format` 承担同样角色，已由 `bun run python:format` 接入（见 [Python 贡献者工作流](development.md#lint-and-type-check)）。
+
 ### CI 门禁
 
 keyless [CI 工作流](../.github/workflows/ci.yml) 将独立门禁分组到若干宽粒度 lane，并在受支持的 Node 版本上运行一组较小的兼容性检查。产物消费方在各自 lane 内等待一次 build。单独的真实 API 工作流按其配置的 worker 上限运行 `bun run test:e2e`。当前门禁和 job 清单以 [scripts/run-gates.ts](../scripts/run-gates.ts) 和工作流文件为准。
