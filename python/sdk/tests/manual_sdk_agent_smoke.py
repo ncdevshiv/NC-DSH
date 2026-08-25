@@ -15,8 +15,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from deepseek_harness import DeepSeekHarness
 from deepseek_harness_runtime import bundled_default_config_path
+
+from deepseek_harness import DeepSeekHarness
 
 
 class MockCompletionHandler(BaseHTTPRequestHandler):
@@ -25,17 +26,25 @@ class MockCompletionHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("content-length", "0"))
         body = self.rfile.read(length).decode("utf-8")
-        self.requests.append({
-            "path": self.path,
-            "authorization": self.headers.get("authorization"),
-            "body": json.loads(body),
-        })
+        self.requests.append(
+            {
+                "path": self.path,
+                "authorization": self.headers.get("authorization"),
+                "body": json.loads(body),
+            }
+        )
         self.send_response(200)
         self.send_header("content-type", "text/event-stream")
         self.end_headers()
-        self.wfile.write(b'data: {"choices":[{"delta":{"role":"assistant","content":null,"reasoning_content":""}}]}\n\n')
-        self.wfile.write(b'data: {"choices":[{"delta":{"content":"SDK runtime reached the configured HTTP model endpoint."}}]}\n\n')
-        self.wfile.write(b'data: {"choices":[{"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":9}}\n\n')
+        self.wfile.write(
+            b'data: {"choices":[{"delta":{"role":"assistant","content":null,"reasoning_content":""}}]}\n\n'
+        )
+        self.wfile.write(
+            b'data: {"choices":[{"delta":{"content":"SDK runtime reached the configured HTTP model endpoint."}}]}\n\n'
+        )
+        self.wfile.write(
+            b'data: {"choices":[{"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":9}}\n\n'
+        )
         self.wfile.write(b"data: [DONE]\n\n")
 
     def log_message(self, _format: str, *_args: object) -> None:
@@ -46,7 +55,9 @@ def run_smoke(repo_root: Path, keep_sessions: bool) -> None:
     session_root = Path(tempfile.mkdtemp(prefix="dsh-sdk-smoke-sessions-"))
     runtime_entry = repo_root / "packages/examples/jsonrpc-demo/src/bin.ts"
     server = ThreadingHTTPServer(("127.0.0.1", 0), MockCompletionHandler)
-    thread = threading.Thread(target=server.serve_forever, name="mock-openai-compatible-server", daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, name="mock-openai-compatible-server", daemon=True
+    )
     thread.start()
     base_url = f"http://127.0.0.1:{server.server_address[1]}"
 

@@ -27,6 +27,19 @@ uv run --project python/sdk pytest
 
 `python/sdk/tests/test_bundled_runtime.py` exercises available bundled carriers and skips a carrier when its artifact has not been built. For repository-wide test policy, see [Testing](../docs/testing.md).
 
+## Lint and type-check
+
+Both Python subprojects use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting and [Mypy](https://mypy.readthedocs.io/) for static type analysis. The configuration lives inside each `pyproject.toml` under `[tool.ruff]` and `[tool.mypy]`. The SDK is strict on the public surface (`api.py`, `models.py`, `__init__.py`) and lenient on the transport-heavy `client.py` and the test tree, where static types fight subprocess and threading shapes.
+
+Install the lint dependency group and run the combined check from the repository root:
+
+```sh
+bun run python:sync
+bun run python:lint
+```
+
+`python:lint` runs `ruff check` and `mypy src` for the SDK, and `ruff check` for the runtime carrier. Use `bun run python:format` to apply Ruff's autofixes; lint and format run as part of the repository hygiene gate on CI.
+
 That suite drives fake runtime peers. `scripts/smoke-python-runtime.py` drives the real packaged runtime instead, and the required `python-runtime` CI job runs every scenario against a freshly built executable:
 
 ```sh

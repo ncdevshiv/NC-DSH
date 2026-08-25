@@ -179,9 +179,12 @@ Direct dependencies of the `pyproject.toml` manifests, plus `uv` as the developm
 
 | Package | License | Role |
 | --- | --- | --- |
-| [`hatchling`](https://github.com/pypa/hatch) | MIT | build backend |
+| [`hatchling`](https://pypa.github.io/hatch/) | MIT | build backend |
+| [`mypy`](https://github.com/python/mypy) | MIT | static type analysis (dev-only) |
 | [`pydantic`](https://github.com/pydantic/pydantic) | MIT | runtime dependency of `deepseek-harness-sdk` |
 | [`pytest`](https://github.com/pytest-dev/pytest) | MIT | test-only |
+| [`ruff`](https://github.com/astral-sh/ruff) | MIT | lint and format (dev-only) |
+| [`types-deprecated`](https://github.com/pytest-dev/pytest) | MIT | type stubs for the stdlib `warnings.deprecated` decorator (dev-only) |
 | [`uv`](https://github.com/astral-sh/uv) | MIT / Apache-2.0 | development workflow tool |
 
 ## Fetched at build time
