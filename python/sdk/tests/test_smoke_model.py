@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[3]
 SMOKE = runpy.run_path(ROOT / "scripts" / "smoke-python-runtime.py")
 
@@ -18,12 +17,14 @@ SMOKE = runpy.run_path(ROOT / "scripts" / "smoke-python-runtime.py")
     ],
 )
 def test_child_prompt_precedes_runtime_context(prompt_name: str, expected: str) -> None:
-    chunks = SMOKE["completion_chunks"]({
-        "messages": [
-            {"role": "user", "content": SMOKE[prompt_name]},
-            {"role": "user", "content": "Current runtime context"},
-        ],
-    })
+    chunks = SMOKE["completion_chunks"](
+        {
+            "messages": [
+                {"role": "user", "content": SMOKE[prompt_name]},
+                {"role": "user", "content": "Current runtime context"},
+            ],
+        }
+    )
 
     assert any(
         choice.get("delta", {}).get("content") == expected
@@ -33,10 +34,12 @@ def test_child_prompt_precedes_runtime_context(prompt_name: str, expected: str) 
 
 
 def test_mcp_smoke_requests_the_discovered_tool() -> None:
-    chunks = SMOKE["completion_chunks"]({
-        "messages": [{"role": "user", "content": SMOKE["MCP_PROMPT"]}],
-        "tools": [{"type": "function", "function": {"name": "mcp__fixture__add"}}],
-    })
+    chunks = SMOKE["completion_chunks"](
+        {
+            "messages": [{"role": "user", "content": SMOKE["MCP_PROMPT"]}],
+            "tools": [{"type": "function", "function": {"name": "mcp__fixture__add"}}],
+        }
+    )
 
     calls = [
         call
@@ -51,20 +54,24 @@ def test_mcp_smoke_requests_the_discovered_tool() -> None:
 
 
 def test_mcp_smoke_accepts_the_external_server_result() -> None:
-    chunks = SMOKE["completion_chunks"]({
-        "messages": [
-            {"role": "user", "content": SMOKE["MCP_PROMPT"]},
-            {
-                "role": "assistant",
-                "tool_calls": [{
-                    "id": "mcp-add",
-                    "type": "function",
-                    "function": {"name": "mcp__fixture__add", "arguments": '{}'},
-                }],
-            },
-            {"role": "tool", "tool_call_id": "mcp-add", "content": "42"},
-        ],
-    })
+    chunks = SMOKE["completion_chunks"](
+        {
+            "messages": [
+                {"role": "user", "content": SMOKE["MCP_PROMPT"]},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "mcp-add",
+                            "type": "function",
+                            "function": {"name": "mcp__fixture__add", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "mcp-add", "content": "42"},
+            ],
+        }
+    )
 
     assert any(
         choice.get("delta", {}).get("content") == SMOKE["MCP_TEXT"]

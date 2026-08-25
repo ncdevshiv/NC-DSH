@@ -23,6 +23,11 @@ Source = "https://github.com/deepseek-ai/deepseek-harness"
 
 [dependency-groups]
 test = ["pytest>=9.0"]
+lint = [
+  "ruff>=0.6.0",
+  "mypy>=1.11.0",
+  "types-deprecated>=1.2.0",
+]
 
 [tool.pytest.ini_options]
 addopts = "-q"
@@ -35,3 +40,67 @@ packages = ["src/deepseek_harness"]
 # of freezing a wheel snapshot.
 [tool.uv.sources]
 deepseek-harness-runtime-bin = { path = "../sdk-runtime", editable = true }
+
+# Ruff: fast Rust linter + formatter. Covers pycodestyle/pyflakes/isort/bugbear/
+# pyupgrade/simplify. Modern defaults, line length 100, Python 3.10 target.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "W",   # pycodestyle warnings
+  "I",   # isort
+  "B",   # flake8-bugbear
+  "UP",  # pyupgrade
+  "SIM", # flake8-simplify
+]
+ignore = [
+  "E501", # line too long (formatter handles wrap; not a lint signal here)
+  "B008", # function call in default argument (Pydantic Field/Factories pattern)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  "B011", # assert False
+  "SIM",  # tests benefit from literal clarity over one-liner collapse
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# mypy: strict on the SDK public surface (api, models, __init__); permissive on
+# the transport-heavy client.py and the test tree, where strict types fight the
+# subprocess/queue/threading model. Pydantic plugin handles model field validation.
+[tool.mypy]
+python_version = "3.10"
+plugins = ["pydantic.mypy"]
+show_error_codes = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "deepseek_harness.api"
+disallow_untyped_defs = true
+disallow_any_generics = true
+no_implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = "deepseek_harness.models"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "deepseek_harness.client"
+# Transport + subprocess: many Any/Optional from os.environ, subprocess streams.
+# Errors caught by tests, not by static type analysis.
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true

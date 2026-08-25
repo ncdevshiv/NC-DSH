@@ -9,10 +9,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from deepseek_harness_runtime import resolve_bundled_launch_args
 
 from deepseek_harness import DeepSeekHarness, HarnessClient, HarnessConfig
 from deepseek_harness.errors import TransportClosedError
-from deepseek_harness_runtime import resolve_bundled_launch_args
 
 _MODES = ("exe", "node")
 _REPO_ROOT = Path(__file__).parents[3]
@@ -76,7 +76,9 @@ def test_bundled_runtime_boots_a_cordis_config(tmp_path: Path, mode: str) -> Non
     (tmp_path / "cordis.yml").write_text(_CORDIS_YML)
 
     with _client(tmp_path, launch_args) as client:
-        init = client.initialize(provider="deepseek-official", cwd=str(tmp_path), model="deepseek-v4-pro")
+        init = client.initialize(
+            provider="deepseek-official", cwd=str(tmp_path), model="deepseek-v4-pro"
+        )
 
     assert init.serverInfo is not None
     assert init.serverInfo.name == "deepseek-harness-sdk-runtime"
@@ -117,7 +119,9 @@ def test_bundled_runtime_surfaces_unbundled_plugin_failure(tmp_path: Path, mode:
     client.start()
     try:
         with pytest.raises((TransportClosedError, TimeoutError)) as excinfo:
-            client.initialize(provider="deepseek-official", cwd=str(tmp_path), model="deepseek-v4-pro")
+            client.initialize(
+                provider="deepseek-official", cwd=str(tmp_path), model="deepseek-v4-pro"
+            )
     finally:
         client.close()
 

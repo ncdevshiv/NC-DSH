@@ -8,9 +8,11 @@ import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, TypeAlias, TypeVar
+from typing import TypeAlias, TypeVar
 
 from pydantic import BaseModel
 
@@ -53,7 +55,7 @@ class HarnessClient:
         self._reader_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
 
-    def __enter__(self) -> "HarnessClient":
+    def __enter__(self) -> HarnessClient:
         self.start()
         return self
 
@@ -89,7 +91,12 @@ class HarnessClient:
         if proc is None:
             return
         try:
-            self.request("shutdown", None, response_model=_ShutdownResponse, timeout_seconds=self.config.shutdown_timeout_seconds)
+            self.request(
+                "shutdown",
+                None,
+                response_model=_ShutdownResponse,
+                timeout_seconds=self.config.shutdown_timeout_seconds,
+            )
         except Exception as exc:
             self._stderr_lines.append(f"shutdown request failed: {exc}")
         if proc.stdin:
@@ -98,10 +105,8 @@ class HarnessClient:
             except Exception as exc:
                 self._stderr_lines.append(f"stdin close failed: {exc}")
         if proc.poll() is None:
-            try:
+            with suppress(ProcessLookupError):
                 proc.terminate()
-            except ProcessLookupError:
-                pass
         try:
             proc.wait(timeout=self.config.shutdown_timeout_seconds)
         except subprocess.TimeoutExpired:
@@ -141,7 +146,7 @@ class HarnessClient:
         content_blocks: list[JsonObject],
         *,
         on_notification: Callable[[Notification], None] | None = None,
-        notification_subscription: "NotificationSubscription | None" = None,
+        notification_subscription: NotificationSubscription | None = None,
     ) -> str:
         payload: JsonObject = {"sessionId": session_id, "contentBlocks": content_blocks}
         response = self.request(
@@ -163,7 +168,7 @@ class HarnessClient:
         timeout_seconds: float | None = None,
         on_notification: Callable[[Notification], None] | None = None,
         notification_filter: NotificationFilter | None = None,
-        notification_subscription: "NotificationSubscription | None" = None,
+        notification_subscription: NotificationSubscription | None = None,
     ) -> ModelT:
         result = self._request_raw(
             method,
@@ -192,14 +197,14 @@ class HarnessClient:
     def subscribe_notifications(
         self,
         notification_filter: NotificationFilter | None = None,
-    ) -> "NotificationSubscription":
+    ) -> NotificationSubscription:
         subscription_id = str(uuid.uuid4())
         notifications: queue.Queue[Notification | BaseException] = queue.Queue()
         with self._lock:
             self._notification_subscribers[subscription_id] = (notifications, notification_filter)
         return NotificationSubscription(self, subscription_id, notifications)
 
-    def subscribe_session_notifications(self, session_id: str) -> "NotificationSubscription":
+    def subscribe_session_notifications(self, session_id: str) -> NotificationSubscription:
         """Subscribe to a session and descendants discovered from subagent lifecycle edges."""
         return self.subscribe_notifications(self._notification_belongs_to_session_tree(session_id))
 
@@ -233,7 +238,7 @@ class HarnessClient:
         timeout_seconds: float | None = None,
         on_notification: Callable[[Notification], None] | None = None,
         notification_filter: NotificationFilter | None = None,
-        notification_subscription: "NotificationSubscription | None" = None,
+        notification_subscription: NotificationSubscription | None = None,
     ) -> JsonValue:
         request_id = str(uuid.uuid4())
         waiter: queue.Queue[JsonValue | BaseException] = queue.Queue(maxsize=1)
@@ -255,7 +260,9 @@ class HarnessClient:
             if temp_subscription is not None:
                 temp_subscription.close()
             raise
-        timeout = self.config.request_timeout_seconds if timeout_seconds is None else timeout_seconds
+        timeout = (
+            self.config.request_timeout_seconds if timeout_seconds is None else timeout_seconds
+        )
         deadline = None if timeout is None else time.monotonic() + timeout
         try:
             while True:
@@ -274,7 +281,9 @@ class HarnessClient:
                         raise TimeoutError(
                             f"{method} timed out waiting for DeepSeek Harness runtime{suffix}"
                         )
-                    wait_timeout = remaining if wait_timeout is None else min(wait_timeout, remaining)
+                    wait_timeout = (
+                        remaining if wait_timeout is None else min(wait_timeout, remaining)
+                    )
                 try:
                     item = waiter.get(timeout=wait_timeout)
                     if on_notification is not None and subscription is not None:
@@ -308,11 +317,15 @@ class HarnessClient:
             raise self._runtime_closed_error("Failed to write to DeepSeek Harness runtime") from exc
 
     def _start_reader_thread(self) -> None:
-        self._reader_thread = threading.Thread(target=self._reader_loop, name="dsh-runtime-reader", daemon=True)
+        self._reader_thread = threading.Thread(
+            target=self._reader_loop, name="dsh-runtime-reader", daemon=True
+        )
         self._reader_thread.start()
 
     def _start_stderr_thread(self) -> None:
-        self._stderr_thread = threading.Thread(target=self._stderr_loop, name="dsh-runtime-stderr", daemon=True)
+        self._stderr_thread = threading.Thread(
+            target=self._stderr_loop, name="dsh-runtime-stderr", daemon=True
+        )
         self._stderr_thread.start()
 
     def _reader_loop(self) -> None:
@@ -347,7 +360,11 @@ class HarnessClient:
         method = message.get("method")
         if isinstance(msg_id, (str, int)) and isinstance(method, str):
             params = message.get("params")
-            self._requests.put(IncomingRequest(id=msg_id, method=method, payload=params if isinstance(params, dict) else {}))
+            self._requests.put(
+                IncomingRequest(
+                    id=msg_id, method=method, payload=params if isinstance(params, dict) else {}
+                )
+            )
             return
         if isinstance(msg_id, (str, int)):
             with self._lock:
@@ -356,13 +373,21 @@ class HarnessClient:
                 return
             if isinstance(message.get("error"), dict):
                 err = message["error"]
-                waiter.put(JsonRpcError(_int_or_none(err.get("code")), str(err.get("message", "JSON-RPC error")), err.get("data")))
+                waiter.put(
+                    JsonRpcError(
+                        _int_or_none(err.get("code")),
+                        str(err.get("message", "JSON-RPC error")),
+                        err.get("data"),
+                    )
+                )
             else:
                 waiter.put(message.get("result"))
             return
         if isinstance(method, str):
             params = message.get("params")
-            notification = Notification(method=method, payload=params if isinstance(params, dict) else {})
+            notification = Notification(
+                method=method, payload=params if isinstance(params, dict) else {}
+            )
             with self._lock:
                 self._record_session_relationship_locked(notification)
                 subscribers = list(self._notification_subscribers.items())
@@ -476,16 +501,14 @@ class HarnessClient:
             payload = notification.payload
             if notification.method in {"subagent.started", "subagent.finished"}:
                 parent_id = payload.get("parentSessionId")
-                if (
-                    isinstance(parent_id, str)
-                    and self._session_is_descendant_of(parent_id, session_id)
+                if isinstance(parent_id, str) and self._session_is_descendant_of(
+                    parent_id, session_id
                 ):
                     return True
                 return payload.get("childSessionId") == session_id
             related_id = payload.get("sessionId")
-            return (
-                isinstance(related_id, str)
-                and self._session_is_descendant_of(related_id, session_id)
+            return isinstance(related_id, str) and self._session_is_descendant_of(
+                related_id, session_id
             )
 
         return belongs
@@ -516,7 +539,7 @@ class NotificationSubscription:
         self._notifications = notifications
         self._closed = False
 
-    def __enter__(self) -> "NotificationSubscription":
+    def __enter__(self) -> NotificationSubscription:
         return self
 
     def __exit__(self, _exc_type, _exc, _tb) -> None:

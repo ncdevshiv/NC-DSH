@@ -151,7 +151,7 @@
     "verify-module-graph": "tsx scripts/gen-module-graph.ts --check",
     "constraints": "tsx scripts/check-workspace-constraints.ts",
     "doc-sync": "tsx scripts/run-gates.ts doc-sync",
-    "hygiene": "bun run rescope-vendor:check && bun run knip && bun run publint && bun run constraints && bun run verify-dsh-package-licenses && bun run verify-package-invariants && bun run verify-built-package-invariants && bun run verify-cordis-config && bun run verify-composition-references && bun run verify-node-next-types && bun run verify-optional-dependency-imports && bun run verify-runtime-closure && bun run verify-client-packages && bun run verify-vendored-links",
+    "hygiene": "bun run rescope-vendor:check && bun run knip && bun run publint && bun run constraints && bun run verify-dsh-package-licenses && bun run verify-package-invariants && bun run verify-built-package-invariants && bun run verify-cordis-config && bun run verify-composition-references && bun run verify-node-next-types && bun run verify-optional-dependency-imports && bun run verify-runtime-closure && bun run verify-client-packages && bun run verify-vendored-links && bun run python:lint",
     "publish:npm-baseline": "tsx scripts/publish-npm-baseline.ts",
     "release:dsh": "tsx scripts/release/bump.ts --family dsh",
     "release:vendor": "tsx scripts/release/bump.ts --family vendor",
@@ -168,7 +168,10 @@
     "desktop": "node scripts/dev-desktop.mjs",
     "dev:desktop": "node scripts/dev-desktop.mjs --hmr",
     "postinstall": "node scripts/install-lefthook.mjs",
-    "verify-composition-references": "tsx scripts/verify-composition-references.ts"
+    "verify-composition-references": "tsx scripts/verify-composition-references.ts",
+    "python:sync": "cd python/sdk && uv sync --group test --group lint && cd ../sdk-runtime && uv sync --group lint",
+    "python:lint": "cd python/sdk && uv run --group lint ruff check . && uv run --group lint mypy src && cd ../../python/sdk-runtime && uv run --group lint ruff check .",
+    "python:format": "cd python/sdk && uv run --group lint ruff format . && cd ../../python/sdk-runtime && uv run --group lint ruff format ."
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",
