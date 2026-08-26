@@ -38,10 +38,13 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
   ModelCatalogFailure, ModelProviderGroup,
-  ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
-  QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
+  ModelReasoning, MuxFrame, NotificationView, PromptContentPart, QuestionResponsePayload,
+  QueuedInboxItem, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
+  SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
+  UpdateStatusView,
   WorkspaceId, WorkspaceView,
 } from './api/index.ts'
+import type { InstalledUpdateView } from './api/updates.ts'
 import {
   DEFAULT_SESSION_LOG_COMPRESSION_LEVEL,
   flushLiveSessionLog,
@@ -81,6 +84,12 @@ import type {} from '@deepseek-ai/dsh-skill'
 import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { SettingsDescriptor, SettingsNamespace, SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
+// Type-only edges: resolve `ctx.get('sidecarUpdates')`, the
+// `sidecar-updates/status` owner event, and `ctx.get('notifications')`.
+// Optional composition, like settings above.
+import type { UpdateStatus } from '@deepseek-ai/dsh-sidecar-updates'
+import type {} from '@deepseek-ai/dsh-sidecar-updates'
+import type {} from '@deepseek-ai/dsh-notifications'
 // Value edge: the rename impl narrows the title service's validation failure; the import also resolves `ctx.get('sessionTitle')`.
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import type { CallId } from '@deepseek-ai/dsh-llm/brand'
@@ -324,6 +333,38 @@ async function buildModelCatalog(ctx: Context): Promise<{
 /** Wrap an error result echoing the request's rpcId. */
 function err<T>(request: RpcRequest<unknown>, error: RpcError): RpcResponse<T> {
   return { rpcId: request.rpcId, result: { ok: false, error } }
+}
+
+/**
+ * Project one committed pipeline status onto its wire view. The single
+ * exePath strip point: responses and the `updates/status` frame both route
+ * through here, so the installed executable's host path never crosses the wire.
+ */
+function updateStatusView(status: UpdateStatus): UpdateStatusView {
+  const installed = status.installed
+  const latest = status.latest
+  return {
+    installed: installed === null ? null : {
+      tag: installed.tag,
+      asset: installed.asset,
+      sha256: installed.sha256,
+      installedAt: installed.installedAt,
+    },
+    latest: latest === null ? null : {
+      tag: latest.tag,
+      ...latest.name === undefined ? {} : { name: latest.name },
+      ...latest.publishedAt === undefined ? {} : { publishedAt: latest.publishedAt },
+      ...latest.url === undefined ? {} : { url: latest.url },
+    },
+    updateAvailable: status.updateAvailable,
+    ignoredLatest: status.ignoredLatest,
+    ...status.lastError === undefined ? {} : { lastError: status.lastError },
+  }
+}
+
+/** Project one stored notification onto its wire view (a plain unfrozen clone). */
+function notificationView(record: Readonly<NotificationView>): NotificationView {
+  return { ...record }
 }
 
 /**
@@ -1870,6 +1911,25 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return { code: 'internal', message: 'credentials service is absent: this deployment does not mount a credential provider (e.g. @deepseek-ai/dsh-credentials-local) in its composition', details: {} }
   }
 
+  /** Missing-service report shared by the updates domain. */
+  function sidecarUpdatesAbsent(): RpcError {
+    return { code: 'internal', message: 'sidecar-updates service is absent: this deployment does not mount @deepseek-ai/dsh-sidecar-updates in its composition', details: {} }
+  }
+
+  /** Missing-service report shared by the notifications domain. */
+  function notificationsAbsent(): RpcError {
+    return { code: 'internal', message: 'notifications service is absent: this deployment does not mount @deepseek-ai/dsh-notifications in its composition', details: {} }
+  }
+
+  /** Fold one notification-seam refusal (unknown id, storage) onto the wire vocabulary. */
+  function notificationRejected(id: string, error: unknown): RpcError {
+    return {
+      code: 'notification-rejected',
+      message: error instanceof Error ? error.message : String(error),
+      details: { id },
+    }
+  }
+
   /** Map one redacted settings descriptor to its wire view. */
   function namespaceView(descriptor: SettingsDescriptor): SettingsNamespaceView {
     return {
@@ -3298,6 +3358,91 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
     },
 
+    updates: {
+      status(request) {
+        const updates = ctx.get('sidecarUpdates')
+        if (updates === undefined) return Promise.resolve(err(request, sidecarUpdatesAbsent()))
+        return Promise.resolve(ok(request, updateStatusView(updates.status())))
+      },
+
+      async check(request) {
+        const updates = ctx.get('sidecarUpdates')
+        if (updates === undefined) return err(request, sidecarUpdatesAbsent())
+        // The seam contains its own check failures: they surface as
+        // `lastError` on the committed post-check status, never as a throw.
+        return ok(request, updateStatusView(await updates.checkNow()))
+      },
+
+      async install(request) {
+        const updates = ctx.get('sidecarUpdates')
+        if (updates === undefined) return err(request, sidecarUpdatesAbsent())
+        const { tag } = request.payload
+        try {
+          const result = await updates.install(tag)
+          const installed: InstalledUpdateView = {
+            tag: result.installed.tag,
+            asset: result.installed.asset,
+            sha256: result.installed.sha256,
+            installedAt: result.installed.installedAt,
+          }
+          return ok(request, { installed, restartRequired: true })
+        } catch (error: unknown) {
+          // Lookup, platform, download, and checksum failures are all the
+          // user's next move (retry, free disk, or accept the current tag).
+          return err(request, {
+            code: 'update-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+
+      async ignore(request) {
+        const updates = ctx.get('sidecarUpdates')
+        if (updates === undefined) return err(request, sidecarUpdatesAbsent())
+        try {
+          await updates.ignore(request.payload.tag)
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'update-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+        return ok(request, { ignoredVersions: [request.payload.tag] })
+      },
+    },
+
+    notifications: {
+      list(request) {
+        const notifications = ctx.get('notifications')
+        if (notifications === undefined) return Promise.resolve(err(request, notificationsAbsent()))
+        return Promise.resolve(ok(request, { items: notifications.list().map(notificationView) }))
+      },
+
+      async setRead(request) {
+        const notifications = ctx.get('notifications')
+        if (notifications === undefined) return Promise.resolve(err(request, notificationsAbsent()))
+        try {
+          notifications.setRead(request.payload.id, request.payload.read ?? true)
+        } catch (error: unknown) {
+          return err(request, notificationRejected(request.payload.id, error))
+        }
+        return ok(request, { ok: true })
+      },
+
+      async dismiss(request) {
+        const notifications = ctx.get('notifications')
+        if (notifications === undefined) return Promise.resolve(err(request, notificationsAbsent()))
+        try {
+          notifications.dismiss(request.payload.id)
+        } catch (error: unknown) {
+          return err(request, notificationRejected(request.payload.id, error))
+        }
+        return ok(request, { ok: true })
+      },
+    },
+
     llm: {
       providers(request) {
         const registered = ctx.llm.listProviders()
@@ -3562,6 +3707,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               }))
             }),
           )),
+          // The sidecar-update seam's committed status rides a dedicated
+          // frame because it IS a projection: updateStatusView strips the
+          // installed entry's host-local exePath before anything queues.
+          ctx.on('sidecar-updates/status', (status: UpdateStatus) => {
+            queue.push(frame({ type: 'updates/status', status: updateStatusView(status) }))
+          }),
         ]
         return queue.iterate(signal, () => { for (const dispose of disposers) dispose() })
       },

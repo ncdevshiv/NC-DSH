@@ -28,6 +28,8 @@ function scriptedApi(overrides: {
   settings?: Partial<ApiProxy['settings']>
   credentials?: Partial<ApiProxy['credentials']>
   llm?: Partial<ApiProxy['llm']>
+  updates?: Partial<ApiProxy['updates']>
+  notifications?: Partial<ApiProxy['notifications']>
   respond?: ApiProxy['respond']
 } = {}): ApiProxy {
   async function *empty<F>(): AsyncGenerator<RpcRequest<F>> { /* no frames */ }
@@ -127,6 +129,19 @@ function scriptedApi(overrides: {
       models: r => ok(r, { groups: [], failures: [] }),
       discoverModels: err,
       ...overrides.llm,
+    },
+    updates: {
+      status: r => ok(r, { installed: null, latest: null, updateAvailable: false, ignoredLatest: false }),
+      check: r => ok(r, { installed: null, latest: null, updateAvailable: false, ignoredLatest: false }),
+      install: err,
+      ignore: err,
+      ...overrides.updates,
+    },
+    notifications: {
+      list: r => ok(r, { items: [] }),
+      setRead: r => ok(r, { ok: true as const }),
+      dismiss: r => ok(r, { ok: true as const }),
+      ...overrides.notifications,
     },
     events: { mux: () => empty<MuxFrame>(), host: () => empty<HostFrame>(), ...overrides.events },
     respond: overrides.respond ?? (() => Promise.resolve({ accepted: false as const, reason: 'not-pending' as const })),
@@ -736,6 +751,21 @@ describe('config unary surface', () => {
       active: false,
     }
     const group = { id: 'deepseek-official', name: 'DeepSeek', models: [{ id: 'deepseek-v4-flash', name: 'Flash' }] }
+    const installedView = { tag: 'v1.2.3', asset: 'ai-sidecar-win32-x64.exe', sha256:'abc123', installedAt: '2026-01-01T00:00:00.000Z' }
+    const statusView = {
+      installed: installedView,
+      latest: { tag: 'v1.3.0', name: 'Next', publishedAt: '2026-02-01T00:00:00.000Z', url: 'https://example.test/release' },
+      updateAvailable: false,
+      ignoredLatest: false,
+    }
+    const notificationRow = {
+      id: 'sdk-update:v1.3.0',
+      kind: 'sdk-update',
+      title: 'AI SDK update available',
+      createdAt: '2026-02-01T00:00:00.000Z',
+      dismissed: false,
+      read: false,
+    }
     const api = scriptedApi({
       settings: {
         describe: record('settings.describe', r => ok(r, { writable: true, hasDocument: false, namespaces: [view] })),
@@ -753,6 +783,17 @@ describe('config unary surface', () => {
         providers: record('llm.providers', r => ok(r, { providers: [providerRow] })),
         models: record('llm.models', r => ok(r, { groups: [group], failures: [] })),
         discoverModels: record('llm.discoverModels', r => ok(r, { models: [{ id: 'acme-large', contextWindow: 65536 }] })),
+      },
+      updates: {
+        status: record('updates.status', r => ok(r, statusView)),
+        check: record('updates.check', r => ok(r, { ...statusView, updateAvailable: true })),
+        install: record('updates.install', r => ok(r, { installed: installedView, restartRequired: true as const })),
+        ignore: record('updates.ignore', r => ok(r, { ignoredVersions: [r.payload.tag] })),
+      },
+      notifications: {
+        list: record('notifications.list', r => ok(r, { items: [notificationRow] })),
+        setRead: record('notifications.setRead', r => ok(r, { ok: true as const })),
+        dismiss: record('notifications.dismiss', r => ok(r, { ok: true as const })),
       },
     })
     const c = client(api)
@@ -785,11 +826,27 @@ describe('config unary surface', () => {
       apiKey: 'probe-key',
     })
     expect(discovered.result).toEqual({ ok: true, value: { models: [{ id: 'acme-large', contextWindow: 65536 }] } })
+    const status = await c.updates.status({})
+    expect(status.result).toEqual({ ok: true, value: statusView })
+    const checked = await c.updates.check({})
+    expect(checked.result).toEqual({ ok: true, value: { ...statusView, updateAvailable: true } })
+    const installed = await c.updates.install({ tag: 'v1.3.0' })
+    expect(installed.result).toEqual({ ok: true, value: { installed: installedView, restartRequired: true } })
+    // No exePath anywhere in the install view, even though the host pointer holds one.
+    expect(JSON.stringify(installed)).not.toContain('exePath')
+    expect((await c.updates.ignore({ tag: 'v1.3.0' })).result)
+      .toEqual({ ok: true, value: { ignoredVersions: ['v1.3.0'] } })
+    const listed = await c.notifications.list({})
+    expect(listed.result).toEqual({ ok: true, value: { items: [notificationRow] } })
+    expect((await c.notifications.setRead({ id: notificationRow.id })).result).toEqual({ ok: true, value: { ok: true } })
+    expect((await c.notifications.dismiss({ id: notificationRow.id })).result).toEqual({ ok: true, value: { ok: true } })
 
     expect(seen.map(call => call.method)).toEqual([
       'settings.describe', 'settings.openDocument', 'settings.update', 'settings.replace', 'settings.mutate',
       'credentials.describe', 'credentials.set', 'credentials.unset',
       'llm.providers', 'llm.models', 'llm.discoverModels',
+      'updates.status', 'updates.check', 'updates.install', 'updates.ignore',
+      'notifications.list', 'notifications.setRead', 'notifications.dismiss',
     ])
     expect(seen[2]?.payload).toEqual({ ns: 'llm-ai-sdk', patch: { baseURL: 'https://next' } })
     expect(seen[4]?.payload)
@@ -811,5 +868,14 @@ describe('config unary surface', () => {
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')
     expect(response.result.error.code).toBe('bad-request')
+  })
+
+  it('rejects a whitespace-padded or empty ignore tag at the updates payload boundary', async () => {
+    const api = scriptedApi()
+    for (const tag of ['', ' v1.3.0 ']) {
+      const response = await client(api).updates.ignore({ tag })
+      expect(response.result.ok).toBe(false)
+      if (!response.result.ok) expect(response.result.error.code).toBe('bad-request')
+    }
   })
 })

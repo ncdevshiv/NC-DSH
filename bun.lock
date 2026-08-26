@@ -728,6 +728,7 @@
         "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
         "@deepseek-ai/dsh-client-ui-message-feedback": "workspace:^",
         "@deepseek-ai/dsh-client-ui-model-selection": "workspace:^",
+        "@deepseek-ai/dsh-client-ui-notifications": "workspace:^",
         "@deepseek-ai/dsh-client-ui-permission-presets": "workspace:^",
         "@deepseek-ai/dsh-client-ui-plan": "workspace:^",
         "@deepseek-ai/dsh-client-ui-reference": "workspace:^",
@@ -1300,14 +1301,12 @@
     "packages/client/ui-layout": {
       "name": "@deepseek-ai/dsh-client-ui-layout",
       "version": "0.1.0-rc.8",
-      "dependencies": {
-        "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
-      },
       "devDependencies": {
         "@deepseek-ai/cordis": "workspace:^",
         "@deepseek-ai/dsh-client-locale": "workspace:^",
         "@deepseek-ai/dsh-client-runtime": "workspace:^",
         "@deepseek-ai/dsh-client-test-runtime": "workspace:^",
+        "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
         "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
         "@deepseek-ai/dsh-client-ui-theme": "workspace:^",
         "@deepseek-ai/dsh-invariants": "workspace:^",
@@ -1386,6 +1385,29 @@
         "@deepseek-ai/dsh-client-ui-commands": "workspace:^",
         "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
         "@deepseek-ai/dsh-client-ui-input-trigger": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+      },
+    },
+    "packages/client/ui-notifications": {
+      "name": "@deepseek-ai/dsh-client-ui-notifications",
+      "version": "0.1.0-rc.8",
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-client-locale": "workspace:^",
+        "@deepseek-ai/dsh-client-runtime": "workspace:^",
+        "@deepseek-ai/dsh-client-test-runtime": "workspace:^",
+        "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
+        "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^",
+        "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@types/react": "^19.2.0",
+        "react": "^19.2.0",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-client-locale": "workspace:^",
+        "@deepseek-ai/dsh-client-runtime": "workspace:^",
+        "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^",
         "@deepseek-ai/dsh-invariants": "workspace:^",
       },
     },
@@ -2212,6 +2234,7 @@
         "@deepseek-ai/dsh-agent-loop": "workspace:^",
         "@deepseek-ai/dsh-fs": "workspace:^",
         "@deepseek-ai/dsh-fs-local": "workspace:^",
+        "@deepseek-ai/dsh-home-paths": "workspace:^",
         "@deepseek-ai/dsh-home-paths": "workspace:^",
         "@deepseek-ai/dsh-invariants": "workspace:^",
         "@deepseek-ai/dsh-llm": "workspace:^",
@@ -3421,6 +3444,7 @@
         "@deepseek-ai/dsh-jobs": "workspace:^",
         "@deepseek-ai/dsh-llm": "workspace:^",
         "@deepseek-ai/dsh-native-command": "workspace:^",
+        "@deepseek-ai/dsh-notifications": "workspace:^",
         "@deepseek-ai/dsh-session": "workspace:^",
         "@deepseek-ai/dsh-session-persistence": "workspace:^",
         "@deepseek-ai/dsh-session-projection": "workspace:^",
@@ -3428,6 +3452,7 @@
         "@deepseek-ai/dsh-session-query": "workspace:^",
         "@deepseek-ai/dsh-session-title": "workspace:^",
         "@deepseek-ai/dsh-settings": "workspace:^",
+        "@deepseek-ai/dsh-sidecar-updates": "workspace:^",
         "@deepseek-ai/dsh-skill": "workspace:^",
         "@deepseek-ai/dsh-subagent": "workspace:^",
         "@deepseek-ai/dsh-tools": "workspace:^",
@@ -3545,6 +3570,23 @@
         "@deepseek-ai/cordis": "workspace:^",
         "@deepseek-ai/dsh-host-webserver": "workspace:^",
         "@deepseek-ai/dsh-invariants": "workspace:^",
+      },
+    },
+    "packages/host/notifications": {
+      "name": "@deepseek-ai/dsh-notifications",
+      "version": "0.1.0-rc.8",
+      "dependencies": {
+        "@deepseek-ai/dsh-home-paths": "workspace:^",
+      },
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/schemastery": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/schemastery": "workspace:^",
       },
     },
     "packages/host/plugin-inventory": {
@@ -4295,6 +4337,25 @@
         "@deepseek-ai/dsh-sdk-protocol": "workspace:^",
         "@deepseek-ai/dsh-session": "workspace:^",
         "@deepseek-ai/dsh-subagent": "workspace:^",
+      },
+    },
+    "packages/sdk/sidecar-updates": {
+      "name": "@deepseek-ai/dsh-sidecar-updates",
+      "version": "0.1.0-rc.8",
+      "dependencies": {
+        "@deepseek-ai/dsh-settings": "workspace:^",
+      },
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-notifications": "workspace:^",
+        "@deepseek-ai/schemastery": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-notifications": "workspace:^",
+        "@deepseek-ai/schemastery": "workspace:^",
       },
     },
     "packages/session-query/session-log-export": {
@@ -6839,6 +6900,8 @@
 
     "@deepseek-ai/dsh-client-ui-model-selection": ["@deepseek-ai/dsh-client-ui-model-selection@workspace:packages/client/ui-model-selection"],
 
+    "@deepseek-ai/dsh-client-ui-notifications": ["@deepseek-ai/dsh-client-ui-notifications@workspace:packages/client/ui-notifications"],
+
     "@deepseek-ai/dsh-client-ui-permission-presets": ["@deepseek-ai/dsh-client-ui-permission-presets@workspace:packages/client/ui-permission-presets"],
 
     "@deepseek-ai/dsh-client-ui-plan": ["@deepseek-ai/dsh-client-ui-plan@workspace:packages/client/ui-plan"],
@@ -6997,6 +7060,8 @@
 
     "@deepseek-ai/dsh-native-command": ["@deepseek-ai/dsh-native-command@workspace:packages/util/native-command"],
 
+    "@deepseek-ai/dsh-notifications": ["@deepseek-ai/dsh-notifications@workspace:packages/host/notifications"],
+
     "@deepseek-ai/dsh-output-retention": ["@deepseek-ai/dsh-output-retention@workspace:packages/util/output-retention"],
 
     "@deepseek-ai/dsh-permission-presets": ["@deepseek-ai/dsh-permission-presets@workspace:packages/interaction/permission-presets"],
@@ -7074,6 +7139,8 @@
     "@deepseek-ai/dsh-shell": ["@deepseek-ai/dsh-shell@workspace:packages/shell/shell"],
 
     "@deepseek-ai/dsh-shell-env": ["@deepseek-ai/dsh-shell-env@workspace:packages/shell/shell-env"],
+
+    "@deepseek-ai/dsh-sidecar-updates": ["@deepseek-ai/dsh-sidecar-updates@workspace:packages/sdk/sidecar-updates"],
 
     "@deepseek-ai/dsh-skill": ["@deepseek-ai/dsh-skill@workspace:packages/skill/skill"],
 

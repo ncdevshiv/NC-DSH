@@ -529,9 +529,33 @@ describe('events frame schemas', () => {
       { type: 'host/remote-event', event: 'settings/document-updated', args: ['ns', 3] },
       { type: 'host/remote-event', event: 'agent-preset/selected', args: ['s', 'minimal'] },
       { type: 'host/remote-event', event: 'llm/adapters-updated', args: [] },
+      {
+        type: 'updates/status',
+        status: {
+          installed: { tag: 'v1.2.3', asset: 'ai-sidecar-win32-x64.exe', sha256: 'abc123', installedAt: '2026-01-01T00:00:00.000Z' },
+          latest: null,
+          updateAvailable: false,
+          ignoredLatest: false,
+        },
+      },
       { type: 'stream/error', error: { code: 'internal', message: 'm', details: {} } },
     ]
     for (const frame of frames) expect(hostFrameSchema.parse(frame)).toMatchObject({ type: frame.type })
+  })
+
+  it('rejects an updates/status frame whose install entry still carries the host exePath', () => {
+    expect(() => hostFrameSchema.parse({
+      type: 'updates/status',
+      status: {
+        installed: {
+          tag: 'v1.2.3', asset: 'ai-sidecar-win32-x64.exe', sha256: 'abc123',
+          installedAt: '2026-01-01T00:00:00.000Z', exePath: '/opt/dsh/ai-sidecar',
+        },
+        latest: null,
+        updateAvailable: false,
+        ignoredLatest: false,
+      },
+    })).toThrow()
   })
 })
 

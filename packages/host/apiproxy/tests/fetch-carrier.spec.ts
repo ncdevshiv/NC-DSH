@@ -282,6 +282,31 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
         return { rpcId: request.rpcId, result: { ok: true, value: { models: [] } } }
       },
     },
+    updates: {
+      async status(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { installed: null, latest: null, updateAvailable: false, ignoredLatest: false } } }
+      },
+      async check(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { installed: null, latest: null, updateAvailable: false, ignoredLatest: false } } }
+      },
+      async install(request) {
+        return { rpcId: request.rpcId, result: { ok: false, error: { code: 'update-failed' as const, message: 'stub', details: {} } } }
+      },
+      async ignore(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { ignoredVersions: [request.payload.tag] } } }
+      },
+    },
+    notifications: {
+      async list(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { items: [] } } }
+      },
+      async setRead(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { ok: true as const } } }
+      },
+      async dismiss(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { ok: true as const } } }
+      },
+    },
     events: {
       mux: (_request, signal) => stream(muxFrames, signal),
       host: (_request, signal) => stream(hostFrames, signal),
