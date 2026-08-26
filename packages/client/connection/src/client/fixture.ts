@@ -3056,6 +3056,35 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         models: fixtureModelGroups().flatMap(group => group.models.map(model => ({ id: model.id, name: model.name }))),
       }),
     },
+    updates: {
+      status: request => ok(request, {
+        installed: {
+          tag: 'v0.1.0-fx', asset: 'ai-sidecar-win32-x64.exe', sha256: 'fxdeadbeef', installedAt: '2026-01-01T00:00:00.000Z',
+        },
+        latest: null,
+        updateAvailable: false,
+        ignoredLatest: false,
+      }),
+      check: request => ok(request, {
+        installed: {
+          tag: 'v0.1.0-fx', asset: 'ai-sidecar-win32-x64.exe', sha256: 'fxdeadbeef', installedAt: '2026-01-01T00:00:00.000Z',
+        },
+        latest: { tag: 'v0.2.0-fx', name: 'Fixture release' },
+        updateAvailable: false,
+        ignoredLatest: false,
+      }),
+      install: request => err(request, {
+        code: 'update-failed',
+        message: 'fixture: no release is staged for download',
+        details: {},
+      }),
+      ignore: request => ok(request, { ignoredVersions: [request.payload.tag] }),
+    },
+    notifications: {
+      list: request => ok(request, { items: [] }),
+      setRead: request => ok(request, { ok: true as const }),
+      dismiss: request => ok(request, { ok: true as const }),
+    },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
       // audit correlation; a settled or unknown id is not-pending.
@@ -3227,6 +3256,13 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'llm.providers': return this.api.llm.providers(request)
       case 'llm.models': return this.api.llm.models(request)
       case 'llm.discoverModels': return this.api.llm.discoverModels(request, signal)
+      case 'updates.status': return this.api.updates.status(request)
+      case 'updates.check': return this.api.updates.check(request)
+      case 'updates.install': return this.api.updates.install(request)
+      case 'updates.ignore': return this.api.updates.ignore(request)
+      case 'notifications.list': return this.api.notifications.list(request)
+      case 'notifications.setRead': return this.api.notifications.setRead(request)
+      case 'notifications.dismiss': return this.api.notifications.dismiss(request)
     }
   }
 

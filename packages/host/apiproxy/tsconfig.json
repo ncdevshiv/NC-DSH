@@ -18,6 +18,12 @@
       "path": "../../credentials/credentials"
     },
     {
+      "path": "../notifications"
+    },
+    {
+      "path": "../../sdk/sidecar-updates"
+    },
+    {
       "path": "../../../vendor/cordis"
     },
     {

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-26-web-notification-center.md
+2026-08-26-web-notification-center.md: 6dfa851d9980050019c711c863fd31da576a2ab8
+2026-08-26-web-notification-center.zh.md: 659d92b8b9c1fbffa8ffaba2983540db81ec67b5

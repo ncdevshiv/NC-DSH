@@ -1024,6 +1024,44 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'notifications',
+    summary: 'File-backed dismissible-notification service.',
+    description: 'File-backed dismissible-notification service.',
+    methods: [
+      {
+        signature: 'readonly storeFile: string',
+        description: 'Absolute path of the versioned store document.',
+        parameters: [],
+      },
+      {
+        signature: 'publish(input: NotificationPublishInput): void',
+        description: 'Publish one notification, or replace the content of the existing entry with the same id. Replacement keeps `createdAt` and resets `dismissed` and `read` to `false`; the input is cloned, so later caller mutations of `data` never reach stored or handed-out views.',
+        parameters: [{ name: 'input', description: 'identity and content of the notification.' }],
+      },
+      {
+        signature: 'list(): readonly NotificationView[]',
+        description: 'Snapshot every live notification, newest first (reverse insertion order; replacement retains its original position). Views are frozen clones, so caller mutation never reaches the store.',
+        parameters: [],
+        returns: 'frozen views ordered newest first.',
+      },
+      {
+        signature: 'setRead(id: string, read: boolean = true): void',
+        description: 'Mark one notification read or unread. An unknown id fails loud; setting the current value again changes nothing and emits nothing.',
+        parameters: [{ name: 'id', description: 'the notification to update.' }, { name: 'read', description: 'next read state; defaults to `true`.' }],
+      },
+      {
+        signature: 'dismiss(id: string): void',
+        description: 'Dismiss one notification (keeps it listed with `dismissed: true`). An unknown id fails loud; dismissing twice changes nothing.',
+        parameters: [{ name: 'id', description: 'the notification to dismiss.' }],
+      },
+      {
+        signature: 'delete(id: string): void',
+        description: 'Delete one notification. Deleting an absent id is already satisfied.',
+        parameters: [{ name: 'id', description: 'the notification to delete.' }],
+      },
+    ],
+  },
+  {
     key: 'permissionPresets',
     summary: 'Owns the deployment\'s permission presets and their write path.',
     description: 'Owns the deployment\'s permission presets and their write path. Requires a confining `ctx.shell` executor and `ctx.approval`; unmatched knob values are reported as CUSTOM_PRESET, not an error.',
@@ -1604,6 +1642,38 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Enumerate plugin-contributed variables without executing their resolvers.',
         parameters: [],
         returns: 'declarations sorted by environment variable name.',
+      },
+    ],
+  },
+  {
+    key: 'sidecarUpdates',
+    summary: 'GitHub-release update pipeline reporting through the notification seam.',
+    description: 'GitHub-release update pipeline reporting through the notification seam.',
+    methods: [
+      {
+        signature: 'status(): UpdateStatus',
+        description: 'Cached sync view of the pipeline state. The pointer and ignore documents are re-read per call, so externally changed files are reflected without cache invalidation.',
+        parameters: [],
+        returns: 'a frozen status snapshot.',
+      },
+      {
+        signature: 'async checkNow(): Promise<UpdateStatus>',
+        description: 'Run one release check now: fetch `releases/latest`, refresh the cached comparison state, reconcile the actionable notification, and — on the first successful check with nothing installed and auto-install enabled — install that release. Transport, HTTP, and parse failures set `lastError`, warn, and never throw.',
+        parameters: [],
+        returns: 'the committed post-check status.',
+      },
+      {
+        signature: 'async install(requestedTag?: string): Promise<InstallResult>',
+        description: 'Download, checksum-verify, and install one release, then atomically repoint the pointer document. Only the published latest release can be installed; the bytes stage under `downloads/<tag>/` and land under `releases/<tag>/`, so a running binary is never overwritten.',
+        parameters: [{ name: 'requestedTag', description: 'tag to install; defaults to the latest published release. Any other tag fails with `UNKNOWN_RELEASE`.' }],
+        returns: 'the committed pointer entry plus `restartRequired`.',
+        throws: ['SidecarUpdateError on lookup, unsupported target, missing asset or checksum manifest, download, or digest mismatch failure.'],
+      },
+      {
+        signature: 'ignore(tag: string): Promise<void>',
+        description: 'Add a release tag to the persisted ignore list, suppressing its "update available" notification until it is removed from `ignored.json` (or the seed in settings). Ignoring an already-ignored tag changes nothing. Persistence is synchronous; the promise confirms the committed state.',
+        parameters: [{ name: 'tag', description: 'exact release tag to ignore.' }],
+        returns: 'a promise settling after the list and status are committed.',
       },
     ],
   },
@@ -2528,6 +2598,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; their messages already obey the immutable creation contract.' }],
   },
   {
+    name: 'notifications/removed',
+    mode: 'emit',
+    signature: '\'notifications/removed\'(id: string): void',
+    summary: 'A notification was deleted: the id is absent from {@linkcode NotificationsService.list}.',
+    description: 'A notification was deleted: the id is absent from {@linkcode NotificationsService.list}.',
+    parameters: [{ name: 'id', description: 'the deleted notification id.' }],
+  },
+  {
+    name: 'notifications/updated',
+    mode: 'emit',
+    signature: '\'notifications/updated\'(id: string): void',
+    summary: 'A notification was published or replaced, or its read/dismiss state changed: the id is present in {@linkcode NotificationsService.list}.',
+    description: 'A notification was published or replaced, or its read/dismiss state changed: the id is present in {@linkcode NotificationsService.list}.',
+    parameters: [{ name: 'id', description: 'the notification id whose entry changed.' }],
+  },
+  {
     name: 'session-telemetry/record',
     mode: 'waterfall',
     signature: '\'session-telemetry/record\'(record: SessionTelemetryRecord, next: () => SessionTelemetryRecord): SessionTelemetryRecord',
@@ -2582,6 +2668,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Committed change to one registered namespace\'s resolved value.',
     description: 'Committed change to one registered namespace\'s resolved value. Emitted after the provider persisted (for `update`) or published (`provider`) the change; never emitted when the resolved value is deep-equal. Listener failures are contained and logged — a sync throw and an async rejection alike — except `INVARIANT`-coded failures, which rethrow after every listener ran; that rethrow reaches the emitter only from synchronous listeners, so invariant checks on this event must not be async functions.',
     parameters: [{ name: 'ns', description: 'the namespace whose resolved value changed.' }, { name: 'next', description: 'the new resolved value.' }, { name: 'prev', description: 'the previous resolved value.' }, { name: 'source', description: 'whether the change entered through `update()` or the provider.' }],
+  },
+  {
+    name: 'sidecar-updates/status',
+    mode: 'emit',
+    signature: '\'sidecar-updates/status\'(this: SidecarUpdatesService, status: UpdateStatus): void',
+    summary: 'Complete pipeline status after every committed check or mutation: check completion, install, and ignore each emit one snapshot.',
+    description: 'Complete pipeline status after every committed check or mutation: check completion, install, and ignore each emit one snapshot.',
+    parameters: [{ name: 'status', description: 'the frozen full-status payload.' }],
   },
   {
     name: 'skills/change',
@@ -3332,6 +3426,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type InboxTarget = \'next-turn\' | \'next-step\';',
   },
   {
+    name: 'InstalledEntry',
+    declaration: 'export interface InstalledEntry {\n    tag: string;\n    asset: string;\n    sha256: string;\n    installedAt: string;\n    exePath: string;\n}',
+  },
+  {
+    name: 'InstallResult',
+    declaration: 'export interface InstallResult {\n    installed: InstalledEntry;\n    restartRequired: true;\n}',
+  },
+  {
     name: 'InvariantFailure',
     declaration: 'export type InvariantFailure = (message: string) => never;',
   },
@@ -3434,6 +3536,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'KvUnitDescriptor',
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n}',
+  },
+  {
+    name: 'LatestReleaseInfo',
+    declaration: 'export interface LatestReleaseInfo {\n    tag: string;\n    name?: string;\n    publishedAt?: string;\n    url?: string;\n}',
   },
   {
     name: 'LlmAdapter',
@@ -3638,6 +3744,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ModelModalityMap',
     declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
+  },
+  {
+    name: 'NotificationPublishInput',
+    declaration: 'export interface NotificationPublishInput {\n    id: string;\n    kind: string;\n    title: string;\n    body?: string;\n    data?: Record<string, unknown>;\n}',
   },
   {
     name: 'ObjectJsonSchema',
@@ -4200,6 +4310,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
   },
   {
+    name: 'SidecarUpdatesConfig',
+    declaration: 'export interface SidecarUpdatesConfig {\n    repo?: string;\n    installDir?: string;\n    checkOnStart?: boolean;\n    intervalMs?: number;\n    assetPrefix?: string;\n    autoInstallOnFirstRun?: boolean;\n    apiBase?: string;\n    ignoredVersions?: string[];\n}',
+  },
+  {
+    name: 'SidecarUpdatesService',
+    declaration: 'export class SidecarUpdatesService extends Service {\n    static Config;\n    static inject;\n    constructor(ctx: Context, config: SidecarUpdatesConfig = {});\n    status(): UpdateStatus;\n    async checkNow(): Promise<UpdateStatus>;\n    async install(requestedTag?: string): Promise<InstallResult>;\n    ignore(tag: string): Promise<void>;\n    [Service.init](): () => void;\n}',
+  },
+  {
     name: 'SkillCandidate',
     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
@@ -4754,6 +4872,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TypertTypeModel',
     declaration: 'export interface TypertTypeModel {\n    readonly name: string;\n    readonly declaration: string;\n}',
+  },
+  {
+    name: 'UpdateStatus',
+    declaration: 'export interface UpdateStatus {\n    installed: InstalledEntry | null;\n    latest: LatestReleaseInfo | null;\n    updateAvailable: boolean;\n    ignoredLatest: boolean;\n    lastError?: string;\n}',
   },
   {
     name: 'UpdateTeamTaskRequest',

@@ -84,7 +84,14 @@ function linkPackage(pkg: WorkspacePackage, nodeModules: string): void {
   const parts = pkg.name.split('/')
   const link = resolve(nodeModules, ...parts)
   mkdirSync(dirname(link), { recursive: true })
-  symlinkSync(pkg.dir, link, 'dir')
+  try {
+    symlinkSync(pkg.dir, link, 'dir')
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'EPERM') throw error
+    // Windows without Developer Mode denies symbolic-link creation but
+    // grants directory junctions freely; both resolve identically here.
+    symlinkSync(pkg.dir, link, 'junction')
+  }
 }
 
 const packages = workspacePackages()
@@ -156,7 +163,10 @@ try {
   failed = true
   const output = error as { stdout?: Buffer; stderr?: Buffer }
   console.error('verify-node-next-types: NodeNext consumer typecheck failed.\n')
-  console.error(`${output.stdout?.toString() ?? ''}${output.stderr?.toString() ?? ''}`)
+  const forwarded = `${output.stdout?.toString() ?? ''}${output.stderr?.toString() ?? ''}`
+  // A thrown setup step (permissions, missing paths) has no child output;
+  // printing the error itself is what keeps that failure diagnosable.
+  console.error(forwarded.length > 0 ? forwarded : error)
 } finally {
   rmSync(tmp, { recursive: true, force: true })
 }

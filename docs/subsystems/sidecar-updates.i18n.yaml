@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/subsystems/sidecar-updates.md
+sidecar-updates.md: 056d063a000e3dfa234c91148667e819e85b3742
+sidecar-updates.zh.md: ef064605648c3e01b1c528de5096ab63b20c71ee

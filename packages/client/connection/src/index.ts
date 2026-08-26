@@ -80,7 +80,10 @@ export const Config: z<ConnectionConfig> = z.object({
  * carries a draft credential, and it makes the HOST issue a GET to a URL the
  * caller chose and reports back the status or the parsed body — an anonymous
  * LAN caller would have a probe for whatever the host can reach and the
- * browser cannot.
+ * browser cannot. `updates.*` and `notifications.*` join the same plane:
+ * they report and steer host-local maintenance state (the update pipeline's
+ * install pointer — its executable path never crosses the wire — and the
+ * notification store), which is exactly the reconnaissance the fence exists for.
  *
  * The model catalog (`llm.providers`, `llm.models`) is deliberately NOT here:
  * it carries provider ids, display names, and model lists — no endpoints,
@@ -116,6 +119,13 @@ const PRIVILEGED_METHODS = new Set([
   'credentials.set',
   'credentials.unset',
   'llm.discoverModels',
+  'updates.status',
+  'updates.check',
+  'updates.install',
+  'updates.ignore',
+  'notifications.list',
+  'notifications.setRead',
+  'notifications.dismiss',
 ])
 
 /**

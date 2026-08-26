@@ -306,6 +306,11 @@
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
 
+    # Sidebar-foot bell: system notices + the AI SDK update card over the
+    # notifications/updates wire domains.
+    - id: ui-notifications
+      name: '@deepseek-ai/dsh-client-ui-notifications'
+
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #
 # Every row below composes what ONE agent contributes to the host registries:

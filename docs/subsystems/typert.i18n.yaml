@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/typert.md
-typert.md: 25f5d7d3aa2e62fde373fe45f70f32bbf07c9f97
-typert.zh.md: 0725a825581fbd58c1c8eb955febbbd566dd51fd
+typert.md: d3d3c2864a1c6dc21429fd858e04d3148396faa1
+typert.zh.md: 543fa64df75335ee639fbb9ff6d508290db4be5b

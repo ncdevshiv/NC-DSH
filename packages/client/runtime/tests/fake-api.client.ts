@@ -278,6 +278,22 @@ export class FakeApiClient implements IApiClient {
     discoverModels: payload => this.record('llm.discoverModels', payload, Promise.resolve(ok({ models: [] }))),
   }
 
+  readonly updates: IApiClient['updates'] = {
+    status: payload => this.record('updates.status', payload, Promise.resolve(ok({ installed: null, latest: null, updateAvailable: false, ignoredLatest: false }))),
+    check: payload => this.record('updates.check', payload, Promise.resolve(ok({ installed: null, latest: null, updateAvailable: false, ignoredLatest: false }))),
+    install: payload => this.record('updates.install', payload, Promise.resolve(ok({
+      installed: { tag: 'fk-1.0.0', asset: 'ai-sidecar-win32-x64.exe', sha256: 'fksha', installedAt: '2026-01-01T00:00:00.000Z' },
+      restartRequired: true as const,
+    }))),
+    ignore: payload => this.record('updates.ignore', payload, Promise.resolve(ok({ ignoredVersions: [(payload as { tag: string }).tag] }))),
+  }
+
+  readonly notifications: IApiClient['notifications'] = {
+    list: payload => this.record('notifications.list', payload, Promise.resolve(ok({ items: [] }))),
+    setRead: payload => this.record('notifications.setRead', payload, Promise.resolve(ok({ ok: true as const }))),
+    dismiss: payload => this.record('notifications.dismiss', payload, Promise.resolve(ok({ ok: true as const }))),
+  }
+
   /** When true, streams never fire onOpen (misbehaving-carrier material for the handshake timeout guard). */
   suppressStreamOpen = false
 

@@ -996,11 +996,19 @@ export interface Config {
 export interface ProviderProfile {
   /** Selector label; defaults to the route key. */
   displayName?: string
-  /** Credential reference (environment-variable name) resolved per request; omission derives `<ROUTE>_API_KEY` with non-alphanumeric runs replaced by underscores. */
+  /**
+   * Credential reference (environment-variable name) resolved per request;
+   * omission derives `<ROUTE>_API_KEY` with non-alphanumeric runs replaced by
+   * underscores.
+   */
   apiKeyEnv?: string
   /** Endpoint base. Native SDK ids (anthropic, google) may omit it; OpenAI-compatible custom ids cannot. */
   baseURL?: string
-  /** Wire dialect of the endpoint; omission derives from the route id (`anthropic` and `google` stay native, everything else speaks OpenAI-compatible). */
+  /**
+   * Wire dialect of the endpoint; omission derives from the route id
+   * (`anthropic` and `google` stay native, everything else speaks
+   * OpenAI-compatible).
+   */
   api?: RouteApiKind
   /** Advisory models shown by discovery consumers; requests remain unrestricted. */
   models?: AiSdkCatalogModel[]
@@ -1053,7 +1061,7 @@ export type SidecarApiKind = 'openai-compatible' | 'anthropic' | 'google'
 
 Depends on: [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
 
-Source: [`packages/llm/llm-ai-sdk/src/index.ts:114`](../packages/llm/llm-ai-sdk/src/index.ts)
+Source: [`packages/llm/llm-ai-sdk/src/index.ts:124`](../packages/llm/llm-ai-sdk/src/index.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 
@@ -1266,6 +1274,20 @@ export interface Config {
 ```
 
 Source: [`packages/feedback/message-feedback/src/index.ts:49`](../packages/feedback/message-feedback/src/index.ts)
+
+<a id="deepseek-aidsh-notifications"></a>
+
+## `@deepseek-ai/dsh-notifications`
+
+```ts config-catalog
+/** Plugin config: harness-home override for the state file location. */
+export interface Config {
+  /** Harness home used instead of `$DSH_HOME` / `~/.dsh`. */
+  dshHome?: string
+}
+```
+
+Source: [`packages/host/notifications/src/index.ts:28`](../packages/host/notifications/src/index.ts)
 
 <a id="deepseek-aidsh-permission-presets"></a>
 
@@ -1802,6 +1824,36 @@ export interface Config {
 ```
 
 Source: [`packages/shell/shell-env/src/index.ts:29`](../packages/shell/shell-env/src/index.ts)
+
+<a id="deepseek-aidsh-sidecar-updates"></a>
+
+## `@deepseek-ai/dsh-sidecar-updates`
+
+Requires: `notifications`
+
+```ts config-catalog
+/** Plugin config; every field is optional in yml and resolved by {@link resolveSpec}. */
+export interface SidecarUpdatesConfig {
+  /** `owner/name` repository polled for releases; default `ncdevshiv/ai-sdk`. */
+  repo?: string
+  /** Install directory root; default `<cwd>/core-deps/ai-sdk`. */
+  installDir?: string
+  /** Run one check after startup; default `true`. */
+  checkOnStart?: boolean
+  /** Poll interval in milliseconds inside [60s, 24h]; omit to disable polling. */
+  intervalMs?: number
+  /** Release asset prefix; default `ai-sidecar`. */
+  assetPrefix?: string
+  /** Install the first observed release when nothing is installed yet; default `true`. */
+  autoInstallOnFirstRun?: boolean
+  /** GitHub API base URL; default `https://api.github.com`. */
+  apiBase?: string
+  /** Seed of the ignored-release tag list; grown at runtime via {@linkcode SidecarUpdatesService.ignore}. */
+  ignoredVersions?: string[]
+}
+```
+
+Source: [`packages/sdk/sidecar-updates/src/index.ts:88`](../packages/sdk/sidecar-updates/src/index.ts)
 
 <a id="deepseek-aidsh-skill"></a>
 
@@ -3132,6 +3184,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-layout` ([`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-message-feedback` ([`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-model-selection` ([`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-notifications` ([`packages/client/ui-notifications/src/index.ts`](../packages/client/ui-notifications/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-permission-presets` ([`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-plan` ([`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-reference` ([`packages/client/ui-reference/src/index.ts`](../packages/client/ui-reference/src/index.ts))

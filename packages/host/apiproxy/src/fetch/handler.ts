@@ -65,6 +65,14 @@ import {
 } from '../api/credentials.schema.ts'
 import { llmDiscoverModelsRequestSchema, llmModelsRequestSchema, llmProvidersRequestSchema } from '../api/llm.schema.ts'
 import {
+  updatesCheckRequestSchema, updatesIgnoreRequestSchema, updatesInstallRequestSchema,
+  updatesStatusRequestSchema,
+} from '../api/updates.schema.ts'
+import {
+  notificationsDismissRequestSchema, notificationsListRequestSchema,
+  notificationsSetReadRequestSchema,
+} from '../api/notifications.schema.ts'
+import {
   subagentHistoryRequestSchema,
   subagentInterruptRequestSchema,
   subagentListRequestSchema,
@@ -140,6 +148,13 @@ const UNARY_ROUTES: UnaryRoutes = {
   'llm.providers': { schema: llmProvidersRequestSchema, invoke: (api, r) => api.llm.providers(r) },
   'llm.models': { schema: llmModelsRequestSchema, invoke: (api, r) => api.llm.models(r) },
   'llm.discoverModels': { schema: llmDiscoverModelsRequestSchema, invoke: (api, r, signal) => api.llm.discoverModels(r, signal) },
+  'updates.status': { schema: updatesStatusRequestSchema, invoke: (api, r) => api.updates.status(r) },
+  'updates.check': { schema: updatesCheckRequestSchema, invoke: (api, r) => api.updates.check(r) },
+  'updates.install': { schema: updatesInstallRequestSchema, invoke: (api, r) => api.updates.install(r) },
+  'updates.ignore': { schema: updatesIgnoreRequestSchema, invoke: (api, r) => api.updates.ignore(r) },
+  'notifications.list': { schema: notificationsListRequestSchema, invoke: (api, r) => api.notifications.list(r) },
+  'notifications.setRead': { schema: notificationsSetReadRequestSchema, invoke: (api, r) => api.notifications.setRead(r) },
+  'notifications.dismiss': { schema: notificationsDismissRequestSchema, invoke: (api, r) => api.notifications.dismiss(r) },
 }
 
 /** Route lookup that narrows an arbitrary path segment to a map key (single cast point for the string→key refinement). */
