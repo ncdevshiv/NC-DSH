@@ -1,8 +1,7 @@
 import { existsSync, rmSync } from 'node:fs'
-import { registerHooks } from 'node:module'
 import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const openerUrl = new URL('./open.mjs', import.meta.url).href
 const exitMarker = join(process.cwd(), `.dsh-browser-open-${process.pid}`)
 
 const markerPoll = setInterval(() => {
@@ -12,12 +11,29 @@ const markerPoll = setInterval(() => {
 }, 25)
 markerPoll.unref()
 
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'open') return { shortCircuit: true, url: openerUrl }
-    return nextResolve(specifier, context)
-  },
-})
+// The fixture swaps the web-app opener seam before the booted tree activates:
+// same assembled server, same readiness ordering, no real browser window.
+const webAppEntry = pathToFileURL(join(
+  fileURLToPath(new URL('../../../../../', import.meta.url)),
+  'packages/bundle/web-app/lib/index.js',
+))
+const { internals } = await import(webAppEntry)
+if (typeof internals?.openBrowser !== 'function') {
+  throw new Error('browser-open fixture: packages/bundle/web-app/lib is not built; run bun run build first')
+}
+
+internals.openBrowser = async (url) => {
+  if (process.env.BROWSER_OPEN_TEST_FAILURE !== undefined) {
+    throw new Error(process.env.BROWSER_OPEN_TEST_FAILURE)
+  }
+  const response = await fetch(url)
+  const html = await response.text()
+  console.log(`dsh browser-open: ${JSON.stringify({
+    url,
+    status: response.status,
+    bootManifest: html.includes('__DSH_BOOT__'),
+  })}`)
+}
 
 // The SSH case has no opener helper to stop the long-lived Web process.
 if (process.env.DSH_BROWSER_OPEN_TEST_EXIT_ON_READY === '1') {
