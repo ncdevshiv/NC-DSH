@@ -1,10 +1,15 @@
 /**
- * Settings/credentials/llm RPC domains and their host-stream frames over
- * createApiProxy: layered redacted describe, write-path rejection mapping,
- * value-free credential views, the directory/live-route merge, and the three
- * invalidation frames (settings/credentials/models changed).
+ * Settings/credentials/llm/updates/notifications RPC domains and their
+ * host-stream frames over createApiProxy: layered redacted describe,
+ * write-path rejection mapping, value-free credential views, the
+ * directory/live-route merge, the three invalidation frames
+ * (settings/credentials/models changed), and the projected updates/status
+ * frame.
  */
 
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -19,6 +24,9 @@ import { SettingsProvider, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { CredentialInfo, CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
+import NotificationsService from '@deepseek-ai/dsh-notifications'
+import SidecarUpdatesService, { POINTER_FILENAME } from '@deepseek-ai/dsh-sidecar-updates'
+import type { InstallResult, UpdateStatus } from '@deepseek-ai/dsh-sidecar-updates'
 import type { HostFrame } from '../src/api/index.ts'
 import type { RpcRequest, RpcResponse } from '../src/api/rpc.ts'
 import { RpcId } from '../src/api/rpc.ts'
@@ -26,6 +34,11 @@ import { AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE } from '@deepseek-ai/dsh-agent-d
 import { createApiProxy } from '../src/api-proxy.ts'
 
 const DEFAULTS = { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' }
+
+/** Fresh scratch directory for notification/update stores. */
+function tempDir(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix))
+}
 
 let nextRpc = 1
 function request<P>(payload: P): RpcRequest<P> {
@@ -155,6 +168,35 @@ class BrokenCatalogAdapter extends CatalogAdapter {
   }
 }
 
+/**
+ * Network-free update seam: `status` and `ignore` run the real file-backed
+ * implementations against a scratch install directory, while the two
+ * GitHub-facing operations return canned committed results.
+ */
+class OfflineUpdates extends SidecarUpdatesService {
+  override async checkNow(): Promise<UpdateStatus> {
+    return Promise.resolve(Object.freeze({
+      installed: null,
+      latest: { tag: 'v9.9.9', name: 'Nine' },
+      updateAvailable: true,
+      ignoredLatest: false,
+    }))
+  }
+
+  override async install(requestedTag?: string): Promise<InstallResult> {
+    return {
+      installed: {
+        tag: requestedTag ?? 'v9.9.9',
+        asset: 'ai-sidecar-win32-x64.exe',
+        sha256: 'deadbeef',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        exePath: '/opt/secret/ai-sidecar.exe',
+      },
+      restartRequired: true,
+    }
+  }
+}
+
 const NS = settingsNamespace('llm-ai-sdk')
 
 const AdapterConfig = z.object({
@@ -162,6 +204,13 @@ const AdapterConfig = z.object({
   apiKeyEnv: z.string().default('DEEPSEEK_API_KEY'),
   baseURL: z.string(),
 })
+
+/** Network-free install outcome used by RefusingUpdates below. */
+class RefusingUpdates extends OfflineUpdates {
+  override async install(): Promise<InstallResult> {
+    throw new Error('tag "v0.0.1" is not the published release "v9.9.9"')
+  }
+}
 
 async function harness(options?: {
   settings?: false | {
@@ -173,6 +222,18 @@ async function harness(options?: {
   credentials?: false | { shadowed?: string[] }
   /** Skip the directory registration to exercise a namespace the proxy does not expose. */
   configurableProviders?: false
+  /** Mount the real notification seam over a scratch harness home. */
+  notifications?: boolean
+  /**
+   * Mount the network-free update seam over a scratch install directory.
+   * Implies `notifications`: the update seam injects the notification service,
+   * so it cannot activate without it.
+   */
+  updates?: false | {
+    installDir: string
+    /** Substitute seam class; defaults to {@linkcode OfflineUpdates}. */
+    serviceClass?: typeof OfflineUpdates
+  }
 }): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
@@ -183,6 +244,15 @@ async function harness(options?: {
   await ctx.plugin(LlmRuntime)
   if (options?.settings !== false) await ctx.plugin(MemorySettings, options?.settings)
   if (options?.credentials !== false) await ctx.plugin(MemoryCredentials, options?.credentials)
+  if (options?.notifications === true || options?.updates !== undefined) {
+    await ctx.plugin(NotificationsService, { dshHome: tempDir('dsh-apiproxy-notif-') })
+  }
+  if (options?.updates) {
+    await ctx.plugin(options.updates.serviceClass ?? OfflineUpdates, {
+      installDir: options.updates.installDir,
+      checkOnStart: false,
+    })
+  }
   // Model-provider namespaces plus the explicit Web preference and product
   // onboarding allowlists are the proxy's complete settings surface.
   if (options?.configurableProviders !== false) {
@@ -773,5 +843,169 @@ describe('llm.discoverModels', () => {
 
     expect(error.code).toBe('model-discovery-failed')
     expect(error.message).toContain('no model discovery is registered')
+  })
+})
+
+describe('updates domain', () => {
+  it('reports an actionable error when the sidecar-update seam is absent', async () => {
+    const ctx = await harness()
+    const api = createApiProxy(ctx, DEFAULTS)
+    const error = expectErr(await api.updates.status(request({})))
+    expect(error.code).toBe('internal')
+    expect(error.message).toContain('dsh-sidecar-updates')
+  })
+
+  it('passes status through and strips exePath from the installed view', async () => {
+    const installDir = tempDir('dsh-apiproxy-updates-')
+    writeFileSync(join(installDir, POINTER_FILENAME), `${JSON.stringify({
+      tag: 'v1.2.3',
+      asset: 'ai-sidecar-win32-x64.exe',
+      sha256: 'abc123',
+      installedAt: '2026-01-01T00:00:00.000Z',
+      exePath: '/opt/secret/ai-sidecar.exe',
+    }, null, 2)}\n`)
+    const ctx = await harness({ updates: { installDir } })
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const value = expectOk(await api.updates.status(request({})))
+
+    // The pointer's facts cross; its host path does not.
+    expect(value).toEqual({
+      installed: { tag: 'v1.2.3', asset: 'ai-sidecar-win32-x64.exe', sha256: 'abc123', installedAt: '2026-01-01T00:00:00.000Z' },
+      latest: null,
+      updateAvailable: false,
+      ignoredLatest: false,
+    })
+    expect(JSON.stringify(value)).not.toContain('exePath')
+    expect(JSON.stringify(value)).not.toContain('/opt/secret')
+  })
+
+  it('check invokes checkNow and answers the committed post-check status', async () => {
+    const ctx = await harness({ updates: { installDir: tempDir('dsh-apiproxy-updates-') } })
+    const checkNow = vi.spyOn(ctx.get('sidecarUpdates')!, 'checkNow')
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const value = expectOk(await api.updates.check(request({})))
+
+    expect(checkNow).toHaveBeenCalledTimes(1)
+    expect(value.latest).toEqual({ tag: 'v9.9.9', name: 'Nine' })
+    expect(value.updateAvailable).toBe(true)
+  })
+
+  it('install passes the requested tag through, answers restartRequired, and strips exePath', async () => {
+    const ctx = await harness({ updates: { installDir: tempDir('dsh-apiproxy-updates-') } })
+    const install = vi.spyOn(ctx.get('sidecarUpdates')!, 'install')
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const value = expectOk(await api.updates.install(request({ tag: 'v9.9.9' })))
+
+    expect(install).toHaveBeenCalledWith('v9.9.9')
+    expect(value.restartRequired).toBe(true)
+    expect(value.installed).toEqual({
+      tag: 'v9.9.9', asset: 'ai-sidecar-win32-x64.exe', sha256: 'deadbeef', installedAt: '2026-01-01T00:00:00.000Z',
+    })
+    expect(JSON.stringify(value)).not.toContain('/opt/secret')
+  })
+
+  it('ignore persists through the seam and answers what this call committed', async () => {
+    const installDir = tempDir('dsh-apiproxy-updates-')
+    const ctx = await harness({ updates: { installDir } })
+    const ignore = vi.spyOn(ctx.get('sidecarUpdates')!, 'ignore')
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const value = expectOk(await api.updates.ignore(request({ tag: 'v1.2.3' })))
+
+    expect(ignore).toHaveBeenCalledWith('v1.2.3')
+    expect(value).toEqual({ ignoredVersions: ['v1.2.3'] })
+    // The suppression is durable in the seam's own document, not just echoed.
+    expect(JSON.parse(readFileSync(join(installDir, 'ignored.json'), 'utf8'))).toEqual(['v1.2.3'])
+  })
+
+  it('maps an install refusal onto update-failed with the seam message', async () => {
+    const ctx = await harness({
+      updates: { installDir: tempDir('dsh-apiproxy-updates-'), serviceClass: RefusingUpdates },
+    })
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const error = expectErr(await api.updates.install(request({ tag: 'v0.0.1' })))
+    expect(error.code).toBe('update-failed')
+    expect(error.message).toContain('is not the published release')
+  })
+
+  it('forwards the owner status event as an exePath-free updates/status frame', async () => {
+    const ctx = await harness({ updates: { installDir: tempDir('dsh-apiproxy-updates-') } })
+    const api = createApiProxy(ctx, DEFAULTS)
+    const forged: UpdateStatus = {
+      installed: {
+        tag: 'v1.2.3', asset: 'ai-sidecar-win32-x64.exe', sha256: 'abc123',
+        installedAt: '2026-01-01T00:00:00.000Z', exePath: '/opt/secret/ai-sidecar.exe',
+      },
+      latest: { tag: 'v2.0.0' },
+      updateAvailable: true,
+      ignoredLatest: false,
+    }
+
+    const frames = await collectHost(api, ['updates/status'], 1, async () => {
+      ctx.emit(ctx.get('sidecarUpdates')!, 'sidecar-updates/status', forged)
+    })
+
+    expect(frames).toEqual([{
+      type: 'updates/status',
+      status: {
+        installed: { tag: 'v1.2.3', asset: 'ai-sidecar-win32-x64.exe', sha256: 'abc123', installedAt: '2026-01-01T00:00:00.000Z' },
+        latest: { tag: 'v2.0.0' },
+        updateAvailable: true,
+        ignoredLatest: false,
+      },
+    }])
+    expect(JSON.stringify(frames)).not.toContain('exePath')
+    expect(JSON.stringify(frames)).not.toContain('/opt/secret')
+  })
+})
+
+describe('notifications domain', () => {
+  it('reports an actionable error when the notification seam is absent', async () => {
+    const ctx = await harness()
+    const api = createApiProxy(ctx, DEFAULTS)
+    const error = expectErr(await api.notifications.list(request({})))
+    expect(error.code).toBe('internal')
+    expect(error.message).toContain('dsh-notifications')
+  })
+
+  it('lists entries newest first and passes setRead/dismiss through to the store', async () => {
+    const ctx = await harness({ notifications: true })
+    ctx.notifications.publish({ id: 'older', kind: 'job', title: 'Older' })
+    ctx.notifications.publish({ id: 'newer', kind: 'sdk-update', title: 'Newer', body: 'text', data: { tag: 'v2' } })
+    const api = createApiProxy(ctx, DEFAULTS)
+
+    const listed = expectOk(await api.notifications.list(request({})))
+    expect(listed.items.map(row => row.id)).toEqual(['newer', 'older'])
+    expect(listed.items[0]).toEqual({
+      id: 'newer', kind: 'sdk-update', title: 'Newer', body: 'text',
+      data: { tag: 'v2' }, createdAt: expect.any(String),
+      dismissed: false, read: false,
+    })
+
+    expect(expectOk(await api.notifications.setRead(request({ id: 'newer' })))).toEqual({ ok: true })
+    expect(expectOk(await api.notifications.dismiss(request({ id: 'older' })))).toEqual({ ok: true })
+    const after = expectOk(await api.notifications.list(request({})))
+    expect(after.items.find(row => row.id === 'newer')?.read).toBe(true)
+    expect(after.items.find(row => row.id === 'older'))
+      .toMatchObject({ dismissed: true, read: false })
+    // Dismissed entries stay listed.
+    expect(after.items).toHaveLength(2)
+  })
+
+  it('folds an unknown-id mutation onto notification-rejected naming the id', async () => {
+    const ctx = await harness({ notifications: true })
+    const api = createApiProxy(ctx, DEFAULTS)
+    for (const attempt of [
+      api.notifications.setRead(request({ id: 'ghost' })),
+      api.notifications.dismiss(request({ id: 'ghost' })),
+    ]) {
+      const error = expectErr(await attempt)
+      expect(error.code).toBe('notification-rejected')
+      expect(error.details).toEqual({ id: 'ghost' })
+    }
   })
 })

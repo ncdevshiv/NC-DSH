@@ -16,6 +16,7 @@ import type { ToolCallView, ToolResultView } from '@deepseek-ai/dsh-tools/presen
 import type { RpcError, RpcId, RpcRequest } from './rpc.ts'
 import type { JobView } from './jobs.ts'
 import type { WorkspaceView } from './workspace.ts'
+import type { UpdateStatusView } from './updates.ts'
 
 // Client-side consumers take the render-intent vocabulary from the contract;
 // dsh-tools remains its owner.
@@ -152,4 +153,12 @@ export type HostFrame =
    * per-event frame variant.
    */
   | { type: 'host/remote-event'; event: string; args: JsonValue[] }
+  /**
+   * The sidecar-update pipeline's committed status after every check or
+   * mutation: the projected counterpart of the seam owner event
+   * `sidecar-updates/status`. Unlike the verbatim wrapper above, this frame
+   * exists because the payload IS projected — the installed entry loses its
+   * host-local `exePath` before crossing the wire.
+   */
+  | { type: 'updates/status'; status: UpdateStatusView }
   | { type: 'stream/error'; error: RpcError }
