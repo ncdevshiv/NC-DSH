@@ -787,3 +787,32 @@ keep every gate green.
 ### Expected goal next
 Commit this as the dsh-side PR branch. Then roster #2:
 `fflate` -> `Bun.Archive` ZIP support (apiproxy session exports).
+
+---
+
+## 2026-08-26 (Bun.open #4 - dsh commit landed)
+
+### Did
+1. Committed `4f96f0f4` on `feat/web-open-builtin` (dsh repo): the full
+   migration from entry #3 plus two pre-commit-hook catches:
+   - lefthook lint rejected my fake child process's `any` typing and a
+     non-null assertion in `openDefaultBrowser`; both rewritten
+     structurally (EventEmitter cast to ChildProcess at construction;
+     probe-and-call folded into one typed read of `bun.open`).
+   - The third-party-notices hook regenerated THIRD_PARTY_NOTICES.md on
+     its own once the dependency left package.json - included in the
+     commit.
+2. Post-fix gates rerun: opener spec 15/15, web-app suite 34/34,
+   browser-open snapshot 4/4.
+
+### Program status after Bun.open (roster #1 complete end-to-end)
+- Bun side pushed: ncdevshiv/nc-bun `feat/bun-open`
+  (`eb1f620c6b` link fix, `13852702eb` implementation).
+- dsh side committed locally: `feat/web-open-builtin`.
+- Benchmarks recorded: Bun-side (5.02x spawn-complete, 59.73x wait-mode,
+  503ms cold import eliminated), dsh-side (15.6x handoff, 32.8ms module
+  eval deleted, 68 files / 132KB deps removed).
+
+### Expected goal next
+Roster #2: fflate -> Bun.Archive ZIP support, starting with the
+apiproxy session-export call site.
