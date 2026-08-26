@@ -36,7 +36,10 @@ concurrency:
 jobs:
   lifecycle:
     name: Issue lifecycle
-    if: ${{ github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested') }}
+    # The lifecycle half drives the organization Project through a GitHub App;
+    # repositories without the app credentials configured skip instead of
+    # failing every pull_request event (the pr policy half stays independent).
+    if: ${{ vars.DSH_ISSUE_APP_CLIENT_ID != '' && (github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy
