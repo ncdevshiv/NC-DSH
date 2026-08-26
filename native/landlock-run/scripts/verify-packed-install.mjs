@@ -71,7 +71,12 @@ function runCapture(command, commandArgs) {
 }
 
 function readPackedManifest(manifest) {
-  return JSON.parse(runCapture('tar', ['-xOf', tarballPath(manifest), 'package/package.json']));
+  return JSON.parse(runCapture('tar', tarReadArgs('-xOf', tarballPath(manifest), 'package/package.json')));
+}
+
+/** A Windows drive letter (`F:`) reads as a remote host to GNU tar without this. */
+function tarReadArgs(...base) {
+  return process.platform === 'win32' ? [...base, '--force-local'] : base;
 }
 
 function verifyPackedManifest(packed) {
@@ -100,7 +105,7 @@ function packageInstallDir(packageName) {
 
 function unpackTarball(manifest) {
   const extractRoot = fs.mkdtempSync(path.join(tempRoot, 'extract-'));
-  run('tar', ['-xzf', tarballPath(manifest), '-C', extractRoot]);
+  run('tar', tarReadArgs('-xzf', tarballPath(manifest)), { cwd: extractRoot });
 
   const source = path.join(extractRoot, 'package');
   const destination = packageInstallDir(manifest.name);

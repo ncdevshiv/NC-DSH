@@ -38,6 +38,10 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 
+# ZCode session-local plans and agent scratch scripts.
+.zcode/
+.tmp-*/
+
 # Local reference checkouts that are not part of the repository.
 core-deps/
 
