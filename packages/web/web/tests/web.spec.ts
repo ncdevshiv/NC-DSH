@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import WebRuntime, {
+  MAX_WEB_ERROR_BODY_CHARS,
+  parseErrorBody,
+  readErrorBody,
+  throwProviderHttpError,
   WebError,
   type WebFetchProvider,
   type WebFetchResult,
@@ -211,5 +215,103 @@ describe('WebError', () => {
     const error = new WebError('boom', 'WEB_INVALID_URL')
     expect(error.code).toBe('WEB_INVALID_URL')
     expect(error.name).toBe('WebError')
+  })
+
+  it('carries structured provider facts when supplied', () => {
+    const error = new WebError('Internal server error', 'WEB_PROVIDER_ERROR', {
+      status: 500,
+      providerType: 'api_error',
+    })
+    expect(error.status).toBe(500)
+    expect(error.providerType).toBe('api_error')
+    const plain = new WebError('boom', 'WEB_INVALID_URL')
+    expect(plain.status).toBeUndefined()
+    expect(plain.providerType).toBeUndefined()
+  })
+})
+
+describe('error-body parsing', () => {
+  it('extracts the nested OpenAI envelope message and type', () => {
+    expect(parseErrorBody(JSON.stringify({
+      error: { type: 'server_error', message: 'upstream exploded' },
+    }))).toEqual({ message: 'upstream exploded', providerType: 'server_error' })
+  })
+
+  it('extracts the Anthropic-style top-level envelope', () => {
+    expect(parseErrorBody(JSON.stringify({ type: 'error', message: 'Internal server error' })))
+      .toEqual({ message: 'Internal server error', providerType: 'error' })
+  })
+
+  it('falls back to string detail fields for SearXNG-style bodies', () => {
+    expect(parseErrorBody(JSON.stringify({ error: 'format disabled' })))
+      .toEqual({ message: 'format disabled' })
+  })
+
+  it('keeps only the first line of a non-JSON body, capped', () => {
+    expect(parseErrorBody('<html>\nrest ignored')).toEqual({ message: '<html>' })
+    const long = `${'x'.repeat(300)}\ntail`
+    expect(parseErrorBody(long).message).toHaveLength(200)
+  })
+
+  it('answers an empty body with an empty message', () => {
+    expect(parseErrorBody('')).toEqual({ message: '' })
+  })
+
+  it('echoes a JSON primitive body as its text', () => {
+    // A scalar body carries no envelope fields; the raw text is the only
+    // signal, so it becomes the message.
+    expect(parseErrorBody('123')).toEqual({ message: '123' })
+  })
+
+  it('reads a bounded stream and reports truncation', async () => {
+    const payload = 'y'.repeat(50)
+    const response = new Response(payload.repeat(1000), { status: 500 })
+    const read = await readErrorBody(response)
+    if (read.kind !== 'parsed') throw new Error('expected parsed outcome')
+    expect(read.truncated).toBe(true)
+    expect(read.message.length).toBeLessThanOrEqual(MAX_WEB_ERROR_BODY_CHARS)
+  })
+
+  it('returns an empty parse for a null body', async () => {
+    const read = await readErrorBody(new Response(null, { status: 500 }))
+    expect(read).toEqual({ kind: 'parsed', message: '', truncated: false })
+  })
+
+  it('surfaces mid-read cancellation as aborted, not parsed', async () => {
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) { controller.error(new DOMException('aborted', 'AbortError')) },
+      }),
+      { status: 500 },
+    )
+    const read = await readErrorBody(response)
+    expect(read.kind).toBe('aborted')
+  })
+
+  it('collapses a failed read into an empty parse so the status survives', async () => {
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) { controller.error(new TypeError('socket reset')) },
+      }),
+      { status: 502 },
+    )
+    const read = await readErrorBody(response)
+    expect(read).toEqual({ kind: 'parsed', message: '', truncated: false })
+  })
+
+  it('throws the standard provider HTTP error with structured facts', () => {
+    const response = new Response('{"error":{"type":"rate_limit_error","message":"slow down"}}', { status: 429 })
+    expect(() => throwProviderHttpError('Exa', response, { message: 'slow down', providerType: 'rate_limit_error' }))
+      .toThrow(expect.objectContaining({
+        code: 'WEB_PROVIDER_ERROR',
+        status: 429,
+        providerType: 'rate_limit_error',
+      }))
+  })
+
+  it('falls back to the status-line message when the body carried none', () => {
+    const response = new Response('{}', { status: 500 })
+    expect(() => throwProviderHttpError('Exa', response, { message: '' }))
+      .toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'Exa API error (HTTP 500)' }))
   })
 })

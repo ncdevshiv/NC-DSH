@@ -61,8 +61,6 @@ function dragData(): Pick<DataTransfer, 'effectAllowed' | 'dropEffect' | 'setDat
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const store = createWorkspaceViewStore().create()
   const props: WorkspaceBrowserProps = {
-    wide: true,
-    expandSidebar: vi.fn(),
     useSessions: hook(sessionState([])),
     useWorkspaces: hook(workspaceState([])),
     useStore: bindSnapshotSelector(store),
@@ -714,56 +712,9 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
-  it('rail state renders icon controls that request expansion', () => {
-    vi.useFakeTimers()
-    try {
-      const expandSidebar = vi.fn()
-      const b = mount({ wide: false, expandSidebar })
-      // No wide chrome in rail state.
-      expect(screen.queryByText('工作区')).toBeNull()
-      expect(screen.queryByPlaceholderText('搜索会话…')).toBeNull()
-      fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
-      expect(expandSidebar).toHaveBeenCalledTimes(1)
-      // The wide flip mounts the input and focuses it after the slide.
-      rerender(b, { wide: true })
-      const input = screen.getByPlaceholderText('搜索会话…')
-      act(() => { vi.advanceTimersByTime(300) })
-      expect(document.activeElement).toBe(input)
-      // Wide search button is decorative (tabIndex -1, no expand call).
-      fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
-      expect(expandSidebar).toHaveBeenCalledTimes(1)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('keeps the rail-opened search expanded when the initiating click reaches document', () => {
-    vi.useFakeTimers()
-    try {
-      const b = mount({ wide: false })
-      fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
-      rerender(b, { wide: true })
-      // In the browser the rail click keeps bubbling to document after the
-      // wide flip mounted the outside-click listener, with the unmounted rail
-      // button as its target — outside searchRoot. It must not dismiss the
-      // search it just opened.
-      fireEvent.click(document.body)
-      expect(screen.getByRole('button', { name: '搜索会话' }).getAttribute('aria-expanded')).toBe('true')
-      act(() => { vi.advanceTimersByTime(300) })
-      expect(document.activeElement).toBe(screen.getByPlaceholderText('搜索会话…'))
-      // The gesture has settled: outside clicks dismiss the search again.
-      fireEvent.click(document.body)
-      expect(screen.getByRole('button', { name: '搜索会话' }).getAttribute('aria-expanded')).toBe('false')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('rail add-workspace raises the directory flow in place, with no menu and no expansion', () => {
-    const expandSidebar = vi.fn()
-    mount({ wide: false, expandSidebar, useWorkspaces: hook(workspaceState([workspace('alpha', [])])) })
+  it('the add-workspace gesture raises the directory flow in place, with no menu', () => {
+    mount({ useWorkspaces: hook(workspaceState([workspace('alpha', [])])) })
     fireEvent.click(screen.getByRole('button', { name: '添加工作区' }))
-    expect(expandSidebar).not.toHaveBeenCalled()
     // Adding is the header's only action, so the gesture IS that action: no
     // one-row popover, and existing workspaces stay in the tree below.
     expect(screen.queryByRole('menu')).toBeNull()

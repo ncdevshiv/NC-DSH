@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmAiSdk from '@deepseek-ai/dsh-llm-ai-sdk'
 import type { MockLlmBehavior, MockLlmServer } from '@deepseek-ai/dsh-llm-mock-server'
 import { startMockLlmServer } from '@deepseek-ai/dsh-llm-mock-server'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -37,8 +37,9 @@ async function harness(
   vi.stubEnv('DEEPSEEK_API_KEY', 'mock-key')
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(LlmDeepSeek, {
-    baseURL,
+  await ctx.plugin(LlmAiSdk, {
+    binaryPath: process.env.DSH_AI_SDK_SIDECAR ?? '',
+    providers: { 'deepseek-official': { apiKeyEnv: 'DEEPSEEK_API_KEY', baseURL } },
     streamIdleTimeoutMs: options.streamIdleTimeoutMs ?? 1_000,
     retryPolicy: {
       mode: 'normal',
@@ -82,7 +83,10 @@ async function unusedPort(): Promise<number> {
   return port
 }
 
-describe('bounded retry through the real DeepSeek HTTP/SSE adapter', () => {
+// Transport faults now originate inside the ai-sidecar's Rust provider wire,
+// so this lane needs the built binary; it self-skips without one.
+const SIDECAR = process.env.DSH_AI_SDK_SIDECAR
+describe.skipIf(SIDECAR === undefined)('bounded retry through the AI SDK sidecar adapter', () => {
   it('recovers from a true refused connection after the endpoint starts during backoff', async () => {
     const port = await unusedPort()
     context = await harness(`http://127.0.0.1:${port}`, { initialDelayMs: 100 })

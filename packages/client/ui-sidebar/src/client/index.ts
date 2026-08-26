@@ -8,7 +8,7 @@ import { en, zh, type SidebarKey } from './locales.ts'
 
 export type {
   SidebarBrandMarkOwnerProps, SidebarBrandNameOwnerProps, SidebarFooterActionOwnerProps,
-  SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps, SidebarSettingsOwnerProps,
+  SidebarRootComponentProps, SidebarRootInjected, SidebarSectionKey, SidebarSettingsOwnerProps,
 } from './contract/slots.ts'
 export type { SidebarKey } from './locales.ts'
 
@@ -42,13 +42,14 @@ export function apply(ctx: ClientContext): void {
     () => ctx.slots.register({
       name: 'sidebar',
       locale: NS,
-      // The shell owns geometry; ui-workspace registers the whole browsing
-      // region (header, search, session list, workspace dialogs), ui-settings
-      // registers the foot trigger + settings panel.
+      // The shell owns geometry and the section switcher; the keyed
+      // `sidebar.section` slot carries the four section surfaces
+      // (ui-home-section, ui-workspace's browser, ui-work-section,
+      // ui-team-section), ui-settings registers the foot trigger + panel.
       children: {
         'sidebar.brand.mark': { kind: 'single', scope: 'root' },
         'sidebar.brand.name': { kind: 'single', scope: 'root' },
-        'sidebar.workspaces': { kind: 'single', scope: 'root' },
+        'sidebar.section': { kind: 'keyed', scope: 'root' },
         'sidebar.settings': { kind: 'single', scope: 'root' },
         'sidebar.footer.action': { kind: 'list', scope: 'root' },
       },

@@ -71,6 +71,13 @@ declare module '@deepseek-ai/cordis' {
 export interface LlmErrorOptions extends ErrorOptions {
   /** Valid HTTP status observed at the provider boundary. */
   status?: number
+  /**
+   * Provider's structural error type (`api_error`, `overloaded_error`,
+   * `rate_limit_error`, `invalid_request_error`, ...). Carried verbatim
+   * from the wire so downstream consumers can branch on the actual cause
+   * without re-parsing the message.
+   */
+  providerType?: string
   /** Positive finite provider-requested delay in milliseconds. */
   providerRetryAfterMs?: number
   /** Non-empty opaque provider request id. */
@@ -97,6 +104,11 @@ export class LlmError extends HarnessError {
       && (!Number.isInteger(options.status) || options.status < 100 || options.status > 599)) {
       throw new Error('LlmError status must be an integer from 100 through 599')
     }
+    if (options?.providerType !== undefined
+      && (typeof options.providerType !== 'string' || options.providerType.length === 0
+        || options.providerType.length > 128)) {
+      throw new Error('LlmError providerType must be a non-empty string of at most 128 characters')
+    }
     if (options?.providerRetryAfterMs !== undefined
       && (!Number.isFinite(options.providerRetryAfterMs) || options.providerRetryAfterMs <= 0)) {
       throw new Error('LlmError providerRetryAfterMs must be a positive finite number')
@@ -111,6 +123,7 @@ export class LlmError extends HarnessError {
       message,
       code,
       ...options?.status === undefined ? {} : { status: options.status },
+      ...options?.providerType === undefined ? {} : { providerType: options.providerType },
       ...options?.providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs: options.providerRetryAfterMs },
       ...options?.requestId === undefined ? {} : { requestId: options.requestId },
     })
@@ -174,9 +187,9 @@ export interface PreparedLlmCall {
 
 /**
  * Provider-wire adapter for the harness message and stream vocabulary. Register implementations
- * with `ctx.llm.registerAdapter(providers, adapter)`. Every provider HTTP request must include
- * `attributionHeaders()`; prove the headers are added in the wire request or library header hook. The direct-fetch
- * DeepSeek and library-backed pi-ai adapters meet this contract through different internals.
+ * with `ctx.llm.registerAdapter(providers, adapter)`. An adapter that owns its provider HTTP
+ * headers includes `attributionHeaders()` on every request; a transport driven by a separate
+ * process carries that process's identity instead.
  */
 export abstract class LlmAdapter {
   /**

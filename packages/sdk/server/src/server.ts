@@ -13,7 +13,7 @@ import { carrierKeyOf, type Scoped } from '@deepseek-ai/dsh-scope'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmAiSdk from '@deepseek-ai/dsh-llm-ai-sdk'
 import type {
   InitializeParams,
   InitializeResult,
@@ -119,7 +119,7 @@ export class HarnessSdkJsonRpcServer {
     this.maxTokens = params.maxTokens
     if (!this.hasAdapterFor(this.provider)) {
       if (this.provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${this.provider}"`)
-      this.llmFiber = await this.ctx.plugin(LlmDeepSeek, {})
+      this.llmFiber = await this.ctx.plugin(LlmAiSdk, {})
     }
     return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } }
   }

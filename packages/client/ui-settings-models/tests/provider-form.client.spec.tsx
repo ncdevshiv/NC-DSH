@@ -18,7 +18,7 @@ afterEach(cleanup)
 
 const t: ModelsSectionInjected['t'] = key => en[key]
 
-const PROTOCOLS = ['openai-completions', 'openai-responses', 'anthropic-messages']
+const PROTOCOLS = ['openai-compatible', 'anthropic', 'google']
 
 /** The pi-ai profile shape as the host serializes it, including the layer-1 fields. */
 const PiAiConfig = Schema.object({
@@ -52,7 +52,7 @@ function piAiNamespace(
   baseProviders: Record<string, unknown> = {},
 ): SettingsNamespaceView {
   return {
-    ns: 'llm-pi-ai',
+    ns: 'llm-ai-sdk',
     schema: JSON.parse(JSON.stringify(PiAiConfig.toJSON())) as unknown,
     // `value` is the effective section; `user` is only the layer this page
     // writes. They differ whenever a composition `base` supplies something.
@@ -90,7 +90,7 @@ function scriptedFace(options: {
         providers: Object.keys(providers).map(provider => ({
           provider,
           displayName: provider,
-          settingsNs: 'llm-pi-ai',
+          settingsNs: 'llm-ai-sdk',
           settingsPath: ['providers', provider],
           active: true,
           declared: options.declaredRoutes?.includes(provider) ?? false,
@@ -211,7 +211,7 @@ describe('model list editing', () => {
 
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     expect(firstMutate(mutate)).toMatchObject({
-      ns: 'llm-pi-ai',
+      ns: 'llm-ai-sdk',
       expectedRevision: 3,
       ops: [{ op: 'set', path: ['providers', 'openai', 'models'], value: [{ id: 'acme-large', contextWindow: 65_536 }] }],
     })
@@ -476,7 +476,7 @@ describe('endpoint interrogation', () => {
 
     await waitFor(() => { expect(discover).toHaveBeenCalled() })
     expect(firstProbe(discover)).toEqual({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       // The route is named, so an adapter that already describes it answers
       // from its own registry rather than the endpoint.
       provider: 'openai',
@@ -489,7 +489,7 @@ describe('endpoint interrogation', () => {
     const discover = vi.fn(() => Promise.resolve(ok({ models: [] })))
     await mountSection({
       discover,
-      providers: { openai: { baseURL: 'https://proxy.example/v1', api: 'openai-responses' } },
+      providers: { openai: { baseURL: 'https://proxy.example/v1', api: 'anthropic' } },
     })
     openEditor('openai')
 
@@ -497,10 +497,10 @@ describe('endpoint interrogation', () => {
 
     await waitFor(() => { expect(discover).toHaveBeenCalled() })
     expect(firstProbe(discover)).toEqual({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       provider: 'openai',
       baseURL: 'https://proxy.example/v1',
-      api: 'openai-responses',
+      api: 'anthropic',
     })
   })
 
@@ -601,7 +601,7 @@ describe('endpoint interrogation', () => {
     fireEvent.click(screen.getByText(en.fetchModels))
 
     await waitFor(() => { expect(discover).toHaveBeenCalled() })
-    expect(firstProbe(discover)).toEqual({ settingsNs: 'llm-pi-ai', provider: 'openai' })
+    expect(firstProbe(discover)).toEqual({ settingsNs: 'llm-ai-sdk', provider: 'openai' })
   })
 
   it('keeps the create card asking only once it has an endpoint', () => {
@@ -623,9 +623,9 @@ describe('endpoint interrogation', () => {
 
     // A provider being declared names no route, so only the endpoint travels.
     expect(firstProbe(scripted.discover)).toEqual({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       baseURL: 'https://acme.test/v1',
-      api: 'openai-completions',
+      api: 'openai-compatible',
     })
   })
 
@@ -727,7 +727,7 @@ describe('provider rows', () => {
       providers: [{
         provider: 'openai',
         displayName: 'openai',
-        settingsNs: 'llm-pi-ai',
+        settingsNs: 'llm-ai-sdk',
         settingsPath: ['providers', 'openai'],
         active: true,
       }],
@@ -786,14 +786,14 @@ describe('hand-declared providers', () => {
 
     await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
     expect(firstMutate(mutate)).toEqual({
-      ns: 'llm-pi-ai',
+      ns: 'llm-ai-sdk',
       ops: [{
         op: 'set',
         path: ['providers', 'acme-gateway'],
         value: {
           displayName: 'Acme Gateway',
           apiKeyEnv: 'ACME_GATEWAY_API_KEY',
-          api: 'openai-completions',
+          api: 'openai-compatible',
           baseURL: 'https://gateway.acme.example/v1',
           models: [{ id: 'acme-large', contextWindow: 65_536 }],
         },
@@ -830,7 +830,7 @@ describe('hand-declared providers', () => {
     // A hand-declared route named its own protocol at creation, so editing it
     // reaches the same field the create card asked for.
     await mountSection({
-      providers: { 'acme-gateway': { api: 'openai-completions', baseURL: 'https://gateway.acme.example/v1' } },
+      providers: { 'acme-gateway': { api: 'openai-compatible', baseURL: 'https://gateway.acme.example/v1' } },
       declaredRoutes: ['acme-gateway'],
     })
     openEditor('acme-gateway')
@@ -840,7 +840,7 @@ describe('hand-declared providers', () => {
   it('renames a declared route and falls back to its id when the name is cleared', async () => {
     const { mutate } = await mountSection({
       providers: {
-        'acme-gateway': { displayName: 'Acme Gateway', api: 'openai-completions', baseURL: 'https://acme.test/v1' },
+        'acme-gateway': { displayName: 'Acme Gateway', api: 'openai-compatible', baseURL: 'https://acme.test/v1' },
       },
       declaredRoutes: ['acme-gateway'],
     })
@@ -865,8 +865,8 @@ describe('hand-declared providers', () => {
     // layer alone, and clearing it restores the layer beneath — the
     // composition name here, not the route id — so that is what it offers.
     await mountSection({
-      providers: { 'acme-gateway': { displayName: 'Acme (pinned)', api: 'openai-completions' } },
-      baseProviders: { 'acme-gateway': { displayName: 'Acme (pinned)', api: 'openai-completions' } },
+      providers: { 'acme-gateway': { displayName: 'Acme (pinned)', api: 'openai-compatible' } },
+      baseProviders: { 'acme-gateway': { displayName: 'Acme (pinned)', api: 'openai-compatible' } },
       userProviders: {},
       declaredRoutes: ['acme-gateway'],
     })
@@ -881,7 +881,7 @@ describe('hand-declared providers', () => {
     // The status line used to echo the target captured when the card opened,
     // which never lied while the name could not change. It can now.
     const { face } = await mountSection({
-      providers: { 'acme-gateway': { displayName: 'Acme Gateway', api: 'openai-completions' } },
+      providers: { 'acme-gateway': { displayName: 'Acme Gateway', api: 'openai-compatible' } },
       declaredRoutes: ['acme-gateway'],
     })
     // The reload after the write answers with the renamed route, exactly as
@@ -890,7 +890,7 @@ describe('hand-declared providers', () => {
       providers: [{
         provider: 'acme-gateway',
         displayName: 'Acme 网关',
-        settingsNs: 'llm-pi-ai',
+        settingsNs: 'llm-ai-sdk',
         settingsPath: ['providers', 'acme-gateway'],
         active: true,
         declared: true,
@@ -909,10 +909,10 @@ describe('hand-declared providers', () => {
   })
 
   it('drops the stored name rather than storing an empty one the adapter refuses', async () => {
-    // `llm-pi-ai` rejects an empty displayName outright, so clearing the field
+    // `llm-ai-sdk` rejects an empty displayName outright, so clearing the field
     // must unset it — which is also what the user means: use the route id.
     const { mutate } = await mountSection({
-      providers: { 'acme-gateway': { displayName: 'Acme Gateway', api: 'openai-completions' } },
+      providers: { 'acme-gateway': { displayName: 'Acme Gateway', api: 'openai-compatible' } },
       declaredRoutes: ['acme-gateway'],
     })
     openEditor('acme-gateway')
@@ -930,7 +930,7 @@ describe('hand-declared providers', () => {
       providers: {
         'acme-gateway': {
           apiKeyEnv: 'ACME_GATEWAY_API_KEY',
-          api: 'openai-completions',
+          api: 'openai-compatible',
           baseURL: 'https://gateway.acme.example/v1',
           models: [{ id: 'acme-large' }],
         },
@@ -940,16 +940,16 @@ describe('hand-declared providers', () => {
     openEditor('acme-gateway')
 
     const protocol = screen.getByLabelText<HTMLSelectElement>(en.customApi)
-    expect(protocol.value).toBe('openai-completions')
-    fireEvent.change(protocol, { target: { value: 'anthropic-messages' } })
+    expect(protocol.value).toBe('openai-compatible')
+    fireEvent.change(protocol, { target: { value: 'google' } })
     fireEvent.click(screen.getByText(en.apply))
 
     await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
     // Only the protocol travels: every other stored field is unchanged, so no
     // op restates it.
     expect(firstMutate(mutate)).toEqual({
-      ns: 'llm-pi-ai',
-      ops: [{ op: 'set', path: ['providers', 'acme-gateway', 'api'], value: 'anthropic-messages' }],
+      ns: 'llm-ai-sdk',
+      ops: [{ op: 'set', path: ['providers', 'acme-gateway', 'api'], value: 'google' }],
       expectedRevision: 3,
     })
   })
@@ -1237,7 +1237,7 @@ describe('hand-declared providers', () => {
 
     fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme' } })
     fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://acme.test/v1' } })
-    fireEvent.change(screen.getByLabelText(en.customApi), { target: { value: 'anthropic-messages' } })
+    fireEvent.change(screen.getByLabelText(en.customApi), { target: { value: 'google' } })
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'm' } })
     fireEvent.click(screen.getByText(en.create))
@@ -1248,7 +1248,7 @@ describe('hand-declared providers', () => {
     // keeps its provider-native auth path instead of resolving a reference
     // nothing ever sets. The with-key case is covered above.
     expect(firstMutate(mutate).ops[0]?.value).toEqual({
-      api: 'anthropic-messages',
+      api: 'google',
       baseURL: 'https://acme.test/v1',
       models: [{ id: 'm' }],
     })

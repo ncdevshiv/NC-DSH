@@ -1,0 +1,146 @@
+/* Sidebar Work section: needs-you / running / goals board rows. The sidebar
+   column owns the scrollbar rebind; this sheet paints no bg-layer/specific
+   surface, so it stays out of the elevated-surface scrollbar contract. */
+
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 4px 0 8px;
+  overflow: hidden;
+}
+
+.sectionTitle {
+  flex: none;
+  padding: 0 4px 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.empty {
+  flex: none;
+  padding: 2px 4px 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.list {
+  flex: none;
+  max-height: 40%;
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.rowCurrent {
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.dotPending {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.dotRunning {
+  background: var(--dsw-alias-button-info-fill);
+}
+
+.rowTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rowState {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.rowTime {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.goalRow {
+  align-items: flex-start;
+}
+
+.phaseChip {
+  flex: none;
+  margin-top: 1px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.phaseBlocked {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+.phasePaused {
+  background: var(--dsw-alias-state-warn-secondary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.goalObjective {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.blockedReason {
+  margin: -2px 0 6px;
+  padding: 0 8px 0 23px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

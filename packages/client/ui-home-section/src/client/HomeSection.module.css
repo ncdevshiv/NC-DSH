@@ -1,0 +1,182 @@
+/* Sidebar Home section: summary strip, quick action, and the recent-session
+   inbox. Styling rides the sidebar's own geometry (the region seat already
+   cancels the shell's inline padding), so this sheet only styles its rows. */
+
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 4px 0 8px;
+  overflow: hidden;
+}
+
+/* Summary strip: quiet count chips; the running chip accents while work is
+   live so the overview answers "is anything happening" at a glance. */
+.summary {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.summaryChip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  /* Control-family wash, not a bg-layer surface: the chips are count badges
+     on the sidebar column (which owns the scrollbar rebind), so this sheet
+     stays out of the elevated-surface scrollbar contract. */
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.summaryChipAccent {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+/* Quick action mirrors the shell's New Session bar geometry at the section's
+   own emphasis level. */
+.newSession {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  margin-bottom: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.newSession:hover {
+  background: var(--dsw-alias-button-floating-hover);
+}
+
+.startError {
+  flex: none;
+  margin: -6px 0 8px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.inboxTitle {
+  flex: none;
+  padding: 0 4px 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inboxEmpty {
+  padding: 8px 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.inbox {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+  overflow-y: auto;
+  /* Pointer-affordance scrollbar, the sidebar column's pattern: the shell's
+     quietBars rebinding reaches nested scroll regions. */
+  scrollbar-gutter: stable;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.rowCurrent {
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.dotIdle {
+  background: var(--dsw-alias-label-tertiary);
+  opacity: 0.55;
+}
+
+.dotRunning {
+  background: var(--dsw-alias-button-info-fill);
+}
+
+.dotPending {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.dotDone {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.rowTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rowPreset {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.rowTime {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}

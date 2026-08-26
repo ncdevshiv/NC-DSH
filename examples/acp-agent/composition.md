@@ -8,8 +8,8 @@ The ACP demo exposes fresh baseline-prompt agent sessions to programmatic client
 ```mermaid
 flowchart LR
   cfg["examples/acp-agent<br/>cordis.yml"]
-  plugin_acp_llm_deepseek["llm-deepseek<br/>@deepseek-ai/dsh-llm-deepseek"]
-  cfg --> plugin_acp_llm_deepseek
+  plugin_acp_llm_ai_sdk["llm-ai-sdk<br/>@deepseek-ai/dsh-llm-ai-sdk"]
+  cfg --> plugin_acp_llm_ai_sdk
   plugin_acp_sandbox["sandbox<br/>@deepseek-ai/dsh-sandbox-local"]
   cfg --> plugin_acp_sandbox
   plugin_acp_sandbox_policy["sandbox-policy<br/>@deepseek-ai/dsh-sandbox-policy"]
@@ -75,7 +75,7 @@ flowchart LR
 
 | Plugin id | Package / module |
 | --- | --- |
-| `llm-deepseek` | `@deepseek-ai/dsh-llm-deepseek` |
+| `llm-ai-sdk` | `@deepseek-ai/dsh-llm-ai-sdk` |
 | `sandbox` | `@deepseek-ai/dsh-sandbox-local` |
 | `sandbox-policy` | `@deepseek-ai/dsh-sandbox-policy` |
 | `subprocess` | `@deepseek-ai/dsh-subprocess-local` |

@@ -1,10 +1,11 @@
 /**
  * ui-workspace contracts. Two registrations share this package:
  *
- * - WorkspaceBrowser fills the sidebar shell's `sidebar.workspaces` hole —
- *   the whole browsing region (section header, search, grouped/flat session
- *   list, workspace dialogs). It registers this package's viewing store and
- *   consumes the shell's two-fact owner share (wide / expandSidebar).
+ * - WorkspaceBrowser fills the sidebar shell's `sidebar.section` hole under
+ *   the `code` key — the whole browsing region (section header, search,
+ *   grouped/flat session list, workspace dialogs). It registers this
+ *   package's viewing store and consumes no shell state (the shell hides the
+ *   section area while collapsed).
  * - WorkspacePicker fills the conversation empty-state hole (menu + error
  *   dialog shared with the browser).
  *
@@ -55,15 +56,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
-    /** Directory-flow hole under the sidebar browsing region (declared by the WorkspaceBrowser entry). */
-    'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
+    /** Directory-flow hole under the sidebar section browser (declared by the WorkspaceBrowser entry). */
+    'sidebar.section.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
   }
 }
 
 /** The two directory-flow holes; a flow package's client half registers its one component into both. */
 export type DirectoryFlowSlotName =
   | 'conversation.hero.workspace.directoryFlow'
-  | 'sidebar.workspaces.directoryFlow'
+  | 'sidebar.section.directoryFlow'
 
 /**
  * Directory-picking share both trigger surfaces consume. Occupancy rides the
@@ -140,10 +141,12 @@ export type WorkspaceBrowserInjected = {
   createWorkspace: (input: { path: string }) => Promise<WorkspaceView>
 }
 
-/** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
+/** Full browser props: viewing store + injected actions + the locale seat.
+ * The browser renders the sidebar's wide Code section only — the shell hides
+ * the section area in rail mode, so no column state crosses this contract. */
 export type WorkspaceBrowserProps =
-  PropsRuntime<'sidebar.workspaces'>
-  & PropsRenderSlots<'sidebar.workspaces.directoryFlow'>
+  PropsRuntime<'sidebar.section', 'code'>
+  & PropsRenderSlots<'sidebar.section.directoryFlow'>
   & PropsStore<ReturnType<typeof createWorkspaceViewStore>>
   & Omit<WorkspaceBrowserInjected, 'hooks'>
   & PropsHooks<WorkspaceBrowserInjected['hooks']>

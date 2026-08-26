@@ -46,11 +46,13 @@ async function bench() {
   }
 }
 
-type HoleName = 'sidebar.workspaces' | 'conversation.hero.workspace' | 'conversation.empty.workspace'
+type HoleName = 'sidebar.section' | 'conversation.hero.workspace' | 'conversation.empty.workspace'
 
 /** Declare any subset of the holes with a single root registration ('root' is a single slot). */
 function declare(slots: SlotRegistry, ...names: HoleName[]): () => void {
-  const children = Object.fromEntries(names.map(name => [name, { kind: 'single', scope: 'root' }]))
+  const children = Object.fromEntries(names.map(name => [name, name === 'sidebar.section'
+    ? { kind: 'keyed', scope: 'root' }
+    : { kind: 'single', scope: 'root' }]))
   return slots.register({ name: 'root', children } as never, () => null)
 }
 
@@ -61,12 +63,12 @@ describe('ui-workspace apply', () => {
 
   it('registers browser and pickers for declarations arriving before or after apply', async () => {
     const before = await bench()
-    declare(before.slots, 'sidebar.workspaces')
+    declare(before.slots, 'sidebar.section')
     await before.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(before.slots.entries('sidebar.workspaces')[0]!.component).toBe(WorkspaceBrowser)
+    expect(before.slots.entries('sidebar.section')[0]!.component).toBe(WorkspaceBrowser)
     // Copy rides the standard locale seat: the entry declares the namespace
     // and apply registered both dictionaries.
-    expect(before.slots.entries('sidebar.workspaces')[0]!.locale).toBe('workspace')
+    expect(before.slots.entries('sidebar.section')[0]!.locale).toBe('workspace')
     expect(before.locale.bind('workspace')('session.new')).toBe('新会话')
 
     const after = await bench()
@@ -79,10 +81,10 @@ describe('ui-workspace apply', () => {
 
   it('routes browser actions and picker creation to the services', async () => {
     const b = await bench()
-    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace')
+    declare(b.slots, 'sidebar.section', 'conversation.hero.workspace')
     await b.ctx.plugin({ inject: [...inject], apply }).await()
 
-    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
+    const browser = (b.slots.entries('sidebar.section')[0]!.inject as () => WorkspaceBrowserInjected)()
     // Both arms delegate to the runtime's shared New Session action.
     browser.startSession('ws' as never)
     expect(b.startSession).toHaveBeenCalledWith('ws')
@@ -119,13 +121,13 @@ describe('ui-workspace apply', () => {
 
   it('declares the two directory-flow holes and reports their occupancy per surface', async () => {
     const b = await bench()
-    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace')
+    declare(b.slots, 'sidebar.section', 'conversation.hero.workspace')
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     // Registration declared the child holes (declaration = render authorization).
-    expect(b.slots.spec('sidebar.workspaces.directoryFlow')).toMatchObject({ kind: 'single' })
+    expect(b.slots.spec('sidebar.section.directoryFlow')).toMatchObject({ kind: 'single' })
     expect(b.slots.spec('conversation.hero.workspace.directoryFlow')).toMatchObject({ kind: 'single' })
 
-    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
+    const browser = (b.slots.entries('sidebar.section')[0]!.inject as () => WorkspaceBrowserInjected)()
     const picker = (b.slots.entries('conversation.hero.workspace')[0]!.inject as () => WorkspacePickerInjected)()
     expect(browser.hooks.directoryFlow.getSnapshot()).toBe(false)
     expect(browser.hooks.hostDescription.getSnapshot()).toBeUndefined()
@@ -133,7 +135,7 @@ describe('ui-workspace apply', () => {
     // A flow occupant flips exactly its own surface, and the source notifies.
     const notified = vi.fn()
     const unsubscribe = browser.hooks.directoryFlow.subscribe(notified)
-    const dispose = b.slots.register({ name: 'sidebar.workspaces.directoryFlow' } as never, () => null)
+    const dispose = b.slots.register({ name: 'sidebar.section.directoryFlow' } as never, () => null)
     expect(browser.hooks.directoryFlow.getSnapshot()).toBe(true)
     expect(picker.hooks.directoryFlow.getSnapshot()).toBe(false)
     await Promise.resolve()
@@ -149,20 +151,20 @@ describe('ui-workspace apply', () => {
       ok: false,
       error: { code: 'internal', message: 'index unavailable', details: {} },
     }) as never)
-    declare(b.slots, 'sidebar.workspaces')
+    declare(b.slots, 'sidebar.section')
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    const browser = (b.slots.entries('sidebar.workspaces')[0]!.inject as () => WorkspaceBrowserInjected)()
+    const browser = (b.slots.entries('sidebar.section')[0]!.inject as () => WorkspaceBrowserInjected)()
     await expect(browser.searchSessions('needle', new AbortController().signal))
       .rejects.toThrow('index unavailable')
   })
 
   it('unregisters every entry on teardown', async () => {
     const b = await bench()
-    declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace')
+    declare(b.slots, 'sidebar.section', 'conversation.hero.workspace', 'conversation.empty.workspace')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     await fiber.dispose()
-    expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
+    expect(b.slots.entries('sidebar.section')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)
     // expect(b.slots.entries('conversation.empty.workspace')).toHaveLength(0)
   })

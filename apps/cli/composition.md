@@ -40,8 +40,6 @@ flowchart LR
   cfg --> plugin_dsh_base_settings
   plugin_dsh_base_credentials["credentials<br/>@deepseek-ai/dsh-credentials-local"]
   cfg --> plugin_dsh_base_credentials
-  plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@deepseek-ai/dsh-llm-pi-ai"]
-  cfg --> plugin_dsh_base_llm_pi_ai
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@deepseek-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_attachment_local["attachment-local<br/>@deepseek-ai/dsh-attachment-local"]
@@ -158,6 +156,10 @@ flowchart LR
   cfg --> plugin_dsh_base_web_search_searxng
   plugin_dsh_base_browser["browser<br/>@deepseek-ai/dsh-browser"]
   cfg --> plugin_dsh_base_browser
+  plugin_dsh_base_browser_moli["browser-moli<br/>@deepseek-ai/dsh-browser-moli"]
+  cfg --> plugin_dsh_base_browser_moli
+  plugin_dsh_base_web_fetch_moli["web-fetch-moli<br/>@deepseek-ai/dsh-web-fetch-moli"]
+  cfg --> plugin_dsh_base_web_fetch_moli
   plugin_dsh_base_tools["tools<br/>@deepseek-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
   plugin_dsh_base_system_prompt["system-prompt<br/>@deepseek-ai/dsh-system-prompt"]
@@ -166,8 +168,8 @@ flowchart LR
   cfg --> plugin_dsh_base_agent_loop
   plugin_dsh_base_fs_sandbox["fs-sandbox<br/>@deepseek-ai/dsh-fs-sandbox"]
   cfg --> plugin_dsh_base_fs_sandbox
-  plugin_dsh_base_llm_deepseek["llm-deepseek<br/>@deepseek-ai/dsh-llm-deepseek"]
-  cfg --> plugin_dsh_base_llm_deepseek
+  plugin_dsh_base_llm_ai_sdk["llm-ai-sdk<br/>@deepseek-ai/dsh-llm-ai-sdk"]
+  cfg --> plugin_dsh_base_llm_ai_sdk
 ```
 
 | Plugin id | Package / module |
@@ -188,7 +190,6 @@ flowchart LR
 | `llm-retry` | `@deepseek-ai/dsh-llm-retry` |
 | `settings` | `@deepseek-ai/dsh-settings-file` |
 | `credentials` | `@deepseek-ai/dsh-credentials-local` |
-| `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` |
@@ -247,11 +248,13 @@ flowchart LR
 | `tool-web` | `@deepseek-ai/dsh-tool-web` |
 | `web-search-searxng` | `@deepseek-ai/dsh-web-search-searxng` |
 | `browser` | `@deepseek-ai/dsh-browser` |
+| `browser-moli` | `@deepseek-ai/dsh-browser-moli` |
+| `web-fetch-moli` | `@deepseek-ai/dsh-web-fetch-moli` |
 | `tools` | `@deepseek-ai/dsh-tools` |
 | `system-prompt` | `@deepseek-ai/dsh-system-prompt` |
 | `agent-loop` | `@deepseek-ai/dsh-agent-loop` |
 | `fs-sandbox` | `@deepseek-ai/dsh-fs-sandbox` |
-| `llm-deepseek` | `@deepseek-ai/dsh-llm-deepseek` |
+| `llm-ai-sdk` | `@deepseek-ai/dsh-llm-ai-sdk` |
 
 Source config: [`packages/bundle/base/cordis.patch.yml`](../../packages/bundle/base/cordis.patch.yml).
 

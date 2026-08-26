@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-26-web-browser-handoff-without-npm-open.md
+2026-08-26-web-browser-handoff-without-npm-open.md: e9e214cef277241a946f45248fcca83a1b2d61f2
+2026-08-26-web-browser-handoff-without-npm-open.zh.md: 01ffcb83d9773acc8b5887d11ddda3d7787b0033

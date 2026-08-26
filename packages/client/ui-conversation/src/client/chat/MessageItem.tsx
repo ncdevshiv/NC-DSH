@@ -107,6 +107,24 @@ function ModelRetryItem({ node, active, t }: {
           <span className={css.retryDetailLabel}>{t('message.retry.failure')}</span>
           {node.failure.message}
         </div>
+        {node.failure.status !== undefined && (
+          <div>
+            <span className={css.retryDetailLabel}>{t('message.retry.httpStatus')}</span>
+            {node.failure.status}
+          </div>
+        )}
+        {node.failure.providerType !== undefined && (
+          <div>
+            <span className={css.retryDetailLabel}>{t('message.retry.providerType')}</span>
+            {node.failure.providerType}
+          </div>
+        )}
+        {node.failure.requestId !== undefined && (
+          <div>
+            <span className={css.retryDetailLabel}>{t('message.retry.requestId')}</span>
+            {node.failure.requestId}
+          </div>
+        )}
       </div>
     </details>
   )

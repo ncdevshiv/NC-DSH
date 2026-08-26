@@ -720,7 +720,7 @@ describe('config unary surface', () => {
     const seen: { method: string; payload: unknown }[] = []
     const record = recorderInto(seen)
     const view = {
-      ns: 'llm-deepseek',
+      ns: 'llm-ai-sdk',
       schema: { uid: 1, refs: { 1: { type: 'object' } } },
       value: { baseURL: 'https://next' },
       user: { baseURL: 'https://next' },
@@ -731,7 +731,7 @@ describe('config unary surface', () => {
     const providerRow = {
       provider: 'openai',
       displayName: 'openai',
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       settingsPath: ['providers', 'openai'],
       active: false,
     }
@@ -760,12 +760,12 @@ describe('config unary surface', () => {
     const described = await c.settings.describe({})
     expect(described.result).toEqual({ ok: true, value: { writable: true, hasDocument: false, namespaces: [view] } })
     expect((await c.settings.openDocument({})).result).toEqual({ ok: true, value: { opened: true } })
-    const updated = await c.settings.update({ ns: 'llm-deepseek', patch: { baseURL: 'https://next' } })
+    const updated = await c.settings.update({ ns: 'llm-ai-sdk', patch: { baseURL: 'https://next' } })
     expect(updated.result).toEqual({ ok: true, value: view })
-    const replaced = await c.settings.replace({ ns: 'llm-deepseek', section: {} })
+    const replaced = await c.settings.replace({ ns: 'llm-ai-sdk', section: {} })
     expect(replaced.result).toEqual({ ok: true, value: view })
     const mutated = await c.settings.mutate({
-      ns: 'llm-deepseek',
+      ns: 'llm-ai-sdk',
       ops: [{ op: 'unset', path: ['baseURL'] }],
       expectedRevision: 0,
     })
@@ -779,7 +779,7 @@ describe('config unary surface', () => {
     const models = await c.llm.models({})
     expect(models.result).toEqual({ ok: true, value: { groups: [group], failures: [] } })
     const discovered = await c.llm.discoverModels({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       baseURL: 'https://gateway.acme.example/v1',
       api: 'openai-completions',
       apiKey: 'probe-key',
@@ -791,14 +791,14 @@ describe('config unary surface', () => {
       'credentials.describe', 'credentials.set', 'credentials.unset',
       'llm.providers', 'llm.models', 'llm.discoverModels',
     ])
-    expect(seen[2]?.payload).toEqual({ ns: 'llm-deepseek', patch: { baseURL: 'https://next' } })
+    expect(seen[2]?.payload).toEqual({ ns: 'llm-ai-sdk', patch: { baseURL: 'https://next' } })
     expect(seen[4]?.payload)
-      .toEqual({ ns: 'llm-deepseek', ops: [{ op: 'unset', path: ['baseURL'] }], expectedRevision: 0 })
+      .toEqual({ ns: 'llm-ai-sdk', ops: [{ op: 'unset', path: ['baseURL'] }], expectedRevision: 0 })
     expect(seen[6]?.payload).toEqual({ ref: 'OPENAI_API_KEY', value: 'sk-x' })
     // The draft crosses whole, credential included: the host needs it for this
     // one interrogation and stores none of it.
     expect(seen[10]?.payload).toEqual({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       baseURL: 'https://gateway.acme.example/v1',
       api: 'openai-completions',
       apiKey: 'probe-key',

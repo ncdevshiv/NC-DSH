@@ -31,8 +31,8 @@ const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.m
 // A minimal opt-in leaf that loads this app + the two backends and the optional
 // session-query consumer/policies, inlined so the package test owns its fixture.
 const CORDIS_YML = `
-- id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
+- id: llm-ai-sdk
+  name: '@deepseek-ai/dsh-llm-ai-sdk'
 - id: subprocess
   name: '@deepseek-ai/dsh-subprocess-local'
 - id: bash

@@ -6,9 +6,9 @@
   "ignoreBinaries": [
     "bwrap",
     "icacls",
-    "musl-gcc",
     "sandbox-exec",
-    "where.exe"
+    "where.exe",
+    "uv"
   ],
   "ignoreWorkspaces": [
     "vendor/*",
@@ -444,26 +444,6 @@
         "tests/**/*.ts"
       ]
     },
-    "packages/llm/llm-deepseek": {
-      "entry": [
-        "tests/**/*.spec.ts",
-        "tests/**/*.e2e.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "tests/**/*.ts"
-      ]
-    },
-    "packages/llm/llm-pi-ai": {
-      "entry": [
-        "tests/**/*.spec.ts",
-        "tests/**/*.e2e.ts"
-      ],
-      "project": [
-        "src/**/*.ts",
-        "tests/**/*.ts"
-      ]
-    },
     "packages/session/session-title-first-prompt-llm": {
       "entry": [
         "tests/**/*.spec.ts",
@@ -535,8 +515,7 @@
     },
     "packages/browser/browser": {
       "entry": [
-        "tests/**/*.spec.ts",
-        "tests/**/*.e2e.ts"
+        "tests/**/*.spec.ts"
       ],
       "project": [
         "src/**/*.ts",
@@ -545,8 +524,7 @@
     },
     "packages/browser/browser-moli": {
       "entry": [
-        "tests/**/*.spec.ts",
-        "tests/**/*.e2e.ts"
+        "tests/**/*.spec.ts"
       ],
       "project": [
         "src/**/*.ts",
@@ -555,8 +533,7 @@
     },
     "packages/browser/tool-browser": {
       "entry": [
-        "tests/**/*.spec.ts",
-        "tests/**/*.e2e.ts"
+        "tests/**/*.spec.ts"
       ],
       "project": [
         "src/**/*.ts",
@@ -575,8 +552,7 @@
     },
     "packages/web/web-fetch-moli": {
       "entry": [
-        "tests/**/*.spec.ts",
-        "tests/**/*.e2e.ts"
+        "tests/**/*.spec.ts"
       ],
       "project": [
         "src/**/*.ts",
@@ -822,6 +798,48 @@
     "packages/bundle/web-app": {
       "ignoreDependencies": [
         "@deepseek-ai/.+"
+      ]
+    },
+    "apps/desktop": {
+      "ignore": [
+        "preload.cjs"
+      ]
+    },
+    "packages/llm/llm-ai-sdk": {
+      "entry": [
+        "tests/**/*.spec.ts",
+        "tests/**/*.e2e.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts"
+      ]
+    },
+    "packages/client/ui-home-section": {
+      "entry": [
+        "tests/*.client.spec.tsx"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.tsx"
+      ]
+    },
+    "packages/client/ui-team-section": {
+      "entry": [
+        "tests/*.client.spec.tsx"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.tsx"
+      ]
+    },
+    "packages/client/ui-work-section": {
+      "entry": [
+        "tests/*.client.spec.tsx"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.tsx"
       ]
     }
   }

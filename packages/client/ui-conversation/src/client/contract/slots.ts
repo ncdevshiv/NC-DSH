@@ -789,7 +789,10 @@ export type DetailsSlotProps = PropsRuntime<'details'> & PropsRenderSlots<'conve
 /** Owner share common to the hero / New-Session Workspace pickers. */
 export interface EmptyWorkspaceOwnerProps {
   open: boolean
-  anchorRef?: RefObject<HTMLElement>
+  // React 19 widens useRef<T>(null) to RefObject<T | null>; the occupant
+  // (ui-workspace) already accepts that exact shape. The owner can omit the
+  // anchor entirely when no surface needs the picker parked against it.
+  anchorRef?: RefObject<HTMLElement | null>
   /** Currently active workspace (renders a trailing check in the picker list). */
   selectedId?: WorkspaceId | undefined
   onPick: (workspaceId: WorkspaceId) => void

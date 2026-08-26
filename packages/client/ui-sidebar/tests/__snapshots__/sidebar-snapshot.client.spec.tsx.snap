@@ -47,6 +47,66 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
         />
       </button>
     </div>
+    <div
+      class="sectionRail"
+    >
+      <button
+        aria-label="Home"
+        class="iconButton sectionRailTab"
+        type="button"
+      >
+        <svg
+          data-content="de4e7ff8"
+          fill="none"
+          height="18"
+          viewBox="0 0 16 16"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+      </button>
+      <button
+        aria-label="Code"
+        class="iconButton sectionRailTab sectionRailActive"
+        type="button"
+      >
+        <svg
+          data-content="ae283ba4"
+          fill="none"
+          height="18"
+          viewBox="0 0 16 16"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+      </button>
+      <button
+        aria-label="Work"
+        class="iconButton sectionRailTab"
+        type="button"
+      >
+        <svg
+          data-content="d7e1059e"
+          fill="none"
+          height="18"
+          viewBox="0 0 16 16"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+      </button>
+      <button
+        aria-label="Team"
+        class="iconButton sectionRailTab"
+        type="button"
+      >
+        <svg
+          data-content="7884c999"
+          fill="none"
+          height="18"
+          viewBox="0 0 16 16"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+      </button>
+    </div>
     <button
       aria-label="New session"
       class="newSession"
@@ -65,9 +125,40 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
       class="regionArea"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
-      />
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        class="sectionPane sectionPaneActive"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
     </div>
     <div
       class="footArea"
@@ -169,6 +260,91 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         />
       </button>
     </div>
+    <div
+      class="sectionTabs"
+      role="tablist"
+    >
+      <button
+        aria-selected="false"
+        class="sectionTab"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="de4e7ff8"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          Home
+        </span>
+      </button>
+      <button
+        aria-selected="true"
+        class="sectionTab sectionTabActive"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="ae283ba4"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          Code
+        </span>
+      </button>
+      <button
+        aria-selected="false"
+        class="sectionTab"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="d7e1059e"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          Work
+        </span>
+      </button>
+      <button
+        aria-selected="false"
+        class="sectionTab"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="7884c999"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          Team
+        </span>
+      </button>
+    </div>
     <button
       aria-label="New session"
       class="newSession"
@@ -192,9 +368,40 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
       class="regionArea"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
-      />
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        class="sectionPane sectionPaneActive"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
     </div>
     <div
       class="footArea"
@@ -296,6 +503,91 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
         />
       </button>
     </div>
+    <div
+      class="sectionTabs"
+      role="tablist"
+    >
+      <button
+        aria-selected="false"
+        class="sectionTab"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="de4e7ff8"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          首页
+        </span>
+      </button>
+      <button
+        aria-selected="true"
+        class="sectionTab sectionTabActive"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="ae283ba4"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          代码
+        </span>
+      </button>
+      <button
+        aria-selected="false"
+        class="sectionTab"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="d7e1059e"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          工作
+        </span>
+      </button>
+      <button
+        aria-selected="false"
+        class="sectionTab"
+        role="tab"
+        type="button"
+      >
+        <svg
+          data-content="7884c999"
+          fill="none"
+          height="14"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="sectionTabLabel"
+        >
+          团队
+        </span>
+      </button>
+    </div>
     <button
       aria-label="新建会话"
       class="newSession"
@@ -319,9 +611,40 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
       class="regionArea"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
-      />
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        class="sectionPane sectionPaneActive"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        class="sectionPane sectionPaneHidden"
+      >
+        <div
+          data-slot="sidebar.section"
+          style="display: contents;"
+        />
+      </div>
     </div>
     <div
       class="footArea"

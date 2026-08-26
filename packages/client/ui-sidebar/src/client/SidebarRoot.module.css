@@ -60,14 +60,14 @@
   from { opacity: 0; }
 }
 
-/* At the 150ms rail settle, the four upper controls enter from the former
-   rail right edge over the remaining 150ms of the AppFrame track transition.
-   The bottom-pinned settings seat shares their opacity timeline but stays
+/* At the 150ms rail settle, the upper controls enter from the former rail
+   right edge over the remaining 150ms of the AppFrame track transition. The
+   bottom-pinned settings seat shares their opacity timeline but stays
    horizontally fixed. Only a live collapse gets .railIn; a cold collapsed
    render stays static. */
 .railIn .iconButton,
 .railIn .newSession,
-.railIn .regionArea {
+.railIn .sectionRail {
   animation: rail-in 150ms var(--ds-ease-in-out) backwards;
 }
 
@@ -84,6 +84,124 @@
 
 @keyframes rail-fade-in {
   from { opacity: 0; }
+}
+
+/* ── Section switcher ───────────────────────────────────────────────────────
+   Wide: a pill tab strip (figma sidebar pattern) between the brand row and
+   New Session. Rail: the same four sections as 36px icon controls riding the
+   shared rail entry path; the active section's icon carries the pill fill. */
+
+.sectionTabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  margin: 0 2px 8px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.sectionTab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sectionTab:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sectionTabActive,
+.sectionTabActive:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+.sectionTabLabel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sectionRail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 12px;
+}
+
+.sectionRailTab {
+  border-radius: 8px;
+}
+
+.sectionRailTab.sectionRailActive {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-button-ghost-active-fill);
+}
+
+/* ── Section panes ──────────────────────────────────────────────────────────
+   All four panes stay mounted (state preservation across visits and across a
+   collapse, the layout columns' display-toggle pattern); exactly one is
+   active. A switch animates the incoming pane only: a directional slide +
+   fade whose retrigger alternates two identical keyframe names (restarting a
+   same-name animation is a no-op) and whose direction rides the
+   --section-slide-from custom property set by the component. */
+
+.sectionPane {
+  display: none;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sectionPaneActive {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.sectionPaneHidden {
+  /* Keep hidden panes out of the tab order as well as off the layout. */
+  visibility: hidden;
+}
+
+.sectionPaneEnterA {
+  animation: section-in-a 200ms var(--ds-ease-in-out);
+}
+
+.sectionPaneEnterB {
+  animation: section-in-b 200ms var(--ds-ease-in-out);
+}
+
+@keyframes section-in-a {
+  from {
+    opacity: 0;
+    transform: translateX(var(--section-slide-from, 16px));
+  }
+}
+
+@keyframes section-in-b {
+  from {
+    opacity: 0;
+    transform: translateX(var(--section-slide-from, 16px));
+  }
 }
 
 /* Logo row: the sidebar's segment of the window title bar (figma pad
@@ -280,9 +398,11 @@
   max-width: 0;
 }
 
-/* Region seat: always mounted so the foot never moves. Its trailing margin
-   cancels the wide shell inset so the nested scrollbar can sit at the sidebar
-   edge; the browser restores that inset inside its own rows. */
+/* Region seat: always mounted so the foot never moves (and the section panes
+   keep their state through a collapse). Its trailing margin cancels the wide
+   shell inset so the nested scrollbar can sit at the sidebar edge; sections
+   restore that inset inside their own rows. Collapsed, the seat leaves the
+   layout entirely — the rail shows the switcher icons instead. */
 .regionArea {
   flex: 1;
   min-height: 0;
@@ -295,9 +415,7 @@
 }
 
 .collapsed .regionArea {
-  margin-left: 0;
-  margin-right: 0;
-  padding-left: 0;
+  display: none;
 }
 
 /* Footer seats: additive actions stack above Settings. Each occupant owns its
@@ -336,7 +454,9 @@
   .railIn .iconButton,
   .railIn .newSession,
   .railIn .footArea,
-  .railIn .regionArea {
+  .railIn .sectionRail,
+  .sectionPaneEnterA,
+  .sectionPaneEnterB {
     transition: none;
     animation: none;
   }

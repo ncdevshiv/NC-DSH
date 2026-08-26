@@ -4,8 +4,8 @@
   config:
     path: ./cordis.yml
     patches:
-      - id: llm-deepseek
-        name: '@deepseek-ai/dsh-llm-deepseek'
+      - id: llm-ai-sdk
+        name: '@deepseek-ai/dsh-llm-ai-sdk'
         disabled: true
       - insert:
           - id: retry-snapshot-backend

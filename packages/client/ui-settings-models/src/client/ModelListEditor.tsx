@@ -137,7 +137,7 @@ type CapacityField = 'contextWindow' | 'maxTokens'
  * What an empty capacity field is worth, shown as its placeholder so a row left
  * blank does not read as a model with no capacity at all.
  *
- * The magnitudes are the adapter's own route-level fallbacks (`llm-pi-ai`'s
+ * The magnitudes are the adapter's own route-level fallbacks (`llm-ai-sdk`'s
  * `defaultContextWindow` and `defaultMaxTokens`), spelled the way a person
  * would say them. They are a hint, not a mirror: this page counts `K` as 1000,
  * so typing `256K` stores 256000 while leaving the field blank keeps the
@@ -355,7 +355,13 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               type="button"
               className={styles['linkButton']}
               disabled={disabled}
-              onClick={props.onReset}
+              onClick={() => {
+                // Reset discards the rows the buffers annotate: keeping them
+                // would render restored rows with text no settings layer stores.
+                setEditing(new Map())
+                setExpanded(new Set())
+                props.onReset?.()
+              }}
             >
               {t('resetModels')}
             </button>

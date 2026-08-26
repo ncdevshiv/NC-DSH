@@ -34,7 +34,7 @@ import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
 /** The settings namespace a hand-declared provider is written into. */
-const NS = 'llm-pi-ai'
+const NS = 'llm-ai-sdk'
 
 /**
  * A route id usable as a settings key AND as the stem of a credential name.
@@ -53,7 +53,7 @@ export interface CustomProviderCardProps {
   /** Wire protocols the adapter can serve, in the order it reports them. */
   protocols: readonly string[]
   /**
-   * Revision of the `llm-pi-ai` user section this card opened at, sent with
+   * Revision of the `llm-ai-sdk` user section this card opened at, sent with
    * the create so a route another tab declared meanwhile is a refusal rather
    * than a silent overwrite of its whole profile.
    */

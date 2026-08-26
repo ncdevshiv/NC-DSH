@@ -1,8 +1,8 @@
 /**
  * Workspace plugin, browser half. Two registrations: WorkspaceBrowser fills
- * the sidebar shell's `sidebar.workspaces` hole (the whole browsing region),
- * and WorkspacePicker fills the conversation hero's picker hole
- * (`conversation.hero.workspace` — both hero forms). Both read real Host
+ * the sidebar shell's `sidebar.section` hole under the `code` key (the whole
+ * browsing region), and WorkspacePicker fills the conversation hero's picker
+ * hole (`conversation.hero.workspace` — both hero forms). Both read real Host
  * Workspaces through the global useWorkspaces hook, and each declares its
  * own `single` directory-flow child hole for the composed picker package's
  * client half (see the contract module doc). Export discipline:
@@ -64,11 +64,11 @@ export function apply(ctx: ClientContext): void {
 
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
   // source identity): true while the surface's directory-flow hole is filled.
-  const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
+  const flowSource = (hole: 'sidebar.section.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
     getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
-  const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
+  const browserFlowSource = flowSource('sidebar.section.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
@@ -110,10 +110,11 @@ export function apply(ctx: ClientContext): void {
   })
   // Each registration declares its directory-flow child in the same call;
   // slot injection follows both the owner and declaration HMR lifetimes.
-  ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
+  ctx.slots.inject('sidebar.section', () => ctx.slots.register(
     {
-      name: 'sidebar.workspaces',
-      children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
+      name: 'sidebar.section',
+      key: 'code',
+      children: { 'sidebar.section.directoryFlow': { kind: 'single', scope: 'root' } },
       store: createWorkspaceViewStore(),
       inject: browserInjected,
       locale: NS,

@@ -7,7 +7,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-ai-sdk'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import WorkerThreadWorkflowEngine from '../src/index.ts'

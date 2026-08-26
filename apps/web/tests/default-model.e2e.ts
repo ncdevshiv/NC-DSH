@@ -63,7 +63,7 @@ describe('web e2e: the composer model switch is the default for later sessions',
     // Declared through the settings seam rather than the Models page: this
     // scenario is about the composer, and the declaring flow is covered by
     // models-settings.e2e.
-    await scaffold.ctx.settings.update(settingsNamespace('llm-pi-ai'), {
+    await scaffold.ctx.settings.update(settingsNamespace('llm-ai-sdk'), {
       providers: {
         [START_ROUTE]: {
           displayName: 'Origin Gateway',
@@ -137,7 +137,7 @@ describe('web e2e: the composer model switch is the default for later sessions',
     // default still names the route, and nothing serves it any more.
     // `replace`, not `update`: a merge patch of `{providers: {}}` leaves every
     // stored profile in place.
-    await scaffold.ctx.settings.replace(settingsNamespace('llm-pi-ai'), { providers: {} })
+    await scaffold.ctx.settings.replace(settingsNamespace('llm-ai-sdk'), { providers: {} })
 
     await expect.poll(async () => box.isEnabled(), { timeout: 15_000 }).toBe(false)
     expect(await box.getAttribute('placeholder')).toBe('当前模型不可用，请先选择模型')

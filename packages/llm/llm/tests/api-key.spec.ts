@@ -40,28 +40,28 @@ describe('normalizeApiKey', () => {
 
 describe('assertUsableApiKey', () => {
   it('returns the trimmed key when it is usable', () => {
-    expect(assertUsableApiKey('  sk-abc  ', 'llm-deepseek', 'DEEPSEEK_API_KEY')).toBe('sk-abc')
+    expect(assertUsableApiKey('  sk-abc  ', 'llm-ai-sdk', 'DEEPSEEK_API_KEY')).toBe('sk-abc')
   })
 
   it('refuses a blank stored credential, naming the reference', () => {
-    expect(() => assertUsableApiKey('   ', 'llm-deepseek', 'DEEPSEEK_API_KEY'))
-      .toThrow(/llm-deepseek: the API key resolved from DEEPSEEK_API_KEY is blank/)
+    expect(() => assertUsableApiKey('   ', 'llm-ai-sdk', 'DEEPSEEK_API_KEY'))
+      .toThrow(/llm-ai-sdk: the API key resolved from DEEPSEEK_API_KEY is blank/)
   })
 
   it('refuses an unusable stored credential with the invalid-credential code', () => {
     try {
-      assertUsableApiKey('sk-\u{1F600}', 'llm-pi-ai', 'ACME_API_KEY')
+      assertUsableApiKey('sk-\u{1F600}', 'llm-ai-sdk', 'ACME_API_KEY')
       expect.fail('an illegal key must throw')
     } catch (error) {
       expect((error as { code: string }).code).toBe(INVALID_CREDENTIAL_CODE)
-      expect((error as Error).message).toContain('llm-pi-ai')
+      expect((error as Error).message).toContain('llm-ai-sdk')
       expect((error as Error).message).toContain('ACME_API_KEY')
     }
   })
 
   it('never echoes the key it refuses', () => {
     try {
-      assertUsableApiKey('sk-\u{1F600}supersecret', 'llm-deepseek', 'DEEPSEEK_API_KEY')
+      assertUsableApiKey('sk-\u{1F600}supersecret', 'llm-ai-sdk', 'DEEPSEEK_API_KEY')
       expect.fail('an illegal key must throw')
     } catch (error) {
       expect((error as Error).message).not.toContain('supersecret')

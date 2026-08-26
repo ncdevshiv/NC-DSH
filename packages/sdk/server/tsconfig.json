@@ -18,7 +18,7 @@
       "path": "../../llm/llm"
     },
     {
-      "path": "../../llm/llm-deepseek"
+      "path": "../../llm/llm-ai-sdk"
     },
     {
       "path": "../../core/agent"

@@ -203,12 +203,12 @@ const EXACT_EDITS: readonly ExactEdit[] = [
         "@deepseek-ai/.+"
       ]
     },
-    "packages/util/home": {`,
+    "packages/host/webserver": {`,
     replace: `      "ignoreDependencies": [
         "@deepseek-ai/.+"
       ]
     },
-    "packages/util/home": {`,
+    "packages/host/webserver": {`,
     expect: 1,
   },
   {

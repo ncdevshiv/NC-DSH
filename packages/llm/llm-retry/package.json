@@ -56,7 +56,7 @@
     "@deepseek-ai/dsh-agent-loop-testkit": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-llm-deepseek": "workspace:^",
+    "@deepseek-ai/dsh-llm-ai-sdk": "workspace:^",
     "@deepseek-ai/dsh-llm-mock-server": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:^",

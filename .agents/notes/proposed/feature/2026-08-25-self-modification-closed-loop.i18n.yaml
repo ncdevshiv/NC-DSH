@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/proposed/feature/2026-08-25-self-modification-closed-loop.md
+2026-08-25-self-modification-closed-loop.md: edc0d9a8c2a18151e2f1bd2370826ee03fa19c7c
+2026-08-25-self-modification-closed-loop.zh.md: dc8a25f6d59c9b8f2a988601fedadbd2db7b0faa

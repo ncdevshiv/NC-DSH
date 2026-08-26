@@ -4,6 +4,8 @@ Status: implemented
 
 [English](2026-07-14-provider-routed-llm-adapters.md) | 中文
 
+> 部分被[基于 ai-sidecar 子进程的单一 LLM 适配器](2026-08-25-single-llm-adapter-via-ai-sdk.md)取代：按提供方路由仍然存在，按路由协议 profile 不再。
+
 ## 问题
 
 `dsh-llm` 按精确模型名称注册适配器。插件在 Cordis 启动时提供模型列表，`LlmRuntime` 为列表中的每个字符串保存一个适配器，`GenerateOptions.model` 同时选择适配器与提供方模型。两个随附的适配器都只面向相同的两个 DeepSeek 模型时，这种方式可以工作，但它混淆了两个独立决策：由哪个上游提供方承接请求，以及该提供方应运行哪个模型。

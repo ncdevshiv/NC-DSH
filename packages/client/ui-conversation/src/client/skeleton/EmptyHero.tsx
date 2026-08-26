@@ -41,7 +41,11 @@ export function workspaceLabel(cwd: string): string {
  * @returns the chip button element.
  */
 export function WorkspaceChip({ buttonRef, label, menuOpen = false, onClick, icon, t }: {
-  buttonRef?: RefObject<HTMLButtonElement>
+  // React 19's useRef<T>(null) returns RefObject<T | null>; the consumer
+  // passes that exact shape. The `buttonRef` is forwarded to the underlying
+  // <button>, so a callback-ref shape also remains valid (React normalizes
+  // both into the same element API).
+  buttonRef?: RefObject<HTMLButtonElement | null>
   label?: string | undefined
   menuOpen?: boolean
   onClick?: () => void

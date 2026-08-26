@@ -17,8 +17,8 @@
 # credential seam and, with no provider mounted here, from the launching
 # environment; DEEPSEEK_BASE_URL follows the same environment ladder. Neither
 # is inlined, so this file names no secret and no route.
-- id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
+- id: llm-ai-sdk
+  name: '@deepseek-ai/dsh-llm-ai-sdk'
 
 # JSONL persistence; $DSH_SESSION_ROOT wins over ./.sessions in the process cwd.
 - id: sessions

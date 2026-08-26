@@ -1,8 +1,10 @@
-# Agent Note: 询问草稿中的提供方端点
+# Agent Note: 探询草稿提供方端点
 
 Status: implemented
 
 [English](2026-08-04-draft-provider-endpoint-interrogation.md) | 中文
+
+> 原地取代说明：该机制现居于单一适配器之上——`ctx.llm.registerModelDiscovery('llm-ai-sdk', …)`，由 sidecar 的 `model.discover` 支撑（[模型发现与路由协议](../feature/2026-08-26-model-discovery-and-route-dialects.md)）。下述决策、备选方案与「采纳而非代写」契约不变；本文最初描述的 pi-ai 实现已删除。
 
 ## Problem
 
@@ -21,7 +23,7 @@ Status: implemented
 - `LlmDiscoveredModel` 除 `id` 外每个字段都可选，因为大多数列表只公布 id。回复是候选而非 catalog：采纳其中一条的界面仍要补上适配器所需的容量。
 - `llm.discoverModels` 把同一份草稿送过协议层。它的 `apiKey` 是可承载机密的第三个、也是最后一个载荷（另两个是 `settings.update`/`mutate` 与 `credentials.set`），且绝不被存储或回显。它确实会像其他承载机密的载荷一样随客户端外发信封同行，`subscribeEnvelopes()` 观察者看得到；把那个抽头脱敏是整个配置面的改动，不该由这一个方法独自决定。除密钥之外，将它限制为仅可通过回环访问还有第二个理由：它让宿主向调用方选定的 URL 发起 GET 并回报结果，这是匿名 LAN 调用者不该拥有的探测能力。每一种拒绝都折叠为 `model-discovery-failed`，其消息是适配器自己的文本，details 点名被询问的端点，绝不点名所提供的凭据。
 
-`dsh-llm-pi-ai` 的实现只是一次朴素的 `GET {baseURL}/models`，且仅限 OpenAI 兼容协议。它们的列表形状是网关、自建服务与官方端点三方一致认可的那一种，而这正是该动作存在的场景。其余协议一律以 `DISCOVERY_UNSUPPORTED` 回答，让界面回退到手工填写，而不是把猜错的响应形状报成一个空提供方。`baseURL` 按前缀而非待解析 URL 处理，因此 `https://gateway.example/openai/v1` 这类部署路径会保留其路径段。回复在四兆字节上限下读取，且上限落在实际收到的字节上——端点是用户自己填的 URL，因此会先看声明的 `content-length` 作为善意提示，但绝不把它当作边界；这与 `dsh-web-fetch` 面对自己的调用方提供 URL 时所用的两段式形状一致。
+`dsh-llm-ai-sdk` 经 sidecar 的 `model.discover` 实现该线路：子进程为一次列表调用构建临时 provider，把草稿的显式 `api`（否则路由 profile，否则路由 id 表）映射到原生 Anthropic、Gemini 适配器或 OpenAI 兼容族。未知协议在任何网络调用之前即以类型化配置错误响亮失败——猜错的响应形状绝不会与没有模型的提供方混淆——无端点的 OpenAI 兼容探询同样被拒绝。路由的存量凭据由插件自己的按请求解析器解析，且仅在草稿未携带手输密钥时解析，因此 catalog 路由完全不触碰凭据与网络即可作答。
 
 ### 为什么不用 pi-ai 自己的 refresh 机制
 
@@ -47,4 +49,4 @@ pi-ai 提供了 `createProvider({ fetchModels })` 加上 `Models.refresh()` 与 
 
 ## Testing
 
-`packages/llm/llm/tests/topology.spec.ts` 覆盖注册表：每个 namespace 一份、随 fiber dispose（资源释放）、丢弃重复与不可用 id 且不凭空补容量的归一化，以及 `NO_DISCOVERY`/`INVALID_DISCOVERY` 两种拒绝。`packages/llm/llm-pi-ai/tests/discovery.spec.ts` 针对本地 HTTP 服务器驱动探测——含与不含公布容量的列表、被保留的部署路径、无凭据、草稿没带密钥时已配置路由自行取用凭据且键入的密钥压过它、catalog 路由完全不解析凭据即作答、被丢弃的行、401/403 与服务器故障之别、非列表与非 JSON 响应、不可达端点、调用方取消、不支持的协议，以及尺寸上限的「声明长度」与「流式」两种形态。`packages/host/apiproxy/tests/api-proxy-config.spec.ts` 在真实 proxy 上覆盖该 RPC：草稿完整抵达其 namespace、缺席字段保持缺席、没有 namespace 或凭据被写入，以及失败以 `model-discovery-failed` 呈现且序列化后的错误里不含凭据。
+`packages/llm/llm/tests/topology.spec.ts` 覆盖注册表：每个 namespace 一份、随 fiber dispose（资源释放）、丢弃重复与不可用 id 且不凭空补容量的归一化，以及 `NO_DISCOVERY`/`INVALID_DISCOVERY` 两种拒绝。`packages/llm/llm-ai-sdk/tests/adapter.spec.ts` 以脚本化 sidecar 驱动探测——端点回报的行、缺端点的契约拒绝、以及杀死失败世代子进程的生命周期——`tests/loader-composition.spec.ts` 在没有任何 sidecar 的情况下由参考 catalog 回答已知路由；`tests/adapter.e2e.ts` 以真实 release 二进制对一次活的 OpenAI 兼容列表完成发现。`packages/host/apiproxy/tests/api-proxy-config.spec.ts` 在真实 proxy 上覆盖该 RPC：草稿完整抵达其 namespace、缺席字段保持缺席、没有 namespace 或凭据被写入，以及失败以 `model-discovery-failed` 呈现且序列化后的错误里不含凭据。

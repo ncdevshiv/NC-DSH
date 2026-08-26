@@ -284,10 +284,10 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const addable = state.rows.filter(row => !row.configured && row.entry.settingsNs !== '')
   const addTarget = adding ? editing : undefined
   const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
-  // Hand-declared routes live in the pi-ai namespace, which is also the only
-  // one whose schema names the protocols one may speak; without it mounted
-  // there is nothing to declare and the entry point stays disabled.
-  const protocols = protocolChoices(state.namespaces.get('llm-pi-ai'), schema)
+  // Hand-declared routes live in the llm-ai-sdk namespace, whose schema names
+  // the wire dialects one may declare; without it mounted there is nothing to
+  // declare and the entry point stays disabled.
+  const protocols = protocolChoices(state.namespaces.get('llm-ai-sdk'), schema)
 
   return (
     <div className={styles['section']}>
@@ -329,6 +329,11 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
           const credentialMissing = !credentialConfigured
             && row.apiKeyEnv !== undefined
             && row.credential?.configured === false
+          // A customized composition-owned route cannot be deleted (the pin
+          // keeps the row), but the user layer's overrides can be cleared, so
+          // it still gets the Reset control.
+          const offersReset = target.settingsPath.length > 0 && !row.removable
+            && schema.hasPath(namespace.user, target.settingsPath)
           return (
             <li key={row.entry.provider} className={styles['rowCard']}>
               <div className={styles['rowHead']}>
@@ -377,7 +382,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   >
                     {t('edit')}
                   </button>
-                  {row.entry.settingsPath.length === 0 || row.removable
+                  {row.entry.settingsPath.length === 0 || row.removable || offersReset
                     ? (
                       <button
                         type="button"
@@ -444,6 +449,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                 namespace={addNamespace}
                 schema={schema}
                 settingsPath={addTarget.settingsPath}
+                {...addTarget.declared === true ? { declared: true } : {}}
                 api={api}
                 t={t}
                 readOnly={!state.writable}
@@ -458,7 +464,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   taken={state.rows.map(row => row.entry.provider)}
                   protocols={protocols}
                   /* v8 ignore next -- the card only opens from a button disabled without this namespace */
-                  revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0}
+                  revision={state.namespaces.get('llm-ai-sdk')?.revision ?? 0}
                   api={api}
                   t={t}
                   readOnly={!state.writable}

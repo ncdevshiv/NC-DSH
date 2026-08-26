@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
-  SidebarFooterActionOwnerProps, SidebarRootComponentProps, SidebarSectionOwnerProps,
-  SidebarSettingsOwnerProps,
+  SidebarFooterActionOwnerProps, SidebarRootComponentProps, SidebarSettingsOwnerProps,
 } from '../src/client/contract/slots.ts'
 import { SidebarRoot } from '../src/client/SidebarRoot.tsx'
 import { en } from '../src/client/locales.ts'
@@ -26,7 +25,6 @@ const neverHook = (() => { throw new Error('shell must not read global hooks') }
 function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; width?: number } = {}) {
   const startSession = vi.fn()
   const toggleSidebar = vi.fn()
-  let regionOwner: SidebarSectionOwnerProps | undefined
   let settingsOwner: SidebarSettingsOwnerProps | undefined
   let footerActionOwner: SidebarFooterActionOwnerProps | undefined
   const brandMark = <span data-testid="custom-brand-mark">M</span>
@@ -39,7 +37,8 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
       startSession={startSession} toggleSidebar={toggleSidebar} t={t}
       renderSlot={((
         key: string,
-        owner: SidebarFooterActionOwnerProps | SidebarSectionOwnerProps | SidebarSettingsOwnerProps,
+        owner: SidebarFooterActionOwnerProps | SidebarSettingsOwnerProps,
+        options?: { entryKey?: string },
       ) => {
         if (key === 'sidebar.brand.mark') return brandMark
         if (key === 'sidebar.brand.name') return brandName
@@ -51,8 +50,9 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
           footerActionOwner = owner
           return <div data-testid="footer-action-seat" data-wide={owner.wide} />
         }
-        regionOwner = owner as SidebarSectionOwnerProps
-        return <div data-testid="region" data-wide={owner.wide} />
+        // sidebar.section dispatches once per key; each stub node sits inside
+        // its pane wrapper, so tests read the wrapper's aria-hidden state.
+        return <div data-testid={`section-${options?.entryKey}`} />
       }) as SidebarRootComponentProps['renderSlot']}
     />
   )
@@ -60,10 +60,6 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
   return {
     startSession,
     toggleSidebar,
-    regionOwner: () => {
-      if (regionOwner === undefined) throw new Error('region owner not rendered')
-      return regionOwner
-    },
     settingsOwner: () => {
       if (settingsOwner === undefined) throw new Error('settings owner not rendered')
       return settingsOwner
@@ -76,7 +72,16 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
       current = { ...current, ...next }
       view.rerender(root())
     },
+    container: view.container,
   }
+}
+
+/** The pane wrapper around one section stub, for aria-hidden assertions. */
+function paneOf(testId: string): HTMLElement {
+  const node = screen.getByTestId(testId)
+  const pane = node.parentElement
+  if (pane === null) throw new Error(`pane wrapper missing for ${testId}`)
+  return pane
 }
 
 describe('SidebarRoot shell', () => {
@@ -131,38 +136,57 @@ describe('SidebarRoot shell', () => {
 
     expect(screen.getByText('DSH Local Build')).toBeTruthy()
     expect(screen.getByText('0123456')).toBeTruthy()
+    // The fish mark fallback renders in both the brand row and the toggle.
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
-  it('hands the region its wide flag and clamps expandSidebar to the collapsed state', () => {
+  it('boots on Code and switches the active pane through the tab strip', () => {
     const b = mountShell()
-    expect(b.regionOwner().wide).toBe(true)
-    // The settings seat rides the same wide flag (ui-settings renders the row).
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs.map(tab => tab.textContent)).toEqual(['Home', 'Code', 'Work', 'Team'])
+    // Boot state: Code is the active tab and the only revealed pane.
+    expect(tabs[1]!.getAttribute('aria-selected')).toBe('true')
+    expect(paneOf('section-code').getAttribute('aria-hidden')).toBeNull()
+    expect(paneOf('section-home').getAttribute('aria-hidden')).toBe('true')
+    // Switch forward: Work becomes active, Code hides.
+    fireEvent.click(screen.getByRole('tab', { name: 'Work' }))
+    expect(screen.getByRole('tab', { name: 'Work' }).getAttribute('aria-selected')).toBe('true')
+    expect(paneOf('section-work').getAttribute('aria-hidden')).toBeNull()
+    expect(paneOf('section-code').getAttribute('aria-hidden')).toBe('true')
+    // Switching to the active tab is a no-op.
+    fireEvent.click(screen.getByRole('tab', { name: 'Work' }))
+    expect(paneOf('section-work').getAttribute('aria-hidden')).toBeNull()
+    // The settings and footer seats still ride the wide flag.
     expect(b.settingsOwner().wide).toBe(true)
     expect(b.footerActionOwner().wide).toBe(true)
-    // Expanded: the request is a no-op (no accidental collapse).
-    b.regionOwner().expandSidebar()
-    expect(b.toggleSidebar).not.toHaveBeenCalled()
   })
 
-  it('keeps the region mounted through collapse and expands on its request', () => {
+  it('renders the section icon rail when collapsed and expands on a pick', () => {
     vi.useFakeTimers()
     const b = mountShell()
     b.rerender({ collapsed: true })
     // Wide content survives the crossfade window, then settles into the rail.
-    expect(b.regionOwner().wide).toBe(true)
     vi.advanceTimersByTime(200)
     b.rerender({})
-    expect(b.regionOwner().wide).toBe(false)
-    expect(b.footerActionOwner().wide).toBe(false)
-    expect(screen.getByTestId('region')).toBeTruthy()
-    b.regionOwner().expandSidebar()
+    // The tab strip is gone; the rail carries one icon button per section.
+    expect(screen.queryByRole('tab')).toBeNull()
+    for (const name of ['Home', 'Code', 'Work', 'Team']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy()
+    }
+    // The rail keeps Code marked active without rendering the section area.
+    expect(screen.getByRole('button', { name: 'Code' }).className).toContain('sectionRailActive')
+    // Picking a section selects it AND expands the column (the panes are
+    // hidden while collapsed, so selecting without expanding shows nothing).
+    fireEvent.click(screen.getByRole('button', { name: 'Team' }))
     expect(b.toggleSidebar).toHaveBeenCalledOnce()
+    b.rerender({ collapsed: false })
+    expect(screen.getByRole('tab', { name: 'Team' }).getAttribute('aria-selected')).toBe('true')
+    expect(paneOf('section-team').getAttribute('aria-hidden')).toBeNull()
   })
 
   it('renders statically collapsed on a cold start (no crossfade classes)', () => {
-    const b = mountShell({ collapsed: true })
-    expect(b.regionOwner().wide).toBe(false)
+    mountShell({ collapsed: true })
     expect(screen.getByRole('button', { name: 'Open sidebar' })).toBeTruthy()
+    expect(screen.queryByRole('tab')).toBeNull()
   })
 })

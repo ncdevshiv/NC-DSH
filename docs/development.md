@@ -130,7 +130,7 @@ The repository does not run a formatter in CI or in the lefthook chain. The curr
 
 Hold for **oxfmt stabilization**, then adopt it: it is the only option that doesn't introduce a second lint/format vendor alongside oxlint, and the cross-package cost of maintaining two style policies is the only argument that would justify a one-off large formatting commit.
 
-For Python, `ruff format` covers the same role and is already wired in by `bun run python:format` (see [Python contributor workflows](development.md#lint-and-type-check)).
+For Python, `ruff format` covers the same role and is already wired in by `bun run python:format` (see [Python contributor workflows](../python/development.md#lint-and-type-check)).
 
 ### CI gates
 

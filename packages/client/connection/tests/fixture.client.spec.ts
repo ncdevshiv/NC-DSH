@@ -216,7 +216,7 @@ describe('createFixtureApi', () => {
     const settings = await api.settings.describe(req({}))
     if (!settings.result.ok) throw new Error('settings describe failed')
     expect(settings.result.value.namespaces).toMatchObject([{
-      ns: 'llm-deepseek',
+      ns: 'llm-ai-sdk',
       value: { apiKeyEnv: 'DEEPSEEK_API_KEY' },
       secrets: [{ path: ['apiKey'], set: false }],
     }])

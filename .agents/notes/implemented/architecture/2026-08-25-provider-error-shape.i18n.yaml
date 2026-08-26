@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-25-provider-error-shape.md
+2026-08-25-provider-error-shape.md: 4f3271699b48153c8bf1b0d3077c99e56b2be215
+2026-08-25-provider-error-shape.zh.md: b478530235356ceaeec7f15812b37271b0559351

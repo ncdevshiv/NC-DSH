@@ -18,7 +18,8 @@ The surrounding runtime also loads JSONL session persistence and automatic conte
 | Variable | Purpose |
 |---|---|
 | `DEEPSEEK_API_KEY` | Credential passed to the OpenAI-compatible host endpoint |
-| `DEEPSEEK_BASE_URL` | Host endpoint used by `dsh-llm-deepseek` |
+| `DEEPSEEK_API_KEY` | Credential reference resolved by the default `deepseek-official` route |
+| `DSH_AI_SDK_SIDECAR` | Absolute path of the `ai-sidecar` executable |
 | `DSH_CWD` | Agent workspace for bash and filesystem tools |
 | `DSH_CONTEXT_WINDOW` | Context capacity recorded for the `DSH_MODEL` catalog entry in the minimal variant |
 | `DSH_MAX_TOKENS_AS_SUCCESS` | `true` (default) accepts token-limited results; `false` reports them as errors |

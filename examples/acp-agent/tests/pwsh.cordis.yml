@@ -1,10 +1,11 @@
 # Minimal live counterpart for the pwsh-tool-turn snapshot composition.
-- id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
+- id: llm-ai-sdk
+  name: '@deepseek-ai/dsh-llm-ai-sdk'
   config:
-    models:
-      - id: deepseek-v4-pro
-
+    providers:
+      deepseek-official:
+        models:
+          - id: deepseek-v4-pro
 - id: subprocess
   name: '@deepseek-ai/dsh-subprocess-local'
 

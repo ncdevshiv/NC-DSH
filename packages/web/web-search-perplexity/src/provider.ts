@@ -6,14 +6,14 @@
  * @module @deepseek-ai/dsh-web-search-perplexity/provider
  */
 
-import { WebError } from '@deepseek-ai/dsh-web'
+import { readErrorBody, throwProviderHttpError, WebError } from '@deepseek-ai/dsh-web'
 import type {
   WebSearchProvider,
   WebSearchRequest,
   WebSearchResult,
   WebSearchSource,
 } from '@deepseek-ai/dsh-web'
-import type { PerplexityError, PerplexityResponse, PerplexitySearchResult } from './types.ts'
+import type { PerplexityResponse, PerplexitySearchResult } from './types.ts'
 
 /** Stable id this provider registers under. */
 export const PERPLEXITY_PROVIDER_ID = 'perplexity'
@@ -124,22 +124,9 @@ export class PerplexitySearchProvider implements WebSearchProvider {
     }
 
     if (!response.ok) {
-      const status = response.status
-      let message = `Perplexity API error (HTTP ${status})`
-      try {
-        const parsed = await response.json() as PerplexityError
-        const detail = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message ?? parsed.message
-        if (detail !== undefined && detail.length > 0) message = detail
-      } catch (error: unknown) {
-        // An abort fired mid-body must surface as WEB_ABORTED, not be swallowed
-        // into a generic HTTP-error message — cancellation is not a provider
-        // error (the seam's cancellation contract).
-        if (isAbortError(error)) throw new WebError('Perplexity search aborted', 'WEB_ABORTED', { cause: error })
-        // Otherwise: the HTTP status is already captured in `message` above; a
-        // malformed/non-JSON error body (normal for gateway 5xx/429s) can only
-        // cost a richer provider message, never the real error.
-      }
-      throw new WebError(message, 'WEB_PROVIDER_ERROR')
+      const read = await readErrorBody(response)
+      if (read.kind === 'aborted') throw new WebError('Perplexity search aborted', 'WEB_ABORTED', { cause: read.cause })
+      throwProviderHttpError('Perplexity', response, read)
     }
 
     try {

@@ -1,17 +1,21 @@
 /**
  * Sidebar slot contract: the registrant-side props composition for the
  * layout-owned `sidebar` slot, plus the holes this shell declares. The shell
- * owns column geometry (fold state machine, brand row, New Session);
- * everything between the section header and the list bottom is the
- * `sidebar.workspaces` registrant's (ui-workspace), and the foot is the
- * `sidebar.settings` registrant's (ui-settings), followed by optional footer
- * actions in `sidebar.footer.action`.
+ * owns column geometry (fold state machine, brand row, New Session) and the
+ * section switcher; the section area between the switcher and the list bottom
+ * dispatches the keyed `sidebar.section` slot (ui-home-section renders Home,
+ * ui-workspace the Code browser, ui-work-section Work, ui-team-section Team),
+ * and the foot is the `sidebar.settings` registrant's (ui-settings), followed
+ * by optional footer actions in `sidebar.footer.action`.
  */
 import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls ui-layout's SlotMap merge (the 'sidebar' entry) into every
 // program that sees this contract, so PropsRuntime<'sidebar'> resolves.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+
+/** The literal section keys of the keyed `sidebar.section` slot. */
+export type SidebarSectionKey = 'home' | 'code' | 'work' | 'team'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -27,12 +31,17 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar.brand.name': { kind: 'single'; scope: 'root'; owner: SidebarBrandNameOwnerProps }
     /**
-     * The workspace/session browsing region: section header, search, the
-     * grouped/flat session list, and every workspace dialog. Declared by this
-     * package's 'sidebar' entry (declaring is claiming); ui-workspace
-     * registers the browser.
+     * The section area: the switcher-selected section's full surface. Keys
+     * are the switcher's fixed tab set; the shell dispatches the active key
+     * at its render site and passes no owner props — business data and
+     * actions arrive through each section's own inject. Declared by this
+     * package's `sidebar` entry; section packages register one key each.
      */
-    'sidebar.workspaces': { kind: 'single'; scope: 'root'; owner: SidebarSectionOwnerProps }
+    'sidebar.section': {
+      kind: 'keyed'
+      scope: 'root'
+      keyProps: Record<SidebarSectionKey, object>
+    }
     /**
      * The settings seat at the sidebar foot. Declared by this package's
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
@@ -57,17 +66,6 @@ export interface SidebarBrandMarkOwnerProps {
 export interface SidebarBrandNameOwnerProps {
   /** Marker field: the occupant owns its own content and width. */
   children?: never
-}
-
-/**
- * Owner share of the browser hole — the only facts crossing the shell/region
- * boundary. Business data and actions arrive through the region's own inject.
- */
-export interface SidebarSectionOwnerProps {
-  /** Shell fold-state output: wide renders the full browser, rail the icon column. */
-  wide: boolean
-  /** Rail icons request expansion; the browser rides the wide flip for focus. */
-  expandSidebar: () => void
 }
 
 /**
@@ -112,7 +110,7 @@ export type SidebarRootComponentProps =
   & PropsRenderSlots<
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
-    | 'sidebar.workspaces'
+    | 'sidebar.section'
     | 'sidebar.settings'
     | 'sidebar.footer.action'
   >

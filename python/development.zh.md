@@ -27,6 +27,19 @@ uv run --project python/sdk pytest
 
 `python/sdk/tests/test_bundled_runtime.py` 会运行可用的内置载体；某个载体的产物尚未构建时，会跳过该载体。仓库级测试政策见 [测试](../docs/testing.md)。
 
+## Lint 与类型检查
+
+两个 Python 子项目都使用 [Ruff](https://docs.astral.sh/ruff/) 进行代码检查与格式化，并用 [Mypy](https://mypy.readthedocs.io/) 做静态类型分析。配置位于各自 `pyproject.toml` 的 `[tool.ruff]` 与 `[tool.mypy]` 段内。SDK 对公开表面（`api.py`、`models.py`、`__init__.py`）保持严格，对以传输为主的 `client.py` 和测试树保持宽松——在那些地方，静态类型与子进程和线程的实际形态互相冲突。
+
+从仓库根目录安装 lint 依赖组并运行组合检查：
+
+```sh
+bun run python:sync
+bun run python:lint
+```
+
+`python:lint` 对 SDK 运行 `ruff check` 与 `mypy src`，对运行时载体只运行 `ruff check`。使用 `bun run python:format` 应用 Ruff 的自动修复；lint 与 format 已接入 CI 的仓库 hygiene 门禁一起运行。
+
 该套件面向的是伪造的运行时对端。`scripts/smoke-python-runtime.py` 面向真实的打包运行时；必需的 `python-runtime` CI 任务会用新构建的可执行文件运行全部场景：
 
 ```sh
@@ -44,6 +57,9 @@ from deepseek_harness import DeepSeekHarness
 with DeepSeekHarness() as harness:
     print(harness.run("say hi").final_response)
 ```
+
+
+`python:lint` 对 SDK 运行 `ruff check` 与 `mypy src`，对运行时载体只运行 `ruff check`。使用 `bun run python:format` 应用 Ruff 的自动修复；lint 与 format 已接入 CI 的仓库 hygiene 门禁一起运行。
 
 ## 针对 Node 源码运行
 

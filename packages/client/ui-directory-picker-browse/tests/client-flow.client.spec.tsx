@@ -17,7 +17,7 @@ usePinnedBrowserLanguages('zh-CN')
 
 afterEach(cleanup)
 
-const HOLES = ['conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow'] as const
+const HOLES = ['conversation.hero.workspace.directoryFlow', 'sidebar.section.directoryFlow'] as const
 
 const HOME = '/home/u'
 const homeListing: DirectoryListing = {

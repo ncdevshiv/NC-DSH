@@ -4,9 +4,11 @@ Status: implemented
 
 [English](2026-06-21-mandatory-app-attribution-headers.md) | 中文
 
+> 部分被[基于 ai-sidecar 子进程的单一 LLM 适配器](2026-08-25-single-llm-adapter-via-ai-sdk.md)取代：由独立进程拥有的传输层以该进程的身份标识代替。
+
 ## 问题
 
-LLM（大语言模型）提供方请求应当标识发出请求的产品。这对提供方侧的技术支持、滥用调查、兼容性调试和流量分析都有价值。在本 Agent Note 之前，harness 只做了部分工作：手写的 DeepSeek 适配器发送了一个手动复制的 `User-Agent` 常量（`packages/llm/llm-deepseek/src/adapter.ts`），而基于 pi-ai 的孪生适配器则完全不发送 harness 自有的头部（`packages/llm/llm-pi-ai/src/adapter.ts`）。因此新适配器可以悄无声息地省略归属标识，而基于库的适配器也可能与手写适配器产生偏差——尽管[孪生适配器 Agent Note](2026-06-13-twin-llm-adapters.md) 的存在正是为了确保两种实现中的提供方约定真实可靠。
+LLM（大语言模型）提供方请求应当标识发出请求的产品。这对提供方侧的技术支持、滥用调查、兼容性调试和流量分析都有价值。在本 Agent Note 之前，harness 只做了部分工作：手写的 DeepSeek 适配器发送了一个手动复制的 `User-Agent` 常量，而基于 pi-ai 的孪生适配器则完全不发送 harness 自有的头部。因此新适配器可以悄无声息地省略归属标识，而基于库的适配器也可能与手写适配器产生偏差——尽管[孪生适配器 Agent Note](2026-06-13-twin-llm-adapters.md) 的存在正是为了确保两种实现中的提供方约定真实可靠。
 
 直接触发因素来自 OpenRouter 的[应用归属](https://openrouter.ai/docs/app-attribution)文档。OpenRouter 根据 `HTTP-Referer` 加上用于展示和分类的头部来创建应用页面和排名。这有价值，但它不是 HTTP 标准中的应用身份机制。风险在于：把 OpenRouter 的精确头部集当作通用标准来采纳，然后将提供方特有的头部泄漏到直连 DeepSeek 的请求、未来的 OpenAI/Anthropic/Vertex 适配器、测试服务器或无限期记录未知字段的代理中。
 
@@ -54,7 +56,7 @@ OpenRouter 应用归属刻意未实现。`HTTP-Referer`、`X-OpenRouter-Title`�
 - `dsh-llm` 为 `LlmAdapter` 作者文档化了强制的 `User-Agent` 归属约定（`LlmAdapter` JSDoc、包 README，以及 `docs/subsystems/llm-streaming.md` 的适配器约定（adapter contract）章节）。
 - 共享辅助函数（`attributionHeaders` / `userAgent`）从包元数据构建应用身份和标准 `User-Agent` 值，适配器无需手动复制版本常量。
 - `dsh-llm-deepseek` 在每个请求上发送共享的 `User-Agent`，其 mock 服务器套件断言精确值。
-- `dsh-llm-pi-ai` 通过 pi-ai 的 `StreamOptions.headers` 钩子发送相同的 `User-Agent`，其 mock 服务器套件断言精确值。
+- 如今唯一的 `dsh-llm-ai-sdk` 适配器不发送任何归属头部：其传输是 sidecar 进程的属性（[单适配器](2026-08-25-single-llm-adapter-via-ai-sdk.md)）。
 - 本决策下没有适配器发送 OpenRouter 特有的归属头部（`HTTP-Referer`、`X-OpenRouter-Title`、`X-Title`、`X-OpenRouter-Categories`）。
 - 没有应用归属字段携带机密、本地路径、会话 id、提示词文本、模型输出、用户邮箱或逐用户的稳定标识符。
 - 适配器 README 声明了 `User-Agent` 归属策略，并明确避免将 OpenRouter 应用归属记录为已实现的行为。

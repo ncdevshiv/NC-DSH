@@ -94,7 +94,7 @@ SQLite DDL is declarative data definition with a versioned migration policy; CSS
 
 - `vendor/` holds pinned Cordis source copies — sync discipline (manifest + upstream SHAs) is the standing cost of the vendoring choice, not a language problem.
 - The preset-loader `.js` fixtures and generated `.mjs` test artifacts are intentional: plugins load as JavaScript at runtime even though sources are TypeScript.
-- `str_replace_editor` coexists with the newer `read`/`write`/`edit` fs tools; consolidation within TypeScript is plausible future cleanup, unrelated to language choice.
+- `str_replace_editor` beside the native `read`/`write`/`edit` suite is a deliberate two-vocabulary design, not drift: the implemented single-editor decision (`.agents/notes/implemented/simplification/2026-08-10-default-presets-single-editor.md`) keeps general-purpose presets on the native suite only, retains `str_replace_editor` as the `minimal` preset's dedicated editor (and Python runtime default), and leaves explicit mounts available. The shared `bundle/base` row is a neutral default that later patch layers disable per surface.
 
 ## Appendix — evidence
 
