@@ -72,9 +72,9 @@
     - id: llm-retry
       name: '@deepseek-ai/dsh-llm-retry'
 
-    # User-settings document (`$DSH_HOME/settings.yaml`, hot-reloaded): a
-    # `llm-deepseek:` or `llm-pi-ai:` section there overrides the adapter entries
-    # below without a restart, and is what the web Models page writes.
+    # User-settings document (`$DSH_HOME/settings.yaml`, hot-reloaded): an
+    # `llm-ai-sdk:` section there overrides the adapter entry below without a
+    # restart, and is what the web Models page writes.
     - id: settings
       name: '@deepseek-ai/dsh-settings-file'
 
@@ -84,16 +84,6 @@
     # managed document, which is never materialized into the process environment.
     - id: credentials
       name: '@deepseek-ai/dsh-credentials-local'
-
-    # The pi-ai multi-provider twin, mounted dormant: zero routes (and no extra
-    # models in the picker) until a `llm-pi-ai:` settings section supplies provider
-    # profiles — then those routes register live, keys resolving per request
-    # through their apiKeyEnv references, and drop again when the section empties.
-    # Supplying those profiles is exactly what the web Models page does. Which
-    # adapters exist is composition; which providers run is the user's settings
-    # document.
-    - id: llm-pi-ai
-      name: '@deepseek-ai/dsh-llm-pi-ai'
 
     - id: session-persistence-jsonl
       name: '@deepseek-ai/dsh-session-persistence-jsonl'
@@ -469,9 +459,11 @@
     - id: fs-sandbox
       name: '@deepseek-ai/dsh-fs-sandbox'
 
-    # The native DeepSeek adapter. No key or endpoint is inlined: both resolve per
-    # request from the `llm-deepseek:` settings section over this entry, with the
-    # key coming from the credential store below. Thinking defaults are a deployment
-    # choice.
-    - id: llm-deepseek
-      name: '@deepseek-ai/dsh-llm-deepseek'
+    # The AI SDK sidecar adapter — every provider route (DeepSeek official,
+    # OpenRouter, Ollama, Anthropic, Gemini, any OpenAI-compatible gateway)
+    # resolves through this one child process. No key or endpoint is inlined:
+    # both resolve per request from the `llm-ai-sdk:` settings section over
+    # this entry, with keys coming from the credential store. The `binaryPath`
+    # of the ai-sidecar executable comes from config or $DSH_AI_SDK_SIDECAR.
+    - id: llm-ai-sdk
+      name: '@deepseek-ai/dsh-llm-ai-sdk'

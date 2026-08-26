@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-25-python-ruff-mypy-adoption.md
+2026-08-25-python-ruff-mypy-adoption.md: 6e42308cc88a1ffd59d6b5c9f4936a23096ee601
+2026-08-25-python-ruff-mypy-adoption.zh.md: 5d1a026133f29d77e102e91bdf53fbc586ef9ca9

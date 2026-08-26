@@ -18,7 +18,8 @@
 | 变量 | 用途 |
 |---|---|
 | `DEEPSEEK_API_KEY` | 传给 OpenAI 兼容宿主端点的凭据 |
-| `DEEPSEEK_BASE_URL` | `dsh-llm-deepseek` 使用的宿主端点 |
+| `DEEPSEEK_API_KEY` | 默认 `deepseek-official` 路由解析的凭据引用 |
+| `DSH_AI_SDK_SIDECAR` | `ai-sidecar` 可执行文件的绝对路径 |
 | `DSH_CWD` | bash 和文件系统工具使用的 agent workspace |
 | `DSH_CONTEXT_WINDOW` | 极简变体中为 `DSH_MODEL` 目录项记录的上下文容量 |
 | `DSH_MAX_TOKENS_AS_SUCCESS` | `true`（默认）接受受 token 上限限制的结果；`false` 将其报告为错误 |

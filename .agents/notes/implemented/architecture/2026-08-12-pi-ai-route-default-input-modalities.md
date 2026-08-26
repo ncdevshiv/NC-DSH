@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-08-12-pi-ai-route-default-input-modalities.zh.md)
 
+> Superseded in part by [model discovery and route dialects](../feature/2026-08-26-model-discovery-and-route-dialects.md): the single adapter carries the same per-entry `inputModalities` (entry → catalog → text-only default) on its profile schema, and the pi-ai implementation this note originally described is deleted. The ordering decision below is the surviving authority.
+
 ## Problem
 
 Nothing in `settings.yaml` could describe a hand-declared pi-ai model as accepting images, and the adapter assumed text-only for every model the installed pi-ai catalog does not describe. Every model a deployment adds through the web UI's "add a custom provider" card is such a model, so an OpenAI-compatible gateway serving a vision model reported `inputModalities: ['text']` no matter what it actually served.
@@ -46,8 +48,6 @@ A model that declares images its endpoint does not serve is not caught locally �
 
 ## Testing
 
-`packages/llm/llm-pi-ai/tests/catalog.spec.ts` covers each rung of the chain and both readings of an empty list at the resolver: one route mixing an undeclared model with entry-declared text-only and vision models, a route default answering an undeclared model while an entry still outranks it, a catalog vision model keeping its modalities under a narrower route default, an entry's `[]` inheriting rather than emptying, and the route's `[]` refused. A separate case re-asserts every rung end to end — a written settings section, the plugin's own registration, and `ctx.llm.listModels` / `resolveModelInfo` — so a break between the document and `LlmModelInfo` cannot pass.
+`packages/llm/llm-ai-sdk` carries the chain now: its profile schema types `inputModalities` per entry with a text-only default, `resolveModels` validates it, and the adapter's `resolveModel` reads entry → route default (`text`) exactly as described. The discovery mapper adopts an endpoint-declared modality list onto the adopted row, and the web editor pins or unpins it through the Vision checkbox. `tests/loader-composition.spec.ts` answers discovery from a resolved profile catalog with the schema-defaulted modalities; `tests/adapter.spec.ts` and `translate.spec.ts` pin the resolveModel reading and the wire translation of image blocks; the ui-settings-models specs pin the checkbox writing an explicit declaration so an uncheck cannot inherit.
 
-`config.spec.ts` holds the schema boundary: an unknown modality refused at both levels, the empty route list accepted by the schema and refused by the namespace validator that the settings seam actually runs, and the `[]` materialization for an absent array that the inheritance rule depends on.
-
-No keyless snapshot lane exercises a pi-ai route: the snapshot examples drive `dsh-llm-replay`, which declares modalities directly in its configuration, and a pi-ai route needs a live endpoint whose port a static `cordis.yml` cannot name. The admission points this change feeds are already covered there through that provider (`examples/acp-agent/image.cordis.snapshot.yml` and `image-text-route.cordis.snapshot.yml`) and are unaffected — what changed is what one adapter reports, not how a gate reads it.
+No keyless snapshot lane exercises a live custom route: the snapshot examples drive `dsh-llm-replay`, which declares modalities directly in its configuration. The admission points this change feeds are covered there through that provider (`examples/acp-agent/image.cordis.snapshot.yml` and `image-text-route.cordis.snapshot.yml`) and are unaffected — what changed is what one adapter reports, not how a gate reads it.

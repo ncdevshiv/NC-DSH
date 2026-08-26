@@ -7,7 +7,6 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import type { FC } from 'react'
 import type { SlotRendererHost } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '../src/client/slots.ts'
 
@@ -20,7 +19,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-const C: FC<object> = () => null
+// React 19's `FC<P>` widens to `ReactNode | Promise<ReactNode>` (async server
+// components are now in the ReactNode union); the slot component type stays
+// `ReactNode`-only, so a plain `() => null` matches the narrower return and
+// serves the test's purpose — a no-render component to occupy the slot.
+const C: (props: object) => null = () => null
 
 /**
  * Register/install/renderSlot through a type-erased view: the typed register
@@ -239,7 +242,7 @@ describe('declaration injection', () => {
     const activeFiber = active.ctx.plugin({
       name: 'active-injection',
       inject: ['slots'],
-      apply: (ctx: Context) => { ctx.slots.inject('t.host', () => ctx.slots.register({ name: 't.host' }, C)) },
+      apply: (ctx: Context) => { ctx.slots.inject('t.host', () => active.erased.register({ name: 't.host' }, C)) },
     })
     await activeFiber.await()
     expect(active.svc.entries('t.host')).toHaveLength(1)
@@ -385,10 +388,10 @@ describe('declaration injection', () => {
     }, C)
     const componentA = (): null => null
     const componentB = (): null => null
-    const mount = (name: string, component: FC<object>) => bench.ctx.plugin({
+    const mount = (name: string, component: (props: object) => null) => bench.ctx.plugin({
       name,
       inject: ['slots'],
-      apply: (ctx: Context) => { ctx.slots.inject('t.host', () => ctx.slots.register({ name: 't.host' }, component)) },
+      apply: (ctx: Context) => { ctx.slots.inject('t.host', () => bench.erased.register({ name: 't.host' }, component)) },
     })
     const first = mount('replacement-a', componentA)
     await first.await()

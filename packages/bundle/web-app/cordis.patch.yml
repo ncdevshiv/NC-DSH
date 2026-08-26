@@ -194,6 +194,18 @@
     - id: ui-sidebar
       name: '@deepseek-ai/dsh-client-ui-sidebar'
 
+    # Sidebar Home section: the inbox overview under sidebar.section 'home'.
+    - id: ui-home-section
+      name: '@deepseek-ai/dsh-client-ui-home-section'
+
+    # Sidebar Team section: live members + preset roster under sidebar.section 'team'.
+    - id: ui-team-section
+      name: '@deepseek-ai/dsh-client-ui-team-section'
+
+    # Sidebar Work section: needs-you/running/goals board under sidebar.section 'work'.
+    - id: ui-work-section
+      name: '@deepseek-ai/dsh-client-ui-work-section'
+
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'
 

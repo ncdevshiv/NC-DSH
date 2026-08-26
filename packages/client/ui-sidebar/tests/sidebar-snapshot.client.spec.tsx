@@ -5,7 +5,7 @@
  * supplies the layout's owner share at the render site, and the snapshot
  * captures exactly the 'sidebar' slot's output (CSS-module class names
  * folded to their semantic locals by the runtime's serializer). The child
- * holes (sidebar.workspaces / sidebar.settings) have no registrant here, so
+ * holes (sidebar.section / sidebar.settings) have no registrant here, so
  * the snapshots pin the shell chrome itself.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

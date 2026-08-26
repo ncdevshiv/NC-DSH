@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/testing/2026-08-25-jsdom-30-under-vitest-wildcard-peer.md
+2026-08-25-jsdom-30-under-vitest-wildcard-peer.md: 12cfdbb753f3aeab527d33feaaea4da2adfa4a22
+2026-08-25-jsdom-30-under-vitest-wildcard-peer.zh.md: 209a9a702b15564349b1cbd6a434dcea9cccb739

@@ -331,10 +331,10 @@ describe('DeepSeekSearchProvider error handling', () => {
       .rejects.toThrow(expect.objectContaining({ message: 'bad request' }))
   })
 
-  it('keeps a status-line message when the error body is not JSON', async () => {
+  it('quotes the first line of a non-JSON error body', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream error', { status: 503 })))
     await expect(searchProvider(options).search({ query: 'q' }))
-      .rejects.toThrow(expect.objectContaining({ message: 'DeepSeek API error (HTTP 503)' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'upstream error' }))
   })
 
   it('keeps the status-line message when the JSON error body carries no detail', async () => {
@@ -379,8 +379,16 @@ describe('DeepSeekSearchProvider error handling', () => {
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_ABORTED' }))
   })
 
-  it('surfaces an abort during error-body parse as WEB_ABORTED', async () => {
-    const body = { json: () => Promise.reject(new DOMException('aborted', 'AbortError')), ok: false, status: 500 }
+  it('surfaces an abort during error-body read as WEB_ABORTED', async () => {
+    // The shared error-body reader consumes the stream, so the fake aborts
+    // by erroring its body stream rather than rejecting a json() call.
+    const body = {
+      ok: false,
+      status: 500,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) { controller.error(new DOMException('aborted', 'AbortError')) },
+      }),
+    }
     vi.stubGlobal('fetch', vi.fn(async () => body as unknown as Response))
     await expect(searchProvider(options).search({ query: 'q' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_ABORTED' }))

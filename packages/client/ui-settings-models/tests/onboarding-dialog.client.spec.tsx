@@ -44,7 +44,7 @@ const DeepSeekConfig = Schema.object({
 function deepSeekNamespace(apiKeyEnv: string | null): SettingsNamespaceView {
   const value = apiKeyEnv === null ? {} : { apiKeyEnv }
   return {
-    ns: 'llm-deepseek',
+    ns: 'llm-ai-sdk',
     schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as unknown,
     value,
     base: value,
@@ -94,7 +94,7 @@ function harness(options: {
             : [{
               provider: 'deepseek-official',
               displayName: 'DeepSeek',
-              settingsNs: options.providerSettingsNs ?? 'llm-deepseek',
+              settingsNs: options.providerSettingsNs ?? 'llm-ai-sdk',
               settingsPath: [],
               active: options.providerActive ?? true,
             }],

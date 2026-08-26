@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-26-model-discovery-and-route-dialects.md
+2026-08-26-model-discovery-and-route-dialects.md: 168d9e00426f74cce2bbedffbce7ea38817aa7c1
+2026-08-26-model-discovery-and-route-dialects.zh.md: 0ed4d6c4dac527a4d5850bc2b357e975cfd974d8

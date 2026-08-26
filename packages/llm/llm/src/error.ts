@@ -47,6 +47,107 @@ export const EMPTY_RESPONSE_CODE = 'EMPTY_RESPONSE'
  */
 export const INVALID_CREDENTIAL_CODE = 'INVALID_CREDENTIAL'
 
+/** Canonical provider-neutral code for a request aborted by the caller. */
+export const ABORTED_CODE = 'ABORTED'
+
+/**
+ * Canonical provider-neutral code for a request the provider rejected because
+ * the supplied input was malformed or the model cannot handle it.
+ */
+export const INVALID_REQUEST_CODE = 'INVALID_REQUEST'
+
+/**
+ * Canonical provider-neutral code for a response closed by the provider's
+ * transport before a terminal frame arrived. Network blips, gateway timeouts,
+ * and dropped sockets all share this code.
+ */
+export const TRANSPORT_CODE = 'TRANSPORT'
+
+/**
+ * Canonical provider-neutral code for a transient provider failure. The retry
+ * policy's default retryable set includes this code; it is not the
+ * provider's own `5xx` body shape, only the harness-side classification.
+ */
+export const SERVER_CODE = 'SERVER'
+
+/**
+ * Canonical provider-neutral code for a request throttled by the provider.
+ * Distinct from {@link QUOTA_EXCEEDED_CODE} which is terminal.
+ */
+export const RATE_LIMIT_CODE = 'RATE_LIMIT'
+
+/**
+ * Canonical provider-neutral code for an authentication or authorization
+ * failure. Both 401 and 403 collapse to this single taxonomy entry because
+ * the fix (correct the stored credential) is identical for both.
+ */
+export const AUTH_CODE = 'AUTH'
+
+/** Canonical provider-neutral code for a request timed out at the harness layer. */
+export const TIMEOUT_CODE = 'TIMEOUT'
+
+/**
+ * Provider-neutral code for an HTTP status the harness has no specialized
+ * mapping for. Carries the numeric status through the code so a future log
+ * query can group these without re-parsing the message.
+ * @param status - the upstream HTTP status code.
+ * @returns the stable failure code, e.g. `HTTP_429`.
+ */
+export function httpStatusCode(status: number): string {
+  return `HTTP_${String(status)}`
+}
+
+/**
+ * Structured detail the harness classifiers share: a joined string of every
+ * provider-issued fact and an optional provider-specific structural type
+ * (Anthropic's `api_error` / `overloaded_error` / OpenAI's `server_error`).
+ * @param detail - whitespace-joined `code`/`type`/`message` text from the
+ *   provider error body, when available.
+ * @param providerType - provider's own structural error type field, when
+ *   captured separately. Takes precedence over `detail` for context-window
+ *   and quota classification, where the SDK's own `type` is the more
+ *   stable signal than the wording of the message.
+ */
+export interface ProviderErrorDetail {
+  /** Whitespace-joined provider-issued facts; empty when nothing usable. */
+  readonly detail: string
+  /** Provider's structural error type, when the adapter captured it. */
+  readonly providerType?: string
+}
+
+/**
+ * Classify one HTTP non-2xx response into a stable harness code.
+ *
+ * The classifier is the seam's single source of truth: every adapter maps
+ * a 401 to `AUTH`, a 429 with a quota-exhausted body to `QUOTA`, a 429
+ * without one to `RATE_LIMIT`, a 400 that names a context bound to
+ * `CONTEXT_WINDOW_EXCEEDED`, and so on. Today the DeepSeek adapter has its
+ * own copy and pi-ai has a regex soup against a flattened string; both
+ * will be replaced with this helper so a 500 in the message text can no
+ * longer be misclassified as `TIMEOUT`.
+ * @param status - HTTP status of a non-2xx provider response.
+ * @param detail - structured provider detail; empty string is allowed.
+ * @returns the harness `LlmFailure.code`.
+ */
+export function classifyHttpStatus(status: number, detail: ProviderErrorDetail = { detail: '' }): string {
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    return httpStatusCode(status)
+  }
+  if (status === 401 || status === 403) return AUTH_CODE
+  if (status === 408) return TIMEOUT_CODE
+  if (status === 413) return INVALID_REQUEST_CODE
+  if (status === 400) {
+    if (isContextWindowExceededError(detail.detail)) return CONTEXT_WINDOW_EXCEEDED_CODE
+    return INVALID_REQUEST_CODE
+  }
+  if (status === 429) {
+    if (isQuotaExceededError(detail.detail)) return QUOTA_EXCEEDED_CODE
+    return RATE_LIMIT_CODE
+  }
+  if (status >= 500 && status <= 599) return SERVER_CODE
+  return httpStatusCode(status)
+}
+
 /** Structured codes and plain phrases that explicitly name a context bound being exceeded. */
 const STRUCTURED_CONTEXT_OVERFLOW = new RegExp(
   String.raw`(?:^|[^a-z0-9])context[\s_-](?:length|window)[\s_-]`

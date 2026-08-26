@@ -29,7 +29,8 @@
   ],
   "overrides": {
     "@deepseek-ai/cosmokit": "workspace:*",
-    "@deepseek-ai/schemastery": "workspace:*"
+    "@deepseek-ai/schemastery": "workspace:*",
+    "use-sync-external-store": "^1.6.0"
   },
   "patchedDependencies": {
     "node-pty@1.2.0-beta.15": "patches/node-pty@1.2.0-beta.15.patch"
@@ -175,7 +176,7 @@
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",
-    "@deepseek-ai/dsh-llm-deepseek": "workspace:^",
+    "@deepseek-ai/dsh-llm-ai-sdk": "workspace:^",
     "@deepseek-ai/dsh-loader-smoke": "workspace:^",
     "@deepseek-ai/dsh-tool-session-query": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",

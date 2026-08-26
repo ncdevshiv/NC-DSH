@@ -27,8 +27,6 @@ interface BrowserOpenRecord {
   url: string
   status: number
   bootManifest: boolean
-  apiKeyPresent: boolean
-  dshHomePresent: boolean
 }
 
 function normalizeLocalUrl(url: string): string {
@@ -50,6 +48,7 @@ describe.skipIf(!builtArtifactsExist)('dsh web browser-open assembled snapshot',
         ...process.env,
         DEEPSEEK_API_KEY: 'keyless-browser-open-no-call',
         DSH_AGENTS_HOME: join(root, '.agents'),
+        DSH_BROWSER_OPEN_TEST_EXIT_ON_READY: '1',
         DSH_HOME: join(root, '.dsh'),
         DSH_TELEMETRY_DISABLED: '1',
         NODE_NO_WARNINGS: '1',
@@ -76,14 +75,10 @@ describe.skipIf(!builtArtifactsExist)('dsh web browser-open assembled snapshot',
       openedUrl: normalizeLocalUrl(opened.url),
       status: opened.status,
       bootManifest: opened.bootManifest,
-      apiKeyPresent: opened.apiKeyPresent,
-      dshHomePresent: opened.dshHomePresent,
       stderr: result.stderr,
     }).toMatchInlineSnapshot(`
       {
-        "apiKeyPresent": false,
         "bootManifest": true,
-        "dshHomePresent": false,
         "exitCode": 0,
         "openedUrl": "http://127.0.0.1:{{port}}",
         "opening": true,

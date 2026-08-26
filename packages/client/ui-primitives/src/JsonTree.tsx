@@ -427,23 +427,28 @@ export function JsonTree({
       : pathId([Array.isArray(data) ? firstExpandableIndex : firstExpandableEntry[0]])
     : isExpandableValue(data) && rootEntries.length > 0 ? pathId([]) : null
   const rootRef = useRef<HTMLDivElement>(null)
-  const activeRowRef = useRef<HTMLElement>()
+  // activeRowRef and resetTimer are late-bound: setActiveRow attaches a row
+  // on hover, the data effect clears it, and the unmount cleanup clears any
+  // residual timer. Their `current` is intentionally optional, so the ref
+  // type carries the null rather than the older "no initial value" form
+  // (React 19's stricter useRef() requires an initial value).
+  const activeRowRef = useRef<HTMLElement | null>(null)
   const copyButtonRef = useRef<HTMLButtonElement>(null)
   const copyMenuOpenRef = useRef(false)
-  const resetTimer = useRef<ReturnType<typeof setTimeout>>()
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [copyTarget, setCopyTarget] = useState<CopyTarget>()
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [copyMenuOpen, setCopyMenuOpen] = useState(false)
   const [tabStopId, setTabStopId] = useState<string | null>(initialTabStopId)
 
-  const setActiveRow = (row: HTMLElement | undefined) => {
+  const setActiveRow = (row: HTMLElement | null) => {
     activeRowRef.current?.removeAttribute('data-json-copy-active')
     activeRowRef.current = row
     row?.setAttribute('data-json-copy-active', '')
   }
 
   const clearCopyTarget = () => {
-    setActiveRow(undefined)
+    setActiveRow(null)
     setCopyTarget(undefined)
     setCopyState('idle')
     copyMenuOpenRef.current = false
@@ -478,13 +483,13 @@ export function JsonTree({
   }
 
   useEffect(() => () => {
-    if (resetTimer.current !== undefined) clearTimeout(resetTimer.current)
+    if (resetTimer.current !== null) clearTimeout(resetTimer.current)
     activeRowRef.current?.removeAttribute('data-json-copy-active')
   }, [])
 
   useEffect(() => {
     activeRowRef.current?.removeAttribute('data-json-copy-active')
-    activeRowRef.current = undefined
+    activeRowRef.current = null
     copyMenuOpenRef.current = false
     setCopyTarget(undefined)
     setCopyState('idle')
@@ -495,7 +500,7 @@ export function JsonTree({
   useEffect(() => {
     const reposition = () => {
       const row = activeRowRef.current
-      if (row !== undefined) repositionCopyButton(row)
+      if (row !== null) repositionCopyButton(row)
     }
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('resize', reposition)
@@ -524,7 +529,7 @@ export function JsonTree({
 
   const handleScroll = (_event: ReactUIEvent<HTMLDivElement>) => {
     const row = activeRowRef.current
-    if (row !== undefined) repositionCopyButton(row)
+    if (row !== null) repositionCopyButton(row)
   }
 
   const copy = async (mode: 'json' | 'path' | 'prettyJson' | 'value') => {
@@ -536,7 +541,7 @@ export function JsonTree({
     } catch {
       setCopyState('failed')
     }
-    if (resetTimer.current !== undefined) clearTimeout(resetTimer.current)
+    if (resetTimer.current !== null) clearTimeout(resetTimer.current)
     resetTimer.current = setTimeout(() => { setCopyState('idle') }, 1_500)
   }
 

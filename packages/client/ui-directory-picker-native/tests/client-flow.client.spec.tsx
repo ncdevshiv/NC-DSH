@@ -11,7 +11,7 @@ import { apply as nodeApply } from '../src/index.ts'
 
 afterEach(cleanup)
 
-const HOLES = ['conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow'] as const
+const HOLES = ['conversation.hero.workspace.directoryFlow', 'sidebar.section.directoryFlow'] as const
 
 async function bench() {
   const ctx = new Context()

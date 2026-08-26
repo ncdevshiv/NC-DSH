@@ -870,3 +870,43 @@ export const IconArchiveOutline20 = ({ size = 20, className }: IconProps) => (
     <path d="M12.7962 12.5661V11.0832H7.20548V12.5661L12.7962 12.5661Z" fill="currentColor" />
   </svg>
 )
+
+/** Sidebar section glyphs (harness-only): home, work, team. Geometry follows the
+ *  set's evenodd outline style so the four section tabs share one visual voice
+ *  with the existing ic_ds_code glyph. */
+
+/** ic_ds_home_outline_16: gabled house with a door notch cut from the base. */
+export const IconHomeOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M8 1.1 L14.75 6.65 L14.75 14.4 L9.65 14.4 L9.65 9.55 L6.35 9.55 L6.35 14.4 L1.25 14.4 L1.25 6.65 Z M8 3.05 L2.55 7.55 L2.55 13.1 L4.85 13.1 L4.85 8.25 L11.15 8.25 L11.15 13.1 L13.45 13.1 L13.45 7.55 Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
+/** ic_ds_work_outline_16: briefcase — handle, body outline, clasp slot. */
+export const IconWorkOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M6.1 3.3 L6.1 2.5 C6.1 1.75 6.7 1.15 7.45 1.15 L8.55 1.15 C9.3 1.15 9.9 1.75 9.9 2.5 L9.9 3.3 L13.6 3.3 C14.4 3.3 15 3.9 15 4.7 L15 12.6 C15 13.4 14.4 14 13.6 14 L2.4 14 C1.6 14 1 13.4 1 12.6 L1 4.7 C1 3.9 1.6 3.3 2.4 3.3 Z M7.5 2.55 L7.5 3.3 L8.5 3.3 L8.5 2.55 Z M2.4 4.7 L2.4 12.6 L13.6 12.6 L13.6 4.7 L9.9 4.7 L9.9 5.5 L6.1 5.5 L6.1 4.7 Z M6.55 7.6 L9.45 7.6 L9.45 8.9 L6.55 8.9 Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
+/** ic_ds_team_outline_16: two people — front figure full, rear figure offset. */
+export const IconTeamOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M5.6 1.7 C7.05 1.7 8.2 2.85 8.2 4.3 C8.2 5.75 7.05 6.9 5.6 6.9 C4.15 6.9 3 5.75 3 4.3 C3 2.85 4.15 1.7 5.6 1.7 Z M10.9 2.6 C12.1 2.6 13.05 3.55 13.05 4.75 C13.05 5.95 12.1 6.9 10.9 6.9 C10.75 6.9 10.6 6.89 10.46 6.86 C10.94 6.13 11.14 5.36 11.14 4.74 C11.14 4.12 10.95 3.36 10.47 2.63 C10.61 2.61 10.75 2.6 10.9 2.6 Z M5.6 8.1 C8.35 8.1 10.35 9.6 10.55 12.05 L10.55 14.3 L0.65 14.3 L0.65 12.05 C0.85 9.6 2.85 8.1 5.6 8.1 Z M10.9 8.1 C11.35 8.1 11.78 8.15 12.18 8.24 C13.6 8.72 14.55 9.85 14.7 11.5 L14.7 12.6 L12 12.6 C11.9 10.9 11.2 9.5 10.05 8.5 C10.33 8.42 10.61 8.1 10.9 8.1 Z"
+      fill="currentColor"
+    />
+  </svg>
+)

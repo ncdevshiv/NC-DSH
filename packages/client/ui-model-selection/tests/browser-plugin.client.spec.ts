@@ -259,7 +259,7 @@ describe('ui-model-selection dual entry', () => {
 
     // Recovering clears it without a reload of the surface.
     b.setRoutable(true)
-    b.ctx.remote.$dispatch('settings/document-updated', ['llm-deepseek', 1])
+    b.ctx.remote.$dispatch('settings/document-updated', ['llm-ai-sdk', 1])
     await Promise.resolve()
     await Promise.resolve()
     expect(b.blockOf('s1')).toBeUndefined()

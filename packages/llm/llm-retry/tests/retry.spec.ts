@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Fiber } from '@deepseek-ai/cordis'
-import LlmRuntime, { createUserMessage, CallId, EMPTY_RESPONSE_CODE, LlmAdapter, LlmError, resolveRetryPolicy  } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, CallId, EMPTY_RESPONSE_CODE, LlmAdapter, LlmError, ProviderRequestId, resolveRetryPolicy  } from '@deepseek-ai/dsh-llm'
 import type {
   AlwaysRetryPolicyConfig,
   BackoffConfig,
@@ -198,7 +198,7 @@ describe('provider-routed retry policy', () => {
       step: 1,
       provider: 'mock',
       mode: 'normal',
-      policyKey: '["normal",2,["RATE_LIMIT","SERVER"],500,10000,0]',
+      policyKey: '["normal",2,["RATE_LIMIT","SERVER"],500,10000,0,10]',
       retry: 1,
       maxRetries: 2,
       delayMs: 500,
@@ -308,7 +308,7 @@ describe('provider-routed retry policy', () => {
     })
   })
 
-  it('applies bounded exponential jitter and stops after the configured budget', async () => {
+  it('applies bounded stepped jitter and stops after the configured budget', async () => {
     vi.useFakeTimers()
     const samples = [0, 1]
     const adapter = new ScriptedAdapter([
@@ -329,10 +329,10 @@ describe('provider-routed retry policy', () => {
 
     const second = waitForRetry(context, agent, 2)
     await vi.advanceTimersByTimeAsync(450)
-    expect((await second).data.delayMs).toBe(1_100)
+    expect((await second).data.delayMs).toBe(550)
 
     const idle = waitForIdle(context, agent)
-    await vi.advanceTimersByTimeAsync(1_100)
+    await vi.advanceTimersByTimeAsync(550)
     await idle
 
     expect(adapter.requests).toHaveLength(3)
@@ -664,6 +664,7 @@ describe('provider-routed retry policy', () => {
       initialDelayMs: 1,
       maxDelayMs: 4,
       jitterRatio: 0.1,
+      doubleEveryRetries: 1,
     }) }, undefined, { random: () => 1 }))
     const agent = context.agentLoop.create(SessionId('retry-always-unbounded'), {
       provider: 'mock',
@@ -689,6 +690,31 @@ describe('provider-routed retry policy', () => {
       { provider: 'mock', mode: 'always', retry: 3, delayMs: 4, hasMax: false },
       { provider: 'mock', mode: 'always', retry: 4, delayMs: 4, hasMax: false },
     ])
+  })
+
+  it('serves one flat delay per consecutive-retry tier before stepping up', async () => {
+    vi.useFakeTimers()
+    const failures = Array.from({ length: 9 }, (_, index) => new LlmError(`busy ${index + 1}`, 'SERVER'))
+    const adapter = new ScriptedAdapter([...failures, textResponse('recovered')])
+    ;({ ctx: context } = await harness(adapter, { mock: alwaysConfig({
+      initialDelayMs: 2,
+      maxDelayMs: 8,
+      jitterRatio: 0,
+      doubleEveryRetries: 3,
+    }) }))
+    const agent = context.agentLoop.create(SessionId('retry-tiered-backoff'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+    const idle = waitForIdle(context, agent)
+
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'keep trying' }], source: { kind: 'user' } }))
+    await vi.runAllTimersAsync()
+    await idle
+
+    expect(adapter.requests).toHaveLength(10)
+    expect(agent.session.events.filter(event => event.type === 'llm/retry').map(event => event.data.delayMs))
+      .toEqual([2, 2, 2, 4, 4, 4, 8, 8, 8])
   })
 
   it('keeps failed error text and partial output out of every retried model context', async () => {
@@ -722,6 +748,44 @@ describe('provider-routed retry policy', () => {
     expect(agent.session.events.some(event =>
       event.type === 'llm/retry' && event.data.failure.message === diagnostic,
     )).toBe(true)
+  })
+
+  it('carries structured provider facts from the failure into the durable retry event', async () => {
+    vi.useFakeTimers()
+    // The reported gateway failure shape: a 500 whose recovered facts name
+    // the status and the provider's structural error type. The retry event
+    // must retain every fact the adapter captured so replay and UI can
+    // branch without re-parsing display text.
+    const adapter = new ScriptedAdapter([
+      new LlmError('Internal server error', 'SERVER', {
+        status: 500,
+        providerType: 'error',
+        requestId: ProviderRequestId('req_flat_500'),
+      }),
+      textResponse('recovered after structured retry'),
+    ])
+    ;({ ctx: context } = await harness(adapter, { mock: normalConfig({
+      backoff: { initialDelayMs: 1, maxDelayMs: 1 },
+    }) }))
+    const agent = context.agentLoop.create(SessionId('retry-structured-facts'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+    const scheduled = waitForRetry(context, agent, 1)
+
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'retry me' }], source: { kind: 'user' } }))
+    await scheduled
+
+    const retryEvent = agent.session.events.find((event): event is SessionEvent<'llm/retry'> =>
+      event.type === 'llm/retry')
+    expect(retryEvent).toBeDefined()
+    expect(retryEvent?.data.failure).toEqual({
+      message: 'Internal server error',
+      code: 'SERVER',
+      status: 500,
+      providerType: 'error',
+      requestId: ProviderRequestId('req_flat_500'),
+    })
   })
 
   it('lets downstream specialized recovery run before always fallback', async () => {

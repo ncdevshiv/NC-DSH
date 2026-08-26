@@ -2994,7 +2994,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         writable: true,
         hasDocument: true,
         namespaces: [{
-          ns: 'llm-deepseek',
+          ns: 'llm-ai-sdk',
           schema: {},
           value: { apiKeyEnv: 'DEEPSEEK_API_KEY' },
           applies: 'live',
@@ -3040,12 +3040,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     llm: {
       providers: request => ok(request, {
         providers: [
-          { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [], active: true },
-          { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true, declared: false },
-          { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'anthropic'], active: false, declared: false },
+          { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-ai-sdk', settingsPath: [], active: true },
+          { provider: 'openai', displayName: 'openai', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'openai'], active: true, declared: false },
+          { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'anthropic'], active: false, declared: false },
           // One hand-declared route, so a surface reading this fixture meets
           // the tagged shape rather than only the shipped one.
-          { provider: 'acme-gateway', displayName: 'Acme Gateway', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'acme-gateway'], active: true, declared: true },
+          { provider: 'acme-gateway', displayName: 'Acme Gateway', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'acme-gateway'], active: true, declared: true },
         ],
       }),
       models: request => ok(request, { groups: fixtureModelGroups(), failures: [] }),

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-25-toolchain-floor-bump-wave.md
+2026-08-25-toolchain-floor-bump-wave.md: 4c466426512136fedac6cf95d6b76d117743bbdf
+2026-08-25-toolchain-floor-bump-wave.zh.md: d88a15c891b3edfaf76ae4e239f69fed1f141bb1

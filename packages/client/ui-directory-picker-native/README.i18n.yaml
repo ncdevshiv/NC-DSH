@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write packages/client/ui-directory-picker-native/README.md
-README.md: feb944b38a17086e0fcc6e4da52e1f16a4055166
-README.zh.md: 0420fb4d5edc0c05ce72d68243c7377b144ee639
+README.md: 2b8a7d081142ec82f2bf3da7ae59b75315a1608d
+README.zh.md: 757b760af4a8e5e4dc4c3eff3aeb9b59e304e732

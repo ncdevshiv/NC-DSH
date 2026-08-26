@@ -12,9 +12,10 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { EMPTY_RESPONSE_CODE } from './error.ts'
 
 const DEFAULT_MAX_RETRIES = 5
-const DEFAULT_INITIAL_DELAY_MS = 500
+const DEFAULT_INITIAL_DELAY_MS = 2_000
 const DEFAULT_MAX_DELAY_MS = 10_000
 const DEFAULT_JITTER_RATIO = 0.1
+const DEFAULT_DOUBLE_EVERY_RETRIES = 10
 const DEFAULT_RETRYABLE_CODES = Object.freeze([
   EMPTY_RESPONSE_CODE,
   'RATE_LIMIT',
@@ -23,14 +24,16 @@ const DEFAULT_RETRYABLE_CODES = Object.freeze([
   'TRANSPORT',
 ])
 
-/** Bounded exponential backoff with symmetric jitter around each local delay. */
+/** Bounded stepped backoff with symmetric jitter around each local delay. */
 export interface BackoffConfig {
-  /** Initial local exponential-backoff delay in milliseconds (default 500). */
+  /** Initial local backoff delay in milliseconds (default 2000). */
   initialDelayMs?: number
   /** Maximum locally scheduled or accepted provider delay in milliseconds (default 10000). */
   maxDelayMs?: number
   /** Symmetric random multiplier range around one (default 0.1). */
   jitterRatio?: number
+  /** Consecutive retries served at one delay before doubling it (default 10); 1 doubles on every retry. */
+  doubleEveryRetries?: number
 }
 
 /** Current bounded transient retry behavior for one provider route. */
@@ -61,6 +64,7 @@ export interface ResolvedRetryBackoff {
   readonly initialDelayMs: number
   readonly maxDelayMs: number
   readonly jitterRatio: number
+  readonly doubleEveryRetries: number
 }
 
 /** Fully resolved bounded transient retry policy. */
@@ -82,6 +86,7 @@ const backoffSchema: z<BackoffConfig> = z.object({
   initialDelayMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_INITIAL_DELAY_MS),
   maxDelayMs: z.number().max(MAX_TIMER_DELAY_MS).default(DEFAULT_MAX_DELAY_MS),
   jitterRatio: z.number().min(0).max(1).default(DEFAULT_JITTER_RATIO),
+  doubleEveryRetries: z.number().step(1).min(1).default(DEFAULT_DOUBLE_EVERY_RETRIES),
 })
 
 const normalPolicySchema: z<NormalRetryPolicyConfig> = z.object({
@@ -110,7 +115,9 @@ const NORMAL_POLICY_KEYS: ReadonlySet<string> = new Set([
 const ALWAYS_POLICY_KEYS: ReadonlySet<string> = new Set([
   'mode', 'maxRetries', 'retryableCodes', 'backoff',
 ])
-const BACKOFF_KEYS: ReadonlySet<string> = new Set(['initialDelayMs', 'maxDelayMs', 'jitterRatio'])
+const BACKOFF_KEYS: ReadonlySet<string> = new Set([
+  'initialDelayMs', 'maxDelayMs', 'jitterRatio', 'doubleEveryRetries',
+])
 
 function validateKeys(value: object, allowed: ReadonlySet<string>, path: string): void {
   for (const key of Object.keys(value)) {
@@ -123,6 +130,7 @@ function resolveBackoff(config: BackoffConfig | undefined, path: string): Resolv
   const initialDelayMs = config?.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS
   const maxDelayMs = config?.maxDelayMs ?? DEFAULT_MAX_DELAY_MS
   const jitterRatio = config?.jitterRatio ?? DEFAULT_JITTER_RATIO
+  const doubleEveryRetries = config?.doubleEveryRetries ?? DEFAULT_DOUBLE_EVERY_RETRIES
 
   if (!Number.isFinite(initialDelayMs) || initialDelayMs <= 0 || initialDelayMs > MAX_TIMER_DELAY_MS) {
     throw new Error(`${path}.initialDelayMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`)
@@ -136,8 +144,11 @@ function resolveBackoff(config: BackoffConfig | undefined, path: string): Resolv
   if (!Number.isFinite(jitterRatio) || jitterRatio < 0 || jitterRatio > 1) {
     throw new Error(`${path}.jitterRatio must be between 0 and 1`)
   }
+  if (!Number.isSafeInteger(doubleEveryRetries) || doubleEveryRetries < 1) {
+    throw new Error(`${path}.doubleEveryRetries must be a safe integer of at least 1`)
+  }
 
-  return Object.freeze({ initialDelayMs, maxDelayMs, jitterRatio })
+  return Object.freeze({ initialDelayMs, maxDelayMs, jitterRatio, doubleEveryRetries })
 }
 
 /**

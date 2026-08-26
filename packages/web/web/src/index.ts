@@ -22,6 +22,7 @@ export {
   WebError,
 } from './types.ts'
 export type {
+  WebErrorOptions,
   WebFetchBody,
   WebFetchProvider,
   WebFetchRequest,
@@ -31,6 +32,13 @@ export type {
   WebSearchResult,
   WebSearchSource,
 } from './types.ts'
+export {
+  MAX_WEB_ERROR_BODY_CHARS,
+  parseErrorBody,
+  readErrorBody,
+  throwProviderHttpError,
+} from './error-body.ts'
+export type { ErrorBodyRead, ParsedErrorBody } from './error-body.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

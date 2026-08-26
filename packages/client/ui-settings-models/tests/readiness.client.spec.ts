@@ -11,7 +11,7 @@ function row(overrides: Partial<ProviderRow> = {}): ProviderRow {
     entry: {
       provider: 'deepseek-official',
       displayName: 'DeepSeek',
-      settingsNs: 'llm-deepseek',
+      settingsNs: 'llm-ai-sdk',
       settingsPath: [],
       active: true,
     },
@@ -29,7 +29,7 @@ function otherRow(overrides: Partial<ProviderRow> = {}): ProviderRow {
     entry: {
       provider: 'hfai',
       displayName: 'HFAI',
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       settingsPath: ['providers', 'hfai'],
       active: true,
     },

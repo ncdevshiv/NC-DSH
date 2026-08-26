@@ -44,6 +44,15 @@ export interface LlmFailure {
   readonly code: string
   /** HTTP status returned by the provider, when available. */
   readonly status?: number
+  /**
+   * Provider's structural error type, when the adapter captures it (for
+   * example Anthropic's `api_error`, `rate_limit_error`, `overloaded_error`,
+   * `invalid_request_error`, or OpenAI's `server_error`, `rate_limit_error`).
+   * Carried verbatim from the wire so downstream consumers can branch on
+   * the actual cause without re-parsing the message text. Provider-issued;
+   * not normalized.
+   */
+  readonly providerType?: string
   /** Provider-requested delay in milliseconds, when valid and available. */
   readonly providerRetryAfterMs?: number
   /** Opaque provider-issued request identifier for diagnostics. */

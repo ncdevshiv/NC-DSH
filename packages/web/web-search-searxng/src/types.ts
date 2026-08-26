@@ -34,9 +34,3 @@ export interface SearxngSearchResponse {
   /** Structured infobox entities; no portable mapping exists on the seam. */
   infoboxes?: unknown[]
 }
-
-/** SearXNG's error response envelope (best-effort; fields vary by failure). */
-export interface SearxngError {
-  error?: string
-  message?: string
-}

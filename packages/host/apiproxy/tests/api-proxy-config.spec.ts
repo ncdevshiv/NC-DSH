@@ -155,7 +155,7 @@ class BrokenCatalogAdapter extends CatalogAdapter {
   }
 }
 
-const NS = settingsNamespace('llm-deepseek')
+const NS = settingsNamespace('llm-ai-sdk')
 
 const AdapterConfig = z.object({
   apiKey: z.string().role('secret'),
@@ -187,7 +187,7 @@ async function harness(options?: {
   // onboarding allowlists are the proxy's complete settings surface.
   if (options?.configurableProviders !== false) {
     ctx.llm.registerConfigurableProviders([
-      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [] },
+      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-ai-sdk', settingsPath: [] },
     ])
   }
   // Host-stream opener reads the committed-workspace baseline; the stub
@@ -230,8 +230,7 @@ function forwardedSettings(ns: string): HostFrame {
     type: 'host/remote-event',
     event: 'settings/document-updated',
     // The revision is the Host's own counter, so the matcher is the assertion.
-    args: [ns, expect.any(Number)], // oxlint-disable-line typescript/no-unsafe-assignment
-  }
+    args: [ns, expect.any(Number)]   }
 }
 
 describe('settings domain', () => {
@@ -245,7 +244,7 @@ describe('settings domain', () => {
 
   it('describes layered redacted namespaces with their secret slots', async () => {
     const ctx = await harness({ settings: {
-      doc: { 'llm-deepseek': { apiKey: 'user-secret', baseURL: 'https://user' } },
+      doc: { 'llm-ai-sdk': { apiKey: 'user-secret', baseURL: 'https://user' } },
       documentPath: '/tmp/custom-settings.yaml',
     } })
     ctx.settings.register(NS, AdapterConfig, { base: { baseURL: 'https://base' } })
@@ -255,7 +254,7 @@ describe('settings domain', () => {
     expect(value.hasDocument).toBe(true)
     expect(value.namespaces).toHaveLength(1)
     const view = value.namespaces[0]!
-    expect(view.ns).toBe('llm-deepseek')
+    expect(view.ns).toBe('llm-ai-sdk')
     expect(view.applies).toBe('live')
     expect((view.schema as { refs?: unknown }).refs).toBeDefined()
     expect(view.value).toEqual({ apiKeyEnv: 'DEEPSEEK_API_KEY', baseURL: 'https://user' })
@@ -356,7 +355,7 @@ describe('settings domain', () => {
 
     const value = expectOk(await api.settings.describe(request({})))
     expect(value.namespaces.map(view => view.ns)).toEqual([
-      'llm-deepseek', 'some-other-plugin', 'permission', 'ui-theme', 'locale',
+      'llm-ai-sdk', 'some-other-plugin', 'permission', 'ui-theme', 'locale',
       'ui-conversation', 'shell', 'agent-loop', 'web-search-deepseek',
     ])
     const permission = expectOk(await api.settings.mutate(request({
@@ -449,8 +448,8 @@ describe('settings domain', () => {
     ctx.settings.register(NS, AdapterConfig)
     const api = createApiProxy(ctx, DEFAULTS)
     expect(expectOk(await api.settings.describe(request({}))).namespaces.map(view => view.ns))
-      .toEqual(['llm-deepseek'])
-    expect(expectOk(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://x' } }))).value)
+      .toEqual(['llm-ai-sdk'])
+    expect(expectOk(await api.settings.update(request({ ns: 'llm-ai-sdk', patch: { baseURL: 'https://x' } }))).value)
       .toMatchObject({ baseURL: 'https://x' })
   })
 
@@ -464,9 +463,9 @@ describe('settings domain', () => {
     ctx.settings.register(NS, AdapterConfig, { base: { baseURL: 'https://base' } })
     const api = createApiProxy(ctx, DEFAULTS)
     const frames = await collectHost(api, ['host/remote-event'], 1, async () => {
-      await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://base' } }))
+      await api.settings.update(request({ ns: 'llm-ai-sdk', patch: { baseURL: 'https://base' } }))
     })
-    expect(frames).toEqual([forwardedSettings('llm-deepseek')])
+    expect(frames).toEqual([forwardedSettings('llm-ai-sdk')])
     // The resolved value never moved: base already said https://base.
     expect(expectOk(await api.settings.describe(request({}))).namespaces[0]!.value)
       .toEqual({ apiKeyEnv: 'DEEPSEEK_API_KEY', baseURL: 'https://base' })
@@ -507,11 +506,11 @@ describe('settings domain', () => {
     ctx.settings.register(NS, AdapterConfig)
     const api = createApiProxy(ctx, DEFAULTS)
     const opened = expectOk(await api.settings.describe(request({}))).namespaces[0]!.revision
-    expect(expectOk(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://first' }, expectedRevision: opened })))
+    expect(expectOk(await api.settings.update(request({ ns: 'llm-ai-sdk', patch: { baseURL: 'https://first' }, expectedRevision: opened })))
       .revision).toBe(opened + 1)
-    const error = expectErr(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://second' }, expectedRevision: opened })))
+    const error = expectErr(await api.settings.update(request({ ns: 'llm-ai-sdk', patch: { baseURL: 'https://second' }, expectedRevision: opened })))
     expect(error.code).toBe('settings-conflict')
-    expect(error.details).toEqual({ ns: 'llm-deepseek', expected: opened, actual: opened + 1 })
+    expect(error.details).toEqual({ ns: 'llm-ai-sdk', expected: opened, actual: opened + 1 })
     // The refused write changed nothing.
     expect(expectOk(await api.settings.describe(request({}))).namespaces[0]!.user).toEqual({ baseURL: 'https://first' })
   })
@@ -521,27 +520,27 @@ describe('settings domain', () => {
     ctx.settings.register(NS, AdapterConfig, { base: { baseURL: 'https://base' } })
     const api = createApiProxy(ctx, DEFAULTS)
     const frames = await collectHost(api, ['host/remote-event'], 1, async () => {
-      const view = expectOk(await api.settings.update(request({ ns: 'llm-deepseek', patch: { apiKey: 'sk-new', baseURL: 'https://next' } })))
+      const view = expectOk(await api.settings.update(request({ ns: 'llm-ai-sdk', patch: { apiKey: 'sk-new', baseURL: 'https://next' } })))
       expect(view.value).toEqual({ apiKeyEnv: 'DEEPSEEK_API_KEY', baseURL: 'https://next' })
       expect(view.user).toEqual({ baseURL: 'https://next' })
       expect(view.secrets).toEqual([{ path: ['apiKey'], set: true }])
       expect(JSON.stringify(view)).not.toContain('sk-new')
     })
-    expect(frames).toEqual([forwardedSettings('llm-deepseek')])
+    expect(frames).toEqual([forwardedSettings('llm-ai-sdk')])
   })
 
   it('replace resets the user layer wholesale', async () => {
-    const ctx = await harness({ settings: { doc: { 'llm-deepseek': { baseURL: 'https://user' } } } })
+    const ctx = await harness({ settings: { doc: { 'llm-ai-sdk': { baseURL: 'https://user' } } } })
     ctx.settings.register(NS, AdapterConfig)
     const api = createApiProxy(ctx, DEFAULTS)
-    const view = expectOk(await api.settings.replace(request({ ns: 'llm-deepseek', section: {} })))
+    const view = expectOk(await api.settings.replace(request({ ns: 'llm-ai-sdk', section: {} })))
     expect(view.value).toEqual({ apiKeyEnv: 'DEEPSEEK_API_KEY' })
     expect(view.user).toEqual({})
   })
 
   it.each([
     ['an invalid namespace name', 'Not A Namespace', {}],
-    ['a schema-invalid patch', 'llm-deepseek', { baseURL: 42 }],
+    ['a schema-invalid patch', 'llm-ai-sdk', { baseURL: 42 }],
   ])('rejects %s as settings-rejected', async (_case, ns, patch) => {
     const ctx = await harness()
     ctx.settings.register(NS, AdapterConfig)
@@ -571,7 +570,7 @@ describe('settings domain', () => {
     const api = createApiProxy(ctx, DEFAULTS)
     const value = expectOk(await api.settings.describe(request({})))
     expect(value.writable).toBe(false)
-    const error = expectErr(await api.settings.update(request({ ns: 'llm-deepseek', patch: {} })))
+    const error = expectErr(await api.settings.update(request({ ns: 'llm-ai-sdk', patch: {} })))
     expect(error.code).toBe('settings-rejected')
     expect(error.message).toContain('read-only')
   })
@@ -621,19 +620,19 @@ describe('llm domain', () => {
   it('merges the configurable directory with live routes and appends undeclared ones', async () => {
     const ctx = await harness({ configurableProviders: false })
     ctx.llm.registerConfigurableProviders([
-      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [] },
-      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'] },
+      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-ai-sdk', settingsPath: [] },
+      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'openai'] },
     ])
     ctx.llm.registerAdapter(['deepseek-official'], new CatalogAdapter('DeepSeek', ['deepseek-v4-flash']))
     ctx.llm.registerAdapter(['undeclared'], new CatalogAdapter('Undeclared', ['u-1']))
     // Only one namespace can answer an interrogation, so the flag follows the
     // entry's namespace rather than being assumed for every row.
-    ctx.llm.registerModelDiscovery('llm-pi-ai', () => Promise.resolve([]))
+    ctx.llm.registerModelDiscovery('llm-ai-sdk', () => Promise.resolve([]))
     const api = createApiProxy(ctx, DEFAULTS)
     const value = expectOk(await api.llm.providers(request({})))
     expect(value.providers).toEqual([
-      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [], active: true },
-      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: false },
+      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-ai-sdk', settingsPath: [], active: true },
+      { provider: 'openai', displayName: 'openai', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'openai'], active: false },
       // An undeclared live route has no settings address, so nothing can be
       // interrogated on its behalf either.
       { provider: 'undeclared', displayName: 'Undeclared', settingsNs: '', settingsPath: [], active: true },
@@ -676,7 +675,7 @@ describe('llm.discoverModels', () => {
   it('carries a draft to its namespace and returns candidates without storing anything', async () => {
     const ctx = await harness()
     const seen: unknown[] = []
-    ctx.llm.registerModelDiscovery('llm-pi-ai', (probe) => {
+    ctx.llm.registerModelDiscovery('llm-ai-sdk', (probe) => {
       seen.push({ baseURL: probe.baseURL, api: probe.api, apiKey: probe.apiKey })
       return Promise.resolve([
         { id: 'acme-large', name: 'Acme Large', contextWindow: 65_536, maxTokens: 4096 },
@@ -686,7 +685,7 @@ describe('llm.discoverModels', () => {
     const api = createApiProxy(ctx, DEFAULTS)
 
     const value = expectOk(await api.llm.discoverModels(request({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       baseURL: 'https://gateway.acme.example/v1',
       api: 'openai-completions',
       apiKey: 'probe-key',
@@ -704,20 +703,20 @@ describe('llm.discoverModels', () => {
     // Interrogating a draft is a read: no namespace gained a section, and no
     // credential reference was written.
     expect(expectOk(await api.settings.describe(request({}))).namespaces.map(view => view.ns))
-      .not.toContain('llm-pi-ai')
+      .not.toContain('llm-ai-sdk')
   })
 
   it('carries the route being edited so an adapter can answer from its own registry', async () => {
     const ctx = await harness()
     let probe: unknown
-    ctx.llm.registerModelDiscovery('llm-pi-ai', (request_) => {
+    ctx.llm.registerModelDiscovery('llm-ai-sdk', (request_) => {
       probe = request_
       return Promise.resolve([{ id: 'from-registry', contextWindow: 65_536, maxTokens: 4096 }])
     })
     const api = createApiProxy(ctx, DEFAULTS)
 
     const value = expectOk(await api.llm.discoverModels(request({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       provider: 'deepseek',
     })))
 
@@ -729,14 +728,14 @@ describe('llm.discoverModels', () => {
   it('omits a credential and protocol the draft does not name', async () => {
     const ctx = await harness()
     let probe: unknown
-    ctx.llm.registerModelDiscovery('llm-pi-ai', (request_) => {
+    ctx.llm.registerModelDiscovery('llm-ai-sdk', (request_) => {
       probe = request_
       return Promise.resolve([])
     })
     const api = createApiProxy(ctx, DEFAULTS)
 
     expectOk(await api.llm.discoverModels(request({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       baseURL: 'https://gateway.acme.example/v1',
     })))
 
@@ -747,19 +746,19 @@ describe('llm.discoverModels', () => {
 
   it('reports a failed interrogation as the form\'s next move, naming no credential', async () => {
     const ctx = await harness()
-    ctx.llm.registerModelDiscovery('llm-pi-ai', () =>
+    ctx.llm.registerModelDiscovery('llm-ai-sdk', () =>
       Promise.reject(new Error('https://gateway.acme.example/v1/models answered 401; check the API key')))
     const api = createApiProxy(ctx, DEFAULTS)
 
     const error = expectErr(await api.llm.discoverModels(request({
-      settingsNs: 'llm-pi-ai',
+      settingsNs: 'llm-ai-sdk',
       baseURL: 'https://gateway.acme.example/v1',
       apiKey: 'wrong',
     })))
 
     expect(error.code).toBe('model-discovery-failed')
     expect(error.message).toContain('answered 401; check the API key')
-    expect(error.details).toEqual({ settingsNs: 'llm-pi-ai', baseURL: 'https://gateway.acme.example/v1' })
+    expect(error.details).toEqual({ settingsNs: 'llm-ai-sdk', baseURL: 'https://gateway.acme.example/v1' })
     expect(JSON.stringify(error)).not.toContain('wrong')
   })
 
@@ -768,7 +767,7 @@ describe('llm.discoverModels', () => {
     const api = createApiProxy(ctx, DEFAULTS)
 
     const error = expectErr(await api.llm.discoverModels(request({
-      settingsNs: 'llm-deepseek',
+      settingsNs: 'llm-ai-sdk',
       baseURL: 'https://api.deepseek.com',
     })))
 

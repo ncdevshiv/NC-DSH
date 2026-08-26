@@ -29,12 +29,12 @@ export function apply(ctx: ClientContext): void {
   // generator makes the two registrations one transactional effect. The
   // outer/inner nesting order is arbitrary; neither hole has precedence.
   ctx.slots.inject('conversation.hero.workspace.directoryFlow', () =>
-    ctx.slots.inject('sidebar.workspaces.directoryFlow', function* () {
+    ctx.slots.inject('sidebar.section.directoryFlow', function* () {
       yield ctx.slots.register({
         name: 'conversation.hero.workspace.directoryFlow', inject: injected,
       }, NativeDirectoryFlow)
       yield ctx.slots.register({
-        name: 'sidebar.workspaces.directoryFlow', inject: injected,
+        name: 'sidebar.section.directoryFlow', inject: injected,
       }, NativeDirectoryFlow)
     }))
 }

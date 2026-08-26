@@ -219,6 +219,15 @@ interface LlmFailure {
   readonly code: string
   /** HTTP status returned by the provider, when available. */
   readonly status?: number
+  /**
+   * Provider's structural error type, when the adapter captures it (for
+   * example Anthropic's `api_error`, `rate_limit_error`, `overloaded_error`,
+   * `invalid_request_error`, or OpenAI's `server_error`, `rate_limit_error`).
+   * Carried verbatim from the wire so downstream consumers can branch on
+   * the actual cause without re-parsing the message text. Provider-issued;
+   * not normalized.
+   */
+  readonly providerType?: string
   /** Provider-requested delay in milliseconds, when valid and available. */
   readonly providerRetryAfterMs?: number
   /** Opaque provider-issued request identifier for diagnostics. */
@@ -703,9 +712,9 @@ interface PreparedLlmCall {
 ```ts public-api
 /**
  * Provider-wire adapter for the harness message and stream vocabulary. Register implementations
- * with `ctx.llm.registerAdapter(providers, adapter)`. Every provider HTTP request must include
- * `attributionHeaders()`; prove the headers are added in the wire request or library header hook. The direct-fetch
- * DeepSeek and library-backed pi-ai adapters meet this contract through different internals.
+ * with `ctx.llm.registerAdapter(providers, adapter)`. An adapter that owns its provider HTTP
+ * headers includes `attributionHeaders()` on every request; a transport driven by a separate
+ * process carries that process's identity instead.
  */
 declare abstract class LlmAdapter {
   /**
@@ -885,7 +894,7 @@ async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<Prepared
 stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:285`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts:298`](../../packages/llm/llm/src/index.ts)
 
 <a id="llm-events"></a>
 

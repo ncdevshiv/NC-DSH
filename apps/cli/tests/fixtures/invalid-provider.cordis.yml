@@ -1,7 +1,8 @@
 # Invalid `--patch` overlay used to prove boot failures settle and exit.
 
-- id: llm-pi-ai
+- id: llm-ai-sdk
   config:
     providers:
-      - provider: openai
-        apiKey: keyless-invalid-shape
+      deepseek-official:
+        models:
+          - providerless-invalid-shape

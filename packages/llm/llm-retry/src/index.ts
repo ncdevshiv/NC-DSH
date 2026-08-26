@@ -56,15 +56,24 @@ async function settleDownstream(
 }
 
 function localDelay(config: ResolvedRetryPolicy, retry: number, random: () => number): number {
-  const exponent = Math.min(retry - 1, 1024)
-  const exponential = Math.min(config.initialDelayMs * 2 ** exponent, config.maxDelayMs)
+  // One delay tier serves doubleEveryRetries consecutive retries, so a
+  // transient crash recovers at the flat initial delay and only a sustained
+  // outage escalates.
+  const exponent = Math.min(Math.floor((retry - 1) / config.doubleEveryRetries), 1024)
+  const stepped = Math.min(config.initialDelayMs * 2 ** exponent, config.maxDelayMs)
   const jitter = 1 - config.jitterRatio + 2 * config.jitterRatio * random()
-  return Math.min(exponential * jitter, config.maxDelayMs)
+  return Math.min(stepped * jitter, config.maxDelayMs)
 }
 
 function retryPolicyKey(policy: ResolvedRetryPolicy): string {
   return policy.mode === 'always'
-    ? JSON.stringify([policy.mode, policy.initialDelayMs, policy.maxDelayMs, policy.jitterRatio])
+    ? JSON.stringify([
+      policy.mode,
+      policy.initialDelayMs,
+      policy.maxDelayMs,
+      policy.jitterRatio,
+      policy.doubleEveryRetries,
+    ])
     : JSON.stringify([
       policy.mode,
       policy.maxRetries,
@@ -72,6 +81,7 @@ function retryPolicyKey(policy: ResolvedRetryPolicy): string {
       policy.initialDelayMs,
       policy.maxDelayMs,
       policy.jitterRatio,
+      policy.doubleEveryRetries,
     ])
 }
 

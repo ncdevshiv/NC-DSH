@@ -3,11 +3,12 @@
   config:
     path: ../../cordis.yml
     patches:
-      - id: llm-deepseek
+      - id: llm-ai-sdk
         config:
-          baseURL: !!js process.env.DSH_SNAPSHOT_BASE_URL
-          thinking: enabled
-          reasoningEffort: low
+          providers:
+            deepseek-official:
+              reasoningEffort: low
+              baseURL: !!js process.env.DSH_SNAPSHOT_BASE_URL
           streamIdleTimeoutMs: 150
       - id: agent-spine
         config:

@@ -120,11 +120,38 @@ export interface WebFetchProvider {
 }
 
 /**
+ * Structured provider facts accepted by {@link WebError} alongside the
+ * standard cause chaining.
+ */
+export interface WebErrorOptions extends ErrorOptions {
+  /** HTTP status of the provider response that failed, when known. */
+  status?: number
+  /**
+   * Provider's structural error type from the response body, when captured
+   * (for example Anthropic's `api_error` or OpenAI's `rate_limit_error`).
+   * Carried verbatim so consumers can branch without parsing the message.
+   */
+  providerType?: string
+}
+
+/**
  * Typed web error with a machine-routable, open-string `code` and chained `cause`.
  * Consumers must tolerate provider-specific codes. Shared codes cover unavailable,
  * missing, unusable, ambiguous, or duplicate providers, cancellation, and provider failure;
  * the local fetch provider additionally distinguishes invalid or blocked URLs, redirects,
  * size and timeout limits, and unsupported content types. Tool execution exposes the code in
- * structured error metadata.
+ * structured error metadata. Provider HTTP failures also carry `status` and, when the
+ * body named one, `providerType`.
  */
-export class WebError extends HarnessError {}
+export class WebError extends HarnessError {
+  /** HTTP status of the failed provider response, when known. */
+  readonly status?: number
+  /** Provider's structural error type from the response body, when captured. */
+  readonly providerType?: string
+
+  constructor(message: string, code: string, options?: WebErrorOptions) {
+    super(message, code, options)
+    if (options?.status !== undefined) this.status = options.status
+    if (options?.providerType !== undefined) this.providerType = options.providerType
+  }
+}

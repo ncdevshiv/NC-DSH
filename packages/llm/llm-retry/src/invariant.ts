@@ -31,6 +31,12 @@ function validateFailure(value: unknown, fail: InvariantFailure): asserts value 
     && (!Number.isInteger(failure.status) || failure.status < 100 || failure.status > 599)) {
     fail('llm/retry failure.status must be an integer from 100 through 599 when present')
   }
+  if (failure.providerType !== undefined
+    && (typeof failure.providerType !== 'string'
+      || failure.providerType.length === 0
+      || failure.providerType.length > 128)) {
+    fail('llm/retry failure.providerType must be a non-empty string of at most 128 characters when present')
+  }
   if (failure.providerRetryAfterMs !== undefined
     && (!Number.isFinite(failure.providerRetryAfterMs) || failure.providerRetryAfterMs <= 0)) {
     fail('llm/retry failure.providerRetryAfterMs must be a positive finite number when present')

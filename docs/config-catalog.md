@@ -964,314 +964,96 @@ export interface Config {
 
 Source: [`packages/jobs/jobs-local/src/index.ts:31`](../packages/jobs/jobs-local/src/index.ts)
 
-<a id="deepseek-aidsh-llm-deepseek"></a>
+<a id="deepseek-aidsh-llm-ai-sdk"></a>
 
-## `@deepseek-ai/dsh-llm-deepseek`
+## `@deepseek-ai/dsh-llm-ai-sdk`
 
 Requires: `llm`
 
 ```ts config-catalog
 /**
- * Connection and request facts for the one provider route this plugin owns.
- * Every field is optional in yml: a missing API key resolves through
- * {@link Config.apiKeyEnv} at each request (a request without
- * any key fails with `MISSING_CREDENTIAL`, not at plugin load), omitted
- * thinking mode uses the provider default, and omitted reasoning effort
- * resolves to `high`.
+ * Plugin configuration. Every field is optional in yml: with no stored
+ * configuration the plugin serves the default `deepseek-official` route
+ * against the public endpoint with the `DEEPSEEK_API_KEY` reference.
  */
 export interface Config {
-  /** Credential reference (environment-variable name) resolved per request; defaults to `DEEPSEEK_API_KEY`. */
+  /**
+   * Absolute path of the `ai-sidecar` executable. Falls back to
+   * $DSH_AI_SDK_SIDECAR from a trusted environment layer. Unset everywhere,
+   * the first request fails loud (`CONFIG`) with setup guidance — the web
+   * Models page stays reachable so the path can be configured after boot.
+   */
+  binaryPath?: string
+  /** Provider routes keyed by route id; omission keeps the default DeepSeek route. */
+  providers?: Record<string, ProviderProfile>
+  /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
+  streamIdleTimeoutMs?: number
+  /** Shared model-request retry policy; omission uses normal mode defaults. */
+  retryPolicy?: RetryPolicyConfig
+}
+
+/** One provider profile on this plugin's config; the dict key is the route. */
+export interface ProviderProfile {
+  /** Selector label; defaults to the route key. */
+  displayName?: string
+  /** Credential reference (environment-variable name) resolved per request; omission derives `<ROUTE>_API_KEY` with non-alphanumeric runs replaced by underscores. */
   apiKeyEnv?: string
-  /** Endpoint base; falls back to $DEEPSEEK_BASE_URL from a trusted environment layer, then the public API. */
+  /** Endpoint base. Native SDK ids (anthropic, google) may omit it; OpenAI-compatible custom ids cannot. */
   baseURL?: string
-  /** Deployment thinking policy; `disabled` limits every conversation request to `off`. */
-  thinking?: 'enabled' | 'disabled'
-  /** Default thinking effort (default `high`); `off` disables thinking per request. */
-  reasoningEffort?: 'off' | 'low' | 'high' | 'max'
-  /** Default per-request output cap (default 256,000); a model's own cap and explicit request values win. */
+  /** Wire dialect of the endpoint; omission derives from the route id (`anthropic` and `google` stay native, everything else speaks OpenAI-compatible). */
+  api?: RouteApiKind
+  /** Advisory models shown by discovery consumers; requests remain unrestricted. */
+  models?: AiSdkCatalogModel[]
+  /** Default per-request output cap (default 256,000); explicit request values win. */
   maxTokens?: number
   /** Positive context capacity used when the selected model has no exact value (default 1,000,000). */
   defaultContextWindow?: number
-  /** Advisory models shown by discovery consumers; defaults to V4 Flash and V4 Pro. */
-  models?: DeepSeekCatalogModel[]
-  /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
-  streamIdleTimeoutMs?: number
-  /** Maximum accumulated base64 image payload per request (default 20 MiB). */
+  /** Reasoning efforts selectable for this route (default off/low/high/max). */
+  reasoningEfforts?: ('off' | 'low' | 'high' | 'max')[]
+  /**
+   * Default thinking effort materialized into requests when callers omit one
+   * (`high`); `off` disables thinking per request.
+   */
+  reasoningEffort?: 'off' | 'low' | 'high' | 'max'
+  /** Maximum accumulated base64 image payload per request on this route (default 20 MiB). */
   maxRequestImageBytes?: number
-  /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
-  retryPolicy?: RetryPolicyConfig
 }
 
-/** One optional model entry advertised by the direct-fetch adapter. */
-export interface DeepSeekCatalogModel {
-  /** Wire model id accepted by the configured endpoint. */
+/**
+ * Wire dialects a route may declare. `openai-compatible` serves every
+ * OpenAI Chat Completions gateway including custom ids; `anthropic` and
+ * `google` select the sidecar's native adapters for endpoints whose URL
+ * alone cannot identify the format.
+ */
+export type RouteApiKind = SidecarApiKind
+
+/** One advisory catalog model of a resolved route. */
+export interface AiSdkCatalogModel {
+  /** Model id the sidecar route accepts. */
   id: string
-  /** Selector label; defaults to {@link id}. */
+  /** Human-readable name for selectors when the composition supplies one. */
   name?: string
-  /** Optional selector detail for deployments with similar model variants. */
+  /** Optional user-facing distinction from otherwise similar models. */
   description?: string
-  /** Known combined request/response context capacity; omitted when deployment metadata is unavailable. */
+  /** Maximum combined request and response context, when declared. */
   contextWindow?: number
-  /** Per-request output cap for this model; omission falls back to the profile's {@link DeepSeekConnectionOptions.maxTokens}. */
+  /** Maximum output tokens, when declared. */
   maxTokens?: number
-  /** Accepted request modalities; omission is text-only. */
-  inputModalities?: ModelModality[]
+  /** Accepted request modalities; absent means unknown, never negative capability. */
+  inputModalities?: readonly ('text' | 'image')[]
 }
+
+/**
+ * Wire dialects the sidecar can serve a route with. `openai-compatible`
+ * covers every OpenAI Chat Completions gateway including custom ids;
+ * `anthropic` and `google` select the SDK's native adapters.
+ */
+export type SidecarApiKind = 'openai-compatible' | 'anthropic' | 'google'
 ```
 
-Depends on: [`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
+Depends on: [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
 
-Source: [`packages/llm/llm-deepseek/src/index.ts:71`](../packages/llm/llm-deepseek/src/index.ts)
-
-<a id="deepseek-aidsh-llm-pi-ai"></a>
-
-## `@deepseek-ai/dsh-llm-pi-ai`
-
-Requires: `llm`
-
-```ts config-catalog
-/** Plugin configuration: the provider routes this instance owns. */
-export interface Config {
-  /**
-   * pi-ai provider routes, keyed by provider. An empty (or omitted) dict is
-   * the dormant settings-driven posture: the adapter mounts with no routes
-   * and registers them the moment a settings section supplies profiles.
-   */
-  providers?: Record<string, PiAiProviderProfile>
-}
-
-/** Configuration for one pi-ai provider route; the `providers` dict key IS the route. */
-export interface PiAiProviderProfile {
-  /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
-  apiKeyEnv?: string
-  /** Name shown by configuration surfaces; defaults to the route key. */
-  displayName?: string
-  /**
-   * Wire protocol every model on this route speaks. Omission keeps each
-   * installed catalog model's own protocol, which is why a catalog route needs
-   * no protocol at all; a route the catalog does not ship must name one.
-   */
-  api?: string
-  /** Endpoint for this route's models; defaults to the installed catalog's endpoint. */
-  baseURL?: string
-  /**
-   * This route's model catalog. Omission serves the installed catalog for the
-   * route unchanged; an explicit list replaces it, each entry defaulting its
-   * unset fields from the installed model of the same id.
-   */
-  models?: PiAiModelProfile[]
-  /**
-   * Installed-catalog customizations by model id: each entry reshapes that
-   * one model with the same fields a {@link models} entry takes, while the
-   * rest of the catalog keeps serving untouched. Only meaningful on a catalog
-   * route with no `models` list — `models` already replaces the catalog, so
-   * an override beside it, on a route the catalog does not ship, or naming a
-   * model the catalog does not describe is refused rather than skipped.
-   */
-  modelOverrides?: Record<string, PiAiModelOverride>
-  /**
-   * pi-ai wire-compatibility switches defaulting every model on this route
-   * whose protocol declares them; each model's own `compat` overrides per
-   * field. What neither sets keeps the installed catalog entry's value, then
-   * pi-ai's own detection. A switch no model on the route could read is
-   * refused rather than left looking applied.
-   */
-  compat?: PiAiCompatProfile
-  /**
-   * Context capacity for a model this route lists that neither the entry nor
-   * the installed catalog sizes (default 262,144). A guess by construction, so
-   * a deployment whose gateway serves smaller models corrects it here.
-   */
-  defaultContextWindow?: number
-  /**
-   * Output capability for a model this route lists that neither the entry nor
-   * the installed catalog sizes (default 32,768). This sizes the model; it
-   * never becomes a per-request cap on its own.
-   */
-  defaultMaxTokens?: number
-  /**
-   * Request modalities for a model this route lists that neither its entry's
-   * {@link PiAiModelProfile.input} nor the installed catalog declares (default
-   * `[text]`). A fallback like the capacities above, not an override: a
-   * catalog model keeps the modalities the catalog records for it, and this
-   * value never narrows one. A gateway serving vision models the catalog does
-   * not describe declares `[text, image]` once here instead of on every entry.
-   * Unlike an entry's list, this one may not be empty — nothing sits below it
-   * to answer instead.
-   */
-  defaultInput?: PiAiModality[]
-  /** Provider request headers; Harness attribution wins reserved names. */
-  headers?: Record<string, string>
-  /** Provider-neutral pi-ai reasoning level. */
-  reasoning?: ModelThinkingLevel
-  /** Token budgets used by reasoning providers that support them. */
-  thinkingBudgets?: ThinkingBudgets
-  /** Prompt-cache retention preference. */
-  cacheRetention?: CacheRetention
-  /** Streaming transport preference. */
-  transport?: Transport
-  /** HTTP/provider SDK timeout in milliseconds. */
-  timeoutMs?: number
-  /** WebSocket connection timeout in milliseconds. */
-  websocketConnectTimeoutMs?: number
-  /** Maximum provider idle time while one stream read is outstanding. */
-  streamIdleTimeoutMs?: number
-  /**
-   * Maximum base64-encoded image payload per request. When a request's
-   * accumulated images exceed it, the oldest images are replaced by text
-   * placeholders until the request fits, so a long session keeps completing
-   * requests instead of being rejected by a request-size cap.
-   */
-  maxRequestImageBytes?: number
-  /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
-  retryPolicy?: RetryPolicyConfig
-}
-
-/** One configured model entry: an id plus the catalog fields it overrides. */
-export interface PiAiModelProfile {
-  /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
-  id: string
-  /** Display name for selectors; defaults to the catalog name, then the id. */
-  name?: string
-  /** Maximum combined request and response context in tokens. */
-  contextWindow?: number
-  /**
-   * Maximum output tokens. Configuring one also makes it this model's
-   * per-request default; a value inherited from the installed catalog, or the
-   * route's fallback, is the model's capability and never becomes a request
-   * default on its own.
-   */
-  maxTokens?: number
-  /**
-   * Request modalities this model accepts. Absent — or empty, which describes
-   * a model that accepts nothing and so states no answer either — keeps the
-   * installed catalog entry's modalities, then the route's `defaultInput`.
-   * Declaring images is what makes a hand-declared vision model usable, and
-   * declaring text alone corrects a catalog model whose gateway does not serve
-   * what the catalog records. This is a claim about the endpoint, not a check
-   * of it: nothing interrogates a gateway for what it accepts, so a model
-   * claiming images its endpoint refuses is refused by the provider instead,
-   * mid-turn.
-   */
-  input?: PiAiModality[]
-  /**
-   * Selectable reasoning efforts. Absent inherits the installed catalog
-   * entry's capability (a hand-declared model has none and does not reason);
-   * `false` declares a non-reasoning model, which is how a profile strips
-   * reasoning from a catalog model its gateway cannot serve; a non-empty dict
-   * declares the offered levels and their wire spellings.
-   */
-  reasoningEfforts?: false | PiAiReasoningEfforts
-  /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */
-  compat?: PiAiCompatProfile
-}
-
-/**
- * Customization of one installed catalog model, keyed by its id in the
- * route's `modelOverrides` dict — the same fields a `models` entry may set,
- * with the id living in the key. Unlike a `models` list, overrides leave the
- * rest of the catalog serving untouched, which is what makes "correct one
- * model, keep the other thirty-seven" a three-line edit.
- */
-export type PiAiModelOverride = Omit<PiAiModelProfile, 'id'>
-
-/**
- * pi-ai wire-compatibility switches, set on the route (its models' default) or
- * per model (winning over the route, field by field).
- *
- * pi-ai decides each of these from the provider id and baseURL when no layer
- * sets it, and a private gateway's URL says nothing: for an endpoint it does
- * not recognize the detection answers as though it were OpenAI itself, which
- * is wrong for most OpenAI-compatible gateways. So every field here is one a
- * deployment must be able to state because nothing can infer it, while the
- * fields pi-ai's catalog sets for a named vendor stay withheld.
- *
- * A field belongs to the protocols whose upstream compat type declares it: a
- * model-level switch its protocol does not take fails resolution, and a
- * route-level one skips past models it cannot fit. "The three Responses
- * protocols" below means `openai-responses`, `azure-openai-responses`, and
- * `openai-codex-responses`, which pi-ai gives one shared compat type, so a
- * switch settable on one is settable on all three.
- */
-export interface PiAiCompatProfile {
-  /** Whether the endpoint accepts `store`; `openai-completions`. */
-  supportsStore?: boolean
-  /**
-   * Whether the endpoint accepts the `developer` role for the system prompt,
-   * which pi-ai sends only to a reasoning model; `false` keeps `system`.
-   * `openai-completions` and the three Responses protocols.
-   */
-  supportsDeveloperRole?: boolean
-  /** Whether the endpoint accepts `reasoning_effort`; `openai-completions`. */
-  supportsReasoningEffort?: boolean
-  /** Whether the endpoint accepts `stream_options: {include_usage: true}`; `openai-completions`. */
-  supportsUsageInStreaming?: boolean
-  /** Which output-cap field the endpoint reads; `openai-completions`. */
-  maxTokensField?: NonNullable<OpenAICompletionsCompat['maxTokensField']>
-  /** Whether tool results must carry `name`; `openai-completions`. */
-  requiresToolResultName?: boolean
-  /** Whether a user message after tool results needs an assistant message between; `openai-completions`. */
-  requiresAssistantAfterToolResult?: boolean
-  /** Whether thinking blocks must travel as text in `<thinking>` delimiters; `openai-completions`. */
-  requiresThinkingAsText?: boolean
-  /** Whether replayed assistant messages need an empty `reasoning_content` while reasoning is on; `openai-completions`. */
-  requiresReasoningContentOnAssistantMessages?: boolean
-  /** Reasoning parameter format the endpoint expects; `openai-completions`. */
-  thinkingFormat?: PiAiThinkingFormat
-  /**
-   * Kwargs sent as `chat_template_kwargs`, which pi-ai reads only under the
-   * two `chat-template` thinking formats; `openai-completions`. Nothing checks
-   * that pairing: the format in force may come from the installed catalog
-   * entry or from pi-ai's own baseURL detection, neither of which resolution
-   * can read, so kwargs set beside another format are sent nowhere.
-   */
-  chatTemplateKwargs?: NonNullable<OpenAICompletionsCompat['chatTemplateKwargs']>
-  /**
-   * Whether the endpoint accepts `strict` in tool definitions;
-   * `openai-completions`, the three Responses protocols, `bedrock-converse-stream`.
-   */
-  supportsStrictMode?: boolean
-  /** Prompt-cache marker convention; `openai-completions`. */
-  cacheControlFormat?: NonNullable<OpenAICompletionsCompat['cacheControlFormat']>
-  /**
-   * Whether the endpoint accepts long prompt-cache retention;
-   * `openai-completions`, the three Responses protocols, `anthropic-messages`.
-   */
-  supportsLongCacheRetention?: boolean
-  /** Whether the endpoint accepts per-tool `eager_input_streaming`; `anthropic-messages`. */
-  supportsEagerToolInputStreaming?: boolean
-  /** Whether the endpoint accepts `cache_control` on tool definitions; `anthropic-messages`. */
-  supportsCacheControlOnTools?: boolean
-  /** Whether the endpoint accepts the `temperature` request field; `anthropic-messages`. */
-  supportsTemperature?: boolean
-  /** Whether to force adaptive thinking regardless of model id; `anthropic-messages`. */
-  forceAdaptiveThinking?: boolean
-  /** Whether to replay an empty thinking signature instead of converting thinking to text; `anthropic-messages`. */
-  allowEmptySignature?: boolean
-  /** Whether the endpoint accepts Anthropic strict tool schemas; `anthropic-messages`. */
-  supportsStrictTools?: boolean
-}
-
-/** One request modality a pi-ai model may accept. */
-export type PiAiModality = Model<Api>['input'][number]
-
-/**
- * Selectable reasoning efforts for one model: each key is a level the model
- * offers (and selectors show), and its value is the wire spelling dispatch
- * sends for it. `off` alone may leave its value empty — "supported, send
- * nothing" — because for most providers not thinking is the parameter's
- * absence; every other declared level must name a wire value. A level absent
- * from the dict is not offered.
- */
-export type PiAiReasoningEfforts = Partial<Record<ModelThinkingLevel, string | null>>
-
-/** One reasoning-dispatch wire format a profile may name. */
-export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFormat']>
-```
-
-Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
-
-Source: [`packages/llm/llm-pi-ai/src/config.ts:201`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-ai-sdk/src/index.ts:114`](../packages/llm/llm-ai-sdk/src/index.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 
@@ -3119,7 +2901,7 @@ export interface WebRuntimeConfig {
 }
 ```
 
-Source: [`packages/web/web/src/index.ts:55`](../packages/web/web/src/index.ts)
+Source: [`packages/web/web/src/index.ts:63`](../packages/web/web/src/index.ts)
 
 <a id="deepseek-aidsh-web-app"></a>
 
@@ -3146,7 +2928,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:42`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:41`](../packages/bundle/web-app/src/index.ts)
 
 <a id="deepseek-aidsh-web-fetch-http"></a>
 
@@ -3344,6 +3126,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-directory-picker-browse` ([`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-directory-picker-native` ([`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-goal` ([`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-home-section` ([`packages/client/ui-home-section/src/index.ts`](../packages/client/ui-home-section/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-input-trigger` ([`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-jobs` ([`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-layout` ([`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts))
@@ -3361,10 +3144,12 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-skill` ([`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-subagent` ([`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-team-section` ([`packages/client/ui-team-section/src/index.ts`](../packages/client/ui-team-section/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-theme` ([`packages/client/ui-theme/src/index.ts`](../packages/client/ui-theme/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-tool` ([`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-trajectory` ([`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-user-questions` ([`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-work-section` ([`packages/client/ui-work-section/src/index.ts`](../packages/client/ui-work-section/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workflow-run` ([`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-workspace` ([`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts))
 - `@deepseek-ai/dsh-command-compact` — requires `commands` · `compaction` ([`packages/compaction/command-compact/src/index.ts`](../packages/compaction/command-compact/src/index.ts))

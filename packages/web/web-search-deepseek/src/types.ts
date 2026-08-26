@@ -41,9 +41,3 @@ export type ContentBlock = WebSearchToolResultBlock | TextBlock | { type: string
 export interface AnthropicResponse {
   content?: ContentBlock[]
 }
-
-/** DeepSeek's error response envelope (best-effort; fields vary). */
-export interface AnthropicError {
-  error?: { message?: string } | string
-  message?: string
-}

@@ -130,7 +130,7 @@ vendor manifest 守卫检查 `vendor/*/src` 下的改动是否连同对应的 `v
 
 **等 oxfmt 稳定后再采用它**：它是唯一不会在 oxlint 之外引入第二个 lint/format 供应商的选项，而同时维护两套风格策略的跨包成本是唯一能证明一次性大型格式化 commit 合理的论据。
 
-Python 端由 `ruff format` 承担同样角色，已由 `bun run python:format` 接入（见 [Python 贡献者工作流](development.md#lint-and-type-check)）。
+Python 端由 `ruff format` 承担同样角色，已由 `bun run python:format` 接入（见 [Python 贡献者工作流](../python/development.md#lint-and-type-check)）。
 
 ### CI 门禁
 

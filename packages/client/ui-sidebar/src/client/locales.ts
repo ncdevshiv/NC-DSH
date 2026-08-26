@@ -1,4 +1,4 @@
-/** `sidebar` namespace dictionaries: shell controls (brand row, New Session, fold toggle). */
+/** `sidebar` namespace dictionaries: shell controls (brand row, New Session, fold toggle, section tabs). */
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
@@ -8,6 +8,10 @@ export const zh = {
   'session.new.failed': '新建会话失败：{message}',
   'toggle.open': '打开侧边栏',
   'toggle.collapse': '收起侧边栏',
+  'section.home': '首页',
+  'section.code': '代码',
+  'section.work': '工作',
+  'section.team': '团队',
 } satisfies Record<string, string>
 
 /** The sidebar namespace key union. */
@@ -21,4 +25,8 @@ export const en = {
   'session.new.failed': 'New session failed: {message}',
   'toggle.open': 'Open sidebar',
   'toggle.collapse': 'Collapse sidebar',
+  'section.home': 'Home',
+  'section.code': 'Code',
+  'section.work': 'Work',
+  'section.team': 'Team',
 } satisfies Record<SidebarKey, string>

@@ -471,7 +471,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       })
       expect(result.code).toBe(1)
       expect(result.stdout).toBe('')
-      expect(result.stderr).toContain('llm-pi-ai')
+      expect(result.stderr).toContain('llm-ai-sdk')
     } finally {
       rmSync(home, { recursive: true, force: true })
     }

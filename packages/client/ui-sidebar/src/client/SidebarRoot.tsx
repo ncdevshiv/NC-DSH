@@ -1,14 +1,19 @@
 /**
- * Sidebar shell: column geometry only. Collapse is a slide plus crossfade:
- * content freezes at its expanded width (inline style) and fades out in place
- * while the sliding column (AppFrame grid tracks) clips it — nothing reflows
- * mid-slide. At settle the wide-only content unmounts and the four upper
- * controls enter the 56px rail from the same horizontal offset (one icon each,
- * same top-down order) on one fade that ends with the slide. The bottom-pinned
- * settings control only fades. The workspace/session browsing region between
- * the New Session button and the foot is the `sidebar.workspaces` registrant's,
- * and the foot holds `sidebar.settings` plus `sidebar.footer.action`; the shell
- * hands them the wide flag (plus an expand request callback for the browser).
+ * Sidebar shell: column geometry plus the section switcher. Collapse is a
+ * slide plus crossfade: content freezes at its expanded width (inline style)
+ * and fades out in place while the sliding column (AppFrame grid tracks)
+ * clips it — nothing reflows mid-slide. At settle the wide-only content
+ * unmounts and the upper controls enter the 56px rail from the same
+ * horizontal offset (one icon each, same top-down order) on one fade that
+ * ends with the slide. The bottom-pinned settings control only fades. The
+ * section switcher owns the region between itself and the foot: wide it is a
+ * pill tab strip above New Session, rail it is the icon column; the four
+ * section panes stay mounted beneath it (display toggles, like the layout
+ * columns) so a section keeps its local state across visits and across
+ * collapse. Switching sections animates the incoming pane only — a
+ * directional slide + fade retriggered by alternating identical keyframes.
+ * The foot holds `sidebar.settings` plus `sidebar.footer.action`; the shell
+ * hands them the wide flag.
  *
  * The column also owns whether the scroll regions nested in it draw a
  * scrollbar at all: the shell tracks the pointer and rebinds ui-theme's
@@ -16,11 +21,13 @@
  * pointing at carries no bar.
  */
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import clsx from 'clsx'
 import {
-  FishLogo, IconNewChatOutline16, IconPanelLeftOutline16, Tooltip,
+  FishLogo, IconCodeOutline16, IconHomeOutline16, IconNewChatOutline16,
+  IconPanelLeftOutline16, IconTeamOutline16, IconWorkOutline16, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SidebarRootComponentProps } from './contract/slots.ts'
+import type { SidebarRootComponentProps, SidebarSectionKey } from './contract/slots.ts'
 import css from './SidebarRoot.module.css'
 
 /** Wide-content unmount delay; matches the 150ms wide-content fade-out. */
@@ -33,6 +40,15 @@ const COLLAPSE_SETTLE_MS = 150
  * edge — on the way to the conversation, or around a portalled menu.
  */
 const SCROLLBAR_LINGER_MS = 2000
+
+/** The switcher's fixed tab set, in display order; the index distance of a
+ *  switch decides its slide direction. */
+const SECTIONS: readonly { key: SidebarSectionKey; Icon: (props: { size: number }) => React.ReactNode }[] = [
+  { key: 'home', Icon: IconHomeOutline16 },
+  { key: 'code', Icon: IconCodeOutline16 },
+  { key: 'work', Icon: IconWorkOutline16 },
+  { key: 'team', Icon: IconTeamOutline16 },
+]
 
 /**
  * Render the sidebar column shell.
@@ -74,6 +90,21 @@ export function SidebarRoot({
         setStartError(reason instanceof Error ? reason.message : String(reason))
       },
     )
+  }
+
+  // Active section: 'code' boots (the workspace browser is the historical
+  // region), and every switch bumps seq so the enter animation can retrigger
+  // by alternating keyframe names (a same-name animation does not restart).
+  const [section, setSection] = useState<{ key: SidebarSectionKey; seq: number; fwd: boolean }>({
+    key: 'code', seq: 0, fwd: true,
+  })
+  const selectSection = (next: SidebarSectionKey): void => {
+    setSection((prev) => {
+      if (prev.key === next) return prev
+      const from = SECTIONS.findIndex(s => s.key === prev.key)
+      const to = SECTIONS.findIndex(s => s.key === next)
+      return { key: next, seq: prev.seq + 1, fwd: to > from }
+    })
   }
 
   // Freeze the content at its expanded width while it fades out (collapsed
@@ -197,6 +228,45 @@ export function SidebarRoot({
         </Tooltip>
       </div>
 
+      {/* Section switcher: pill tabs wide, the icon rail collapsed. A rail
+          click also expands the column — the section panes are hidden while
+          collapsed, so selecting without expanding would show nothing. */}
+      {wide ? (
+        <div className={css.sectionTabs} role="tablist">
+          {SECTIONS.map(({ key, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={section.key === key}
+              className={clsx(css.sectionTab, section.key === key && css.sectionTabActive)}
+              onClick={() => { selectSection(key) }}
+            >
+              <Icon size={14} />
+              <span className={css.sectionTabLabel}>{t(`section.${key}`)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className={css.sectionRail}>
+          {SECTIONS.map(({ key, Icon }) => (
+            <Tooltip key={key} label={t(`section.${key}`)} delayMs={500}>
+              <button
+                type="button"
+                className={clsx(css.iconButton, css.sectionRailTab, section.key === key && css.sectionRailActive)}
+                aria-label={t(`section.${key}`)}
+                onClick={() => {
+                  selectSection(key)
+                  if (collapsed) toggleSidebar()
+                }}
+              >
+                <Icon size={18} />
+              </button>
+            </Tooltip>
+          ))}
+        </div>
+      )}
+
       {/* Expanded, the button carries its own label — tooltip only on the rail. */}
       <Tooltip label={t('session.new.label')} delayMs={500} disabled={wide}>
         <button
@@ -216,13 +286,31 @@ export function SidebarRoot({
         <p className={css.connectError} role="alert">{t('session.new.failed', { message: startError })}</p>
       )}
 
-      {/* The browsing region fills the column between the controls and the
-          foot in both states; its rail icon column rides the same slot. */}
+      {/* The section panes fill the column between the switcher controls and
+          the foot in both states. They stay mounted (display-toggled) so a
+          section keeps its local state across visits and across a collapse;
+          the active pane carries the one-shot enter animation, retriggered
+          per switch by alternating identical keyframe names and aimed by the
+          --section-slide-from custom property. */}
       <div className={css.regionArea}>
-        {renderSlot('sidebar.workspaces', {
-          wide,
-          expandSidebar: () => { if (collapsed) toggleSidebar() },
-        })}
+        {SECTIONS.map(({ key }) => (
+          <div
+            key={key}
+            className={clsx(
+              css.sectionPane,
+              key === section.key ? css.sectionPaneActive : css.sectionPaneHidden,
+              key === section.key && section.seq > 0
+                ? (section.seq % 2 === 1 ? css.sectionPaneEnterA : css.sectionPaneEnterB)
+                : undefined,
+            )}
+            style={key === section.key && section.seq > 0
+              ? ({ '--section-slide-from': section.fwd ? '16px' : '-16px' }) as CSSProperties
+              : undefined}
+            aria-hidden={key !== section.key || undefined}
+          >
+            {renderSlot('sidebar.section', {}, { entryKey: key })}
+          </div>
+        ))}
       </div>
 
       {/* Footer actions stack above Settings in both sidebar widths. */}

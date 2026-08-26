@@ -30,9 +30,3 @@ export interface ExaResult {
 export interface ExaSearchResponse {
   results?: ExaResult[]
 }
-
-/** Exa's error response envelope (best-effort; fields vary by failure). */
-export interface ExaError {
-  error?: string
-  message?: string
-}

@@ -27,9 +27,3 @@ export interface PerplexityResponse {
   /** URL-only citation fallback. */
   citations?: string[]
 }
-
-/** Perplexity's error response envelope (best-effort; fields vary). */
-export interface PerplexityError {
-  error?: { message?: string } | string
-  message?: string
-}

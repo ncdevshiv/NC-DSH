@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import LlmRuntime, { createUserMessage, LlmError  } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, LlmError, ProviderRequestId } from '@deepseek-ai/dsh-llm'
 import type { LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -137,6 +137,46 @@ describe('agent/request-error', () => {
     expect(agent.session.events.find(event => event.type === 'turn/end')).toMatchObject({
       type: 'turn/end',
       data: { reason: { kind: 'error' } },
+    })
+  })
+
+  it('retains structured provider facts on the terminal turn error', async () => {
+    // A non-retryable structured failure terminates the turn; every fact
+    // the adapter captured must reach the durable turn-end reason so UI
+    // surfaces show status and provider type without re-parsing text.
+    const adapter = new MockAdapter([
+      () => {
+        throw new LlmError('Internal server error', 'SERVER', {
+          status: 500,
+          providerType: 'error',
+          requestId: ProviderRequestId('req_flat_500'),
+        })
+      },
+      textResponse('unused'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('request-error-structured-terminal'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+
+    expect(agent.session.events.find(event => event.type === 'turn/end')).toMatchObject({
+      type: 'turn/end',
+      data: {
+        reason: {
+          kind: 'error',
+          error: {
+            message: 'Internal server error',
+            code: 'SERVER',
+            status: 500,
+            providerType: 'error',
+            requestId: ProviderRequestId('req_flat_500'),
+          },
+        },
+      },
     })
   })
 })

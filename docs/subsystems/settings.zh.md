@@ -49,7 +49,7 @@ interface SettingsRegisterOptions<T> {
 }
 ```
 
-`validate` 在 schema 接纳该值之后运行，因此它看到的默认值和组合 base 与 owner 实际看到的完全一致。`dsh-llm-pi-ai` 用它在写入处拒绝自己无法服务的提供方 profile，而不是先存下来、再让该 namespace 下每条路由失效。
+`validate` 在 schema 接纳该值之后运行，因此它看到的默认值和组合 base 与 owner 实际看到的完全一致。`dsh-bash-local` 用它在写入处拒绝任何一次命令执行都无法服务的执行预算——高于定时器上限的 `graceMs`、非正的容量值——而不是先存下来、再在下一条命令时失败。
 
 `applies` 是 UI 提示而非机制：`restart` 的 owner 只是从不 watch，其值在构造期读取一次，配置界面可为待生效变更加标。
 

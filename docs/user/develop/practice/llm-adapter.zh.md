@@ -143,16 +143,16 @@ ctx.llm.registerAdapter(['my-provider'], adapter)
 
 ## 实战参考
 
-仓库中包含以下两个完整实现：
+仓库中包含以下完整实现：
 
-- `packages/llm/llm-deepseek/` — DeepSeek API 适配器（OpenAI 兼容格式）
-- `packages/llm/llm-pi-ai/` — Pi AI 适配器（不同的 API 格式）
+- `packages/llm/llm-ai-sdk/` —— 已交付的适配器：每一条已配置提供方路由经由一个 `ai-sidecar` 子进程服务
+- `packages/test-support/llm-replay/` —— 用于快照测试的最小化进程内免密钥适配器
 
-对比这两个已交付的适配器，可以看到同一套 harness 契约如何在不同提供方 SDK 之上实现。
+阅读已交付的适配器了解生产结构，阅读 replay 适配器了解满足契约的最小骨架。
 
 ## 错误处理
 
-适配器应通过带稳定 code 的 `LlmError` 抛出传输和协议故障；agent loop（智能体循环）会保留该错误及其 code，用于诊断和策略处理。不要依赖普通 `Error` 被自动转换。每个提供方 HTTP 请求还必须合并 `attributionHeaders()`，并传递 `options.signal`。
+适配器应通过带稳定 code 的 `LlmError` 抛出传输和协议故障；agent loop（智能体循环）会保留该错误及其 code，用于诊断和策略处理。不要依赖普通 `Error` 被自动转换。自行持有 HTTP 头的适配器在每个请求上合并 `attributionHeaders()` 并传递 `options.signal`；由独立进程驱动的传输则以该进程的身份标识代替。
 
 ```ts
 import {

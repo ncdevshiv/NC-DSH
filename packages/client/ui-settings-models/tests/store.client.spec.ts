@@ -14,26 +14,23 @@ function fail<T>(message: string): RpcResponse<T> {
 }
 
 const DIRECTORY = [
-  { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [], active: true },
-  { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true },
-  { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'anthropic'], active: false },
+  { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'deepseek-official'], active: true },
+  { provider: 'openai', displayName: 'openai', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'openai'], active: true },
+  { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'anthropic'], active: false },
   { provider: 'ghost', displayName: 'Ghost', settingsNs: '', settingsPath: [], active: true },
 ]
 
 const NAMESPACES = [
   {
-    ns: 'llm-deepseek',
+    ns: 'llm-ai-sdk',
     schema: {},
-    value: { apiKeyEnv: 'DEEPSEEK_API_KEY', baseURL: 'https://base' },
-    base: { baseURL: 'https://base' },
-    applies: 'live' as const,
-    secrets: [],
-    revision: 0,
-  },
-  {
-    ns: 'llm-pi-ai',
-    schema: {},
-    value: { providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } },
+    value: { providers: {
+      'deepseek-official': { apiKeyEnv: 'DEEPSEEK_API_KEY', baseURL: 'https://base' },
+      openai: { apiKeyEnv: 'OPENAI_API_KEY' },
+    } },
+    // The composition layer pins the official route, so it is configured but
+    // never removable; openai is user-authored and deletable.
+    base: { providers: { 'deepseek-official': { baseURL: 'https://base' } } },
     user: { providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } },
     applies: 'live' as const,
     secrets: [],
@@ -98,7 +95,7 @@ describe('ModelsSettingsStore', () => {
     expect(byProvider.get('anthropic')).toMatchObject({ configured: false, removable: false })
     expect(byProvider.get('anthropic')?.apiKeyEnv).toBeUndefined()
     expect(byProvider.get('ghost')).toMatchObject({ configured: false, removable: false })
-    expect(state.namespaces.get('llm-pi-ai')?.ns).toBe('llm-pi-ai')
+    expect(state.namespaces.get('llm-ai-sdk')?.ns).toBe('llm-ai-sdk')
   })
 
   it('degrades the credential badge, not the page, when the credential domain fails', async () => {
@@ -175,7 +172,7 @@ describe('edge joins', () => {
         writable: true,
         hasDocument: false,
         namespaces: [{
-          ns: 'llm-pi-ai',
+          ns: 'llm-ai-sdk',
           schema: {},
           value: { providers: { weird: 'oops' } },
           applies: 'live' as const,
@@ -185,7 +182,7 @@ describe('edge joins', () => {
       })),
       providers: () => Promise.resolve(ok({
         providers: [
-          { provider: 'weird', displayName: 'weird', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'weird'], active: false },
+          { provider: 'weird', displayName: 'weird', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'weird'], active: false },
         ] as never,
       })),
     })
@@ -201,11 +198,11 @@ describe('edge joins', () => {
       describeSettings: () => Promise.resolve(ok({
         writable: true,
         hasDocument: false,
-        namespaces: [{ ns: 'llm-pi-ai', schema: {}, value: { providers: {} }, applies: 'live' as const, secrets: [], revision: 0 }] as never,
+        namespaces: [{ ns: 'llm-ai-sdk', schema: {}, value: { providers: {} }, applies: 'live' as const, secrets: [], revision: 0 }] as never,
       })),
       providers: () => Promise.resolve(ok({
         providers: [
-          { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'anthropic'], active: false },
+          { provider: 'anthropic', displayName: 'anthropic', settingsNs: 'llm-ai-sdk', settingsPath: ['providers', 'anthropic'], active: false },
         ] as never,
       })),
     })

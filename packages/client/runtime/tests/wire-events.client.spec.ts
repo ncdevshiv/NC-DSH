@@ -102,7 +102,7 @@ describe('wire event bridge', () => {
 
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r3' as never,
-      payload: { type: 'host/remote-event', event: 'settings/document-updated', args: ['llm-pi-ai', 7] },
+      payload: { type: 'host/remote-event', event: 'settings/document-updated', args: ['llm-ai-sdk', 7] },
     })
     bench.sinks?.onHostEnvelope?.({
       rpcId: 'r4' as never,
@@ -117,7 +117,7 @@ describe('wire event bridge', () => {
     })
 
     expect(seen).toEqual([
-      ['settings/document-updated', 'llm-pi-ai', 7],
+      ['settings/document-updated', 'llm-ai-sdk', 7],
       ['credentials/updated', 'OPENAI_API_KEY'],
       ['nobody/listening', 'ignored'],
     ])
