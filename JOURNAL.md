@@ -816,3 +816,73 @@ Commit this as the dsh-side PR branch. Then roster #2:
 ### Expected goal next
 Roster #2: fflate -> Bun.Archive ZIP support, starting with the
 apiproxy session-export call site.
+
+---
+
+## 2026-08-26 (Bun.open #5 - native Windows ShellExecuteExW + full surface)
+
+### Wanted
+Close every gap from the QA list: real PID, real wait, dialog
+suppression, cmd.exe 8191 limit, app object form, AbortSignal, Linux
+opener chain.
+
+### Did (commit db91ba7b67, pushed)
+1. **Native Windows backend** (`open.rs::native`): ShellExecuteExW with
+   SEE_MASK_NOCLOSEPROCESS (+ FLAG_NO_UI), STA COM entered once per
+   thread and deliberately never unbalanced, SE_ERR/GetLastError mapping
+   to friendly messages. `pid` is now the shell-created handler's real
+   PID; `.exited` carries its true exit code.
+2. **Exit watcher** (`open.rs::watch`): libuv timer (50ms poll) on the
+   VM loop; settles the exited promise from the JS thread inside the
+   same EventLoop scope guard the subprocess path uses. Timer stays
+   ref'd so it wakes an idle loop - mirroring Bun.spawn's child
+   tracking. on_close closes the OS handle but intentionally leaks the
+   boxed state: dropping JSC strong roots after VM teardown is a
+   use-after-free, and unresolved watchers at exit are bounded by open
+   count.
+3. **Surface**: `wait:true` honored per platform (Windows real process
+   wait; macOS -W; Linux handoff-instant), `signal` pre-launch abort,
+   `app:{name,arguments}` npm form with correct per-OS ordering, and a
+   which()-probed opener chain (xdg-open/gio/kde-open/wslview) whose
+   miss surfaces as a genuine ENOENT SystemError listing candidates.
+4. Types + docs rewritten to the honest contract.
+
+### Errors / root causes / fixes (all caught by tests)
+1. *await handed back `{}`*: pre-fulfilled promises don't assimilate
+   promise VALUES - resolved_promise_value(result-containing-promise)
+   resolved the outer WITH the inner promise object as a plain value.
+   Fix: one explicit JSPromiseStrong per path; settlement unambiguous.
+2. *Second launch hung forever*: com_enter paired CoUninitialize after
+   each dispatch while its flag stayed true, so launch #2 ran
+   ShellExecuteExW with no apartment at all. Fix: init once per thread,
+   never unbalance (main-thread convention).
+3. *`.exited` pending forever after refactor*: the non-wait tail lost
+   its watch::arm call when the direct-return debug experiment was
+   removed. Restored; also fixed ShellLaunch::Drop firing inside arm()
+   (handle closed before first poll) via into_parts().
+4. *edit verb stall*: Windows "edit" verb can sit in DDE negotiation -
+   documented on the type; cross-platform test drops edit.
+5. *Flaky exited hangs*: unpinned 50ms poller cannot wake an idle loop.
+   Ref'd-always (spawn-parity) removed the flake class entirely.
+
+### Bench honesty (Windows, debug, hermetic noop .cmd, n=10-20)
+- dispatch wait:false: NATIVE 10.1ms vs npm open@11 27.9ms spawn-
+  complete (**2.8x**) vs previous cmd/start ~5.5ms (parity class).
+- wait:true end-to-end: NATIVE ~473ms vs npm open@11 **1268ms**
+  PowerShell round trip (**2.7x**). The previous route's "64ms" was a
+  phantom number: `cmd /c start` exits with the WRAPPER; the handler
+  was never tracked. Native mode is the first Windows build whose wait
+  means what it says.
+- .cmd handler lifetime itself (~450ms console-hosted) dominates wait
+  mode for every implementation that truly waits; identical for all.
+
+### Gates
+25/25 open.test.ts cases pass (native PID/wait, >8191 split by enforcing
+layer, NO_UI rejection surface, abort + live-signal, object app form,
+opener-chain error shape). Shutdown-time segfault trace in debug builds
+after watcher use is logged as a known issue (unrelated to results;
+release-mode untested).
+
+### Expected goal next
+dsh side needs no change (uses defaults only). Roster #2:
+fflate -> Bun.Archive ZIP support.
