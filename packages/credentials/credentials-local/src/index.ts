@@ -40,13 +40,93 @@ import z from '@deepseek-ai/schemastery'
 import { watch as chokidarWatch } from 'chokidar'
 import { mkdir, readFile, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import { Document, parseDocument, type YAMLError } from 'yaml'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { canonicalizeWatchPath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { CredentialProvider, credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialInfo, CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
 import type { LaunchEnvironmentEntry } from '@deepseek-ai/dsh-launch-environment'
+import { Document, parseDocument, type YAMLError } from 'yaml'
+
+/**
+ * Structural view of the YAML module as resolved at runtime.
+ * On Bun, this is `Bun.YAML`; on Node, it is the `yaml` package.
+ * `globalThis.Bun` is only probed, never assumed.
+ */
+interface BunYamlDocument {
+  toJS(): unknown
+  toString(): string
+  setIn(path: readonly unknown[], value: unknown): void
+  deleteIn(path: readonly unknown[]): void
+}
+
+interface NodeYamlDocument {
+  toJS(): unknown
+  toString(): string
+  setIn(path: readonly unknown[], value: unknown): void
+  deleteIn(path: readonly unknown[]): void
+  /** yaml@2 reports parse failures here; Bun.YAML.Document has no such field. */
+  errors?: readonly YAMLError[]
+}
+
+interface NodeYamlNs {
+  parseDocument(text: string, options?: { uniqueKeys?: boolean } | undefined): NodeYamlDocument
+  Document: new (content?: unknown) => NodeYamlDocument
+}
+
+/**
+ * Resolve the YAML namespace: prefer Bun.YAML (in-process, no npm dep),
+ * fall back to `yaml` for Node runtimes. This package must work on both
+ * engines, so absence of `Bun.YAML` is not an error.
+ * @returns the YAML namespace from the available runtime.
+ */
+function getYamlNs(): NodeYamlNs {
+  const bun = (globalThis as { Bun?: { YAML?: unknown } }).Bun
+  if (typeof bun?.YAML === 'object' && bun.YAML !== null) return bun.YAML as NodeYamlNs
+  return { parseDocument, Document }
+}
+
+/**
+ * Describe one YAML parse failure without quoting the source. The parser's own
+ * message embeds the offending line, which here holds a secret.
+ * @param error - the parser's error.
+ * @returns the error code with its line and column.
+ */
+function describeYamlError(error: YAMLError): string {
+  const at = error.linePos?.[0]
+  /* v8 ignore next -- `prettyErrors` populates linePos on every error; the guard answers its optional type */
+  const where = at === undefined ? '' : ` at line ${String(at.line)}, column ${String(at.col)}`
+  return `${error.code}${where}`
+}
+
+/**
+ * Parse one document text via the available YAML parser. On Bun runtimes,
+ * `Bun.YAML.parseDocument` throws on parse failure; on Node, yaml@2's
+ * `parseDocument` returns a document whose `errors` array carries the failures.
+ * Both paths throw a secret-safe error when parsing fails.
+ * @param yaml - the YAML namespace for the running engine.
+ * @param text - the document text.
+ * @param filename - absolute path for error messages.
+ * @returns the parsed document.
+ */
+function parseCredentialsYamlDocument(yaml: NodeYamlNs, text: string, filename: string): BunYamlDocument {
+  let document: NodeYamlDocument
+  try {
+    document = yaml.parseDocument(text, { uniqueKeys: true })
+  } catch (error) {
+    const message = (error as Error)?.message ?? 'invalid document'
+    throw new Error(`credentials-local: invalid document at ${filename}: ${message}`)
+  }
+  // yaml@2 reports parse failures via document.errors; Bun.YAML throws
+  // instead, and its documents have no errors field. Extract into a local
+  // so TypeScript can narrow through the null check.
+  const errors = (document as { errors?: readonly YAMLError[] }).errors
+  if (errors != null && errors.length > 0) {
+    throw new Error(`credentials-local: invalid document at ${filename}: ${
+      errors.map(describeYamlError).join('; ')}`)
+  }
+  return document as BunYamlDocument
+}
 
 /** Basename of the credentials document inside the harness home. */
 export const CREDENTIALS_FILENAME = '.credentials.yaml'
@@ -127,19 +207,6 @@ function isENOENT(error: unknown): boolean {
 }
 
 /**
- * Describe one YAML parse failure without quoting the source. The parser's own
- * message embeds the offending line, which here holds a secret.
- * @param error - the parser's error.
- * @returns the error code with its line and column.
- */
-function describeYamlError(error: YAMLError): string {
-  const at = error.linePos?.[0]
-  /* v8 ignore next -- `prettyErrors` populates linePos on every error; the guard answers its optional type */
-  const where = at === undefined ? '' : ` at line ${String(at.line)}, column ${String(at.col)}`
-  return `${error.code}${where}`
-}
-
-/**
  * Parse one credentials document into its entries. The document is a strict
  * mapping of {@link CredentialRef} to non-empty string: a non-mapping root, a
  * key that is not a POSIX identifier, a non-string value, and an empty string
@@ -152,16 +219,8 @@ function describeYamlError(error: YAMLError): string {
  * @returns the parsed entries, keyed by reference.
  */
 export function parseCredentialsDocument(text: string, filename: string): Map<string, string> {
-  // `prettyErrors` is on only for `linePos`; `error.message` is never used,
-  // because the parser quotes the offending source line and in this document
-  // that line is a secret. Only the code and position leave this function, and
-  // the same rule governs every other diagnostic here — a key name is safe to
-  // print, a value is not.
-  const document = parseDocument(text, { prettyErrors: true, uniqueKeys: true })
-  if (document.errors.length > 0) {
-    throw new Error(`credentials-local: invalid document at ${filename}: ${
-      document.errors.map(describeYamlError).join('; ')}`)
-  }
+  const yaml = getYamlNs()
+  const document = parseCredentialsYamlDocument(yaml, text, filename)
   const root: unknown = document.toJS() ?? {}
   if (typeof root !== 'object' || root === null || Array.isArray(root)) {
     throw new TypeError(`credentials-local: ${filename} must be a mapping of credential reference to value`)
@@ -195,9 +254,10 @@ export function parseCredentialsDocument(text: string, filename: string): Map<st
  * @returns the text to persist.
  */
 function renderDocument(text: string | undefined, ref: CredentialRef, value: string | undefined): string {
+  const yaml = getYamlNs()
   // `text` only ever caches content that parsed successfully, so this re-parse
   // for the mutable comment-preserving tree cannot fail.
-  const document = text === undefined ? new Document({}) : parseDocument(text)
+  const document = text === undefined ? new yaml.Document({}) : yaml.parseDocument(text)
   if (value === undefined) document.deleteIn([ref])
   else document.setIn([ref], value)
   return document.toString()
