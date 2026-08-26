@@ -12,10 +12,72 @@ import z from '@deepseek-ai/schemastery'
 import { watch as chokidarWatch } from 'chokidar'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, resolve } from 'node:path'
-import { Document, parseDocument } from 'yaml'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { canonicalizeWatchPath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { SettingsProvider, deepEqualJson, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { Document, parseDocument } from 'yaml'
+
+/**
+ * Structural view of the YAML module as resolved at runtime.
+ * On Bun, this is `Bun.YAML`; on Node, it is the `yaml` package.
+ * `globalThis.Bun` is only probed, never assumed.
+ */
+interface BunYamlDocument {
+  toJS(): unknown
+  toString(): string
+  setIn(path: readonly unknown[], value: unknown): void
+  deleteIn(path: readonly unknown[]): void
+}
+
+interface NodeYamlDocument {
+  toJS(): unknown
+  toString(): string
+  setIn(path: readonly unknown[], value: unknown): void
+  deleteIn(path: readonly unknown[]): void
+  /** yaml@2 reports parse failures here; Bun.YAML.Document has no such field. */
+  errors?: readonly unknown[]
+}
+
+interface NodeYamlNs {
+  parseDocument(text: string, options?: { uniqueKeys?: boolean } | undefined): NodeYamlDocument
+  Document: new (content?: unknown) => NodeYamlDocument
+}
+
+/**
+ * Resolve the YAML namespace: prefer Bun.YAML (in-process, no npm dep),
+ * fall back to `yaml` for Node runtimes. This package must work on both
+ * engines, so absence of `Bun.YAML` is not an error.
+ * @returns the YAML namespace from the available runtime.
+ */
+function getYamlNs(): NodeYamlNs {
+  const bun = (globalThis as { Bun?: { YAML?: unknown } }).Bun
+  if (typeof bun?.YAML === 'object' && bun.YAML !== null) return bun.YAML as NodeYamlNs
+  return { parseDocument, Document }
+}
+
+/**
+ * Parse one document text via the available YAML parser. On Bun runtimes,
+ * `Bun.YAML.parseDocument` throws on parse failure; on Node, yaml@2's
+ * `parseDocument` returns a document whose `errors` array carries the failures.
+ * Both paths throw a secret-safe error when parsing fails.
+ * @param yaml - the YAML namespace for the running engine.
+ * @param text - the document text.
+ * @param filename - absolute path for error messages.
+ * @returns the parsed document.
+ */
+function parseSettingsYamlDocument(yaml: NodeYamlNs, text: string, filename: string): BunYamlDocument {
+  let document: NodeYamlDocument
+  try {
+    document = yaml.parseDocument(text)
+  } catch (error) {
+    const message = (error as Error)?.message ?? 'invalid document'
+    throw new Error(`settings-file: invalid document at ${filename}: ${message}`)
+  }
+  if ((document.errors?.length ?? 0) > 0) {
+    throw new Error(`settings-file: invalid document at ${filename}: parse error`)
+  }
+  return document as BunYamlDocument
+}
 
 /** Plugin config: file location and hot-reload behavior. */
 export interface Config {
@@ -78,7 +140,7 @@ function isMapLike(value: unknown): value is Record<string, unknown> {
  * formatting. Non-map values (arrays and scalars) replace wholesale when
  * unequal, taking any comments inside them along.
  */
-function patchNode(document: Document, path: readonly string[], current: unknown, next: unknown): void {
+function patchNode(document: BunYamlDocument, path: readonly string[], current: unknown, next: unknown): void {
   if (isMapLike(current) && isMapLike(next)) {
     for (const key of Object.keys(current)) {
       if (!(key in next)) document.deleteIn([...path, key])
@@ -272,18 +334,8 @@ export class FileSettingsProvider extends SettingsProvider {
   private parse(text: string): Record<string, unknown> {
     let root: unknown
     if (this.spec.format === 'yaml') {
-      // `prettyErrors` is on only for `linePos`; `error.message` is never
-      // used, because the parser quotes the offending source line and a
-      // settings document can hold a `role('secret')` value.
-      const document = parseDocument(text, { prettyErrors: true })
-      if (document.errors.length > 0) {
-        throw new Error(`settings-file: invalid document at ${this.spec.filename}: ${
-          document.errors.map((error) => {
-            const at = error.linePos?.[0]
-            /* v8 ignore next -- `prettyErrors` populates linePos on every error; the guard answers its optional type */
-            return `${error.code}${at === undefined ? '' : ` at line ${String(at.line)}, column ${String(at.col)}`}`
-          }).join('; ')}`)
-      }
+      const yaml = getYamlNs()
+      const document = parseSettingsYamlDocument(yaml, text, this.spec.filename)
       root = document.toJS() ?? {}
     } else {
       root = text.trim().length === 0 ? {} : JSON.parse(text)
@@ -345,13 +397,14 @@ export class FileSettingsProvider extends SettingsProvider {
    * not just comments outside it.
    */
   private renderYaml(ns: SettingsNamespace, section: Record<string, unknown>): string {
+    const yaml = getYamlNs()
     if (this.text === undefined) {
-      return new Document({ [ns]: section }).toString()
+      return new yaml.Document({ [ns]: section }).toString()
     }
     // this.text only ever caches content that parsed successfully, so this
     // re-parse (for the mutable comment-preserving tree) cannot fail, and
     // parse() already rejected any non-map root.
-    const document = parseDocument(this.text)
+    const document = yaml.parseDocument(this.text)
     const root: unknown = document.toJS()
     patchNode(document, [ns], isMapLike(root) ? root[ns] : undefined, section)
     return document.toString()
