@@ -179,3 +179,108 @@ All code, composition, docs, and test rewires from the earlier entries. Three li
 
 ### Expected goal next
 Owner review of the diff; provide `DEEPSEEK_API_KEY` for one recorded cloud-e2e run if desired; then commit on say-so.
+
+---
+
+## 2026-08-26 (session continuation) — real e2e brought up: five root-cause fixes
+
+### Wanted
+Run `packages/llm/llm-ai-sdk/tests/adapter.e2e.ts` against the real
+`ai-sidecar.exe` and get every adapter suite green without suppressing or
+loosening any assertion.
+
+### Had
+The e2e had never actually passed end-to-end: three separate defects (one in
+the schema, one in credential derivation, two in the fixtures) each stopped it
+at a different layer, and four unit/spec defects sat behind them.
+
+### Errors / root causes / options / chosen fixes
+1. **`vitest run <file>` found nothing** — the default workspace glob only
+   matches `*.spec.*`; real-API/e2e files run under `vitest.e2e.config.ts`
+   (`bun run test:e2e`). Not a defect; recorded so nobody "fixes" the include.
+2. **Loader rejection: `reasoningEfforts expected array length >= 1 but got 0`
+   although the fixture omitted the key entirely.** Root cause (verified by a
+   direct probe against the vendored schemastery): an absent array member of
+   an object schema materializes as `[]`, so `.min(1)` turned optional fields
+   into de-facto required-non-empty, contradicting both the documented
+   defaults and the resolved-route contract ("empty means no effort
+   metadata"). Options: drop `.min(1)` (loses validation), make callers pass
+   the key (contradicts docs), or restore the old packages'
+   `.min(1).default([...])` pattern. Chose the defaults — same trade-off the
+   deleted `dsh-llm-deepseek` made; absence then resolves to the documented
+   value. Same fix applied to catalog-model `inputModalities`.
+3. **`credential ref "DEEPSEEK-OFFICIAL_API_KEY" must match /^[A-Za-z_][A-Za-z0-9_]*$/`.**
+   Root cause: the adapter derived `<ROUTE>_API_KEY` by uppercasing only, so
+   every conventional kebab-case route id crashed at load when `apiKeyEnv`
+   was omitted. Options: forbid hyphens in route ids (breaks the shipped
+   `deepseek-official`), require explicit `apiKeyEnv` (contradicts README),
+   or mirror the web Models page's `deriveKeyRef` (non-alphanumeric runs →
+   `_`). Chose mirroring `deriveKeyRef` and documented the rule in the
+   profile JSDoc, so UI-written and adapter-defaulted routes agree on one
+   reference.
+4. **E2E fixture sent the sidecar to `http://127.0.0.1:[object Object].port}`**
+   — malformed template string interpolating the whole `address()` object.
+   Fixed to extract `.port` properly. Then the fixture still failed
+   `MISSING_CREDENTIAL`: it stored `DEEPSEEK_API_KEY` but declared no
+   `apiKeyEnv`; with derivation working correctly the route looks for
+   `DEEPSEEK_OFFICIAL_API_KEY` and fails loud as designed. Fixture now
+   declares `apiKeyEnv: DEEPSEEK_API_KEY`.
+5. **loader-composition spec produced invalid YAML** (`"gateway-a":,
+   baseURL:` on one line). Root cause: `.map()` returned nested arrays which
+   `join('\n')` stringified comma-flattened; the spec can never have been
+   green in that shape. Fix: `flatMap`.
+6. **Usage chunk assembled mid-block when a provider attaches usage before
+   its terminal content event** (the mock scripted usage-before-completed;
+   the real binary sends completed-then-usage). Both orders are legal wire
+   behavior, so the fix belongs in the assembler: defer usage to stream end
+   (`flushUsage()` after `closeProse()`), making assembly order-independent
+   and satisfying "usage before finish, nothing after" without splitting
+   blocks.
+7. **Spawn failure could hang a request until the 120 s JSON-RPC ceiling.**
+   The child teardown listened only to `exit`; a failed spawn (ENOENT)
+   emits `error` without `exit`. Added an idempotent `onChildGone()` shared
+   by both events plus an `error` arm inside `childExitOrTimeout`.
+   The old "spawn failure" test never exercised this: it passed extra argv
+   to node with a valid script, which runs fine. It now spawns a genuinely
+   missing executable.
+8. **A stalled sidecar read could hang forever — the idle timeout was
+   inert.** `idleWatchdog.next()` arms its timer but deliberately does not
+   race the read; its existing tests document that THE SOURCE must observe
+   `watchdog.signal` and settle. Nothing ever handed that signal to the
+   sidecar client, so `streamIdleTimeoutMs` bounded nothing. Fix: pump passes
+   `watchdog.signal` into `sidecar.stream(reference, request, readSignal)`;
+   a per-stream abort listener marks the stream finished with a typed
+   failure (`timeout` vs `cancelled`) and wakes the waiter.
+9. **Transport outcomes now throw; provider answers stay data.** In-band
+   `chat/done ok=false` remains a terminal finish chunk (RATE_LIMIT etc.);
+   `cancelled`/`timeout` kinds propagate as thrown `LlmError ABORTED/TIMEOUT`
+   per the documented contract. Specs updated to describe this actual
+   contract instead of an accidental one (the cancel test now drives abort
+   through the caller signal — a bare consumer `break` cannot reach teardown
+   promptly under JS async-generator semantics; that limitation is inherent
+   and documented).
+
+### Files edited
+packages/llm/llm-ai-sdk/src/index.ts (schema defaults, key-ref derivation),
+src/sidecar.ts (spawn-error teardown, read-signal settle, shared idle code),
+src/translate.ts (usage deferral), src/adapter.ts (read-signal plumbed into
+pump, transport-outcome throws), tests/adapter.e2e.ts (URL template,
+apiKeyEnv row), tests/adapter.spec.ts (failure-finish, signal-driven cancel,
+real spawn-failure case), tests/translate.spec.ts (deferred-usage case),
+tests/loader-composition.spec.ts (flatMap YAML rows),
+docs/config-catalog.md regenerated after the JSDoc touch.
+
+### Test / review
+- `bun run test:e2e packages/llm/llm-ai-sdk/tests/adapter.e2e.ts` with
+  `DSH_AI_SDK_SIDECAR=<release binary>`: PASS (real child process, scripted
+  OpenAI-compatible HTTP server, bearer-key assertion included).
+- Package suites: translate 11 ✓, adapter 11 ✓, loader-composition 4 ✓ —
+  26/26 green.
+- Raw stdio probe of the real binary confirmed protocol shapes
+  (`initialize`/`configure`/`chat.stream`/flat `chat/event` params) before
+  blaming the Rust side; the AI SDK side itself behaved correctly in every
+  exchange this session.
+
+### Expected goal next
+`bun run hygiene` + `bun run doc-sync` + fresh `typecheck`, fix whatever they
+surface, update MEMORY, leave commit for explicit say-so.
