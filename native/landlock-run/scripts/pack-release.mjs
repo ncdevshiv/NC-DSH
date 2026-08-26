@@ -26,9 +26,9 @@ function hostPlatformDirs() {
   return platformDirs().filter((dir) => readJson(path.join(root, dir, 'prebuilds.json')).platform === hostPlatform);
 }
 
-function run(command, args) {
+function run(command, args, cwd = root) {
   const result = spawnSync(command, args, {
-    cwd: root,
+    cwd,
     stdio: 'inherit',
   });
   if (result.error) throw result.error;
@@ -61,7 +61,7 @@ for (const dir of dirs) {
   if (platformSet.has(dir)) {
     run('npm', ['pack', `./${dir}`, '--pack-destination', destination]);
   } else {
-    run('bun', ['pm', 'pack', '--destination', destination], { cwd: dir });
+    run('bun', ['pm', 'pack', '--destination', destination], dir);
   }
 
   const tarball = tarballName(manifest);
