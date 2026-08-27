@@ -3610,6 +3610,20 @@
         "@deepseek-ai/dsh-typert-protocol": "workspace:^",
       },
     },
+    "packages/host/runtime-supervisor": {
+      "name": "@deepseek-ai/dsh-runtime-supervisor",
+      "version": "0.1.0-rc.8",
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-brand": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-brand": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+      },
+    },
     "packages/host/webserver": {
       "name": "@deepseek-ai/dsh-host-webserver",
       "version": "0.1.0-rc.8",
@@ -4056,6 +4070,24 @@
         "@deepseek-ai/dsh-subprocess": "workspace:^",
         "@deepseek-ai/dsh-timeout": "workspace:^",
         "@deepseek-ai/dsh-tools": "workspace:^",
+      },
+    },
+    "packages/orchestrator/nc-dsh": {
+      "name": "@deepseek-ai/dsh-orchestrator-nc-dsh",
+      "version": "0.1.0-rc.8",
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-agent": "workspace:^",
+        "@deepseek-ai/dsh-experimental-agent-team": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-session": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-agent": "workspace:^",
+        "@deepseek-ai/dsh-experimental-agent-team": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-session": "workspace:^",
       },
     },
     "packages/plan/plan-mode": {
@@ -7062,6 +7094,8 @@
 
     "@deepseek-ai/dsh-notifications": ["@deepseek-ai/dsh-notifications@workspace:packages/host/notifications"],
 
+    "@deepseek-ai/dsh-orchestrator-nc-dsh": ["@deepseek-ai/dsh-orchestrator-nc-dsh@workspace:packages/orchestrator/nc-dsh"],
+
     "@deepseek-ai/dsh-output-retention": ["@deepseek-ai/dsh-output-retention@workspace:packages/util/output-retention"],
 
     "@deepseek-ai/dsh-permission-presets": ["@deepseek-ai/dsh-permission-presets@workspace:packages/interaction/permission-presets"],
@@ -7075,6 +7109,8 @@
     "@deepseek-ai/dsh-pwsh-sandbox": ["@deepseek-ai/dsh-pwsh-sandbox@workspace:packages/shell/pwsh-sandbox"],
 
     "@deepseek-ai/dsh-repeat-tool-reminder": ["@deepseek-ai/dsh-repeat-tool-reminder@workspace:packages/guard/repeat-tool-reminder"],
+
+    "@deepseek-ai/dsh-runtime-supervisor": ["@deepseek-ai/dsh-runtime-supervisor@workspace:packages/host/runtime-supervisor"],
 
     "@deepseek-ai/dsh-sandbox": ["@deepseek-ai/dsh-sandbox@workspace:packages/sandbox/sandbox"],
 
