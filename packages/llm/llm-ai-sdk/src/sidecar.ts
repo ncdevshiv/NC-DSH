@@ -181,7 +181,7 @@ export class AiSidecarClient {
     this.transport = undefined
     this.initialized = undefined
     this.failAllStreams(
-      new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar exited before completing its streams'),
+      new SidecarProtocolError('network', 'llm-ai-sdk: ai-sidecar exited before completing its streams', true),
     )
     this.child = undefined
     if (child === undefined || child.exitCode !== null) return
@@ -410,6 +410,67 @@ export class AiSidecarClient {
       if (!state.finished) {
         transport.notify('stream.cancel', { stream_id: streamId })
       }
+    }
+  }
+
+  /** Drain deadline for a quiesce: let in-flight pumps reach chat/done before failing them. */
+  async drain(deadlineMs: number): Promise<void> {
+    if (this.streams.size === 0) return
+    const deadline = Date.now() + deadlineMs
+    while (this.streams.size > 0 && Date.now() < deadline) {
+      await new Promise<void>(resolve => setTimeout(resolve, 50))
+    }
+    if (this.streams.size > 0) {
+      this.failAllStreams(
+        new SidecarProtocolError('network', 'llm-ai-sdk: sidecar drain deadline exceeded', true),
+      )
+    }
+  }
+
+  /**
+   * Spawn a fresh shadow client probing the same binary. Callers must
+   * `configure()` the shadow with the current generation before promoting.
+   * @param connection - connection facts for the shadow (may be same binary).
+   * @returns a new client that has completed initialize.
+   */
+  async spawnShadow(connection: SidecarConnection): Promise<AiSidecarClient> {
+    const shadow = new AiSidecarClient(() => connection)
+    await (shadow as unknown as { start: () => Promise<unknown> }).start()
+    return shadow
+  }
+
+  /**
+   * Health probe: list providers on this client.
+   * @returns provider ids; throws on failure.
+   */
+  async healthProbe(): Promise<string[]> {
+    return await this.listProviders()
+  }
+
+  /**
+   * Atomically promote a healthy shadow by stealing its transport. The shadow
+   * is disposed after promotion; the old generation drains to its deadline.
+   * @param shadow - a healthy shadow that has been configured.
+   * @param drainDeadlineMs - wall time to let old pumps reach chat/done.
+   */
+  async promoteShadow(shadow: AiSidecarClient, drainDeadlineMs = 5000): Promise<void> {
+    if (shadow === this) throw new Error('llm-ai-sdk: cannot promote self as shadow')
+    const shadowChild = (shadow as unknown as { child: ReturnType<typeof import('node:child_process').spawn> | undefined }).child
+    const shadowTransport = (shadow as unknown as { transport: unknown }).transport
+    const shadowInitialized = (shadow as unknown as { initialized: Promise<void> | undefined }).initialized
+    ;(shadow as unknown as { child: unknown }).child = undefined
+    ;(shadow as unknown as { transport: unknown }).transport = undefined
+    ;(shadow as unknown as { initialized: unknown }).initialized = undefined
+    ;(shadow as unknown as { disposed: boolean }).disposed = true
+    const oldChild = this.child
+    const oldTransport = this.transport
+    this.child = shadowChild as ReturnType<typeof import('node:child_process').spawn> | undefined
+    this.transport = shadowTransport as typeof this.transport
+    this.initialized = shadowInitialized
+    if (oldChild !== undefined && oldChild !== shadowChild) {
+      try { oldTransport?.close() } catch {}
+      await new Promise<void>(resolve => setTimeout(resolve, Math.min(drainDeadlineMs, 200)))
+      try { oldChild.kill() } catch {}
     }
   }
 

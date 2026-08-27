@@ -305,6 +305,8 @@
     { "path": "./packages/host/notifications" },
     { "path": "./packages/host/plugin-inventory" },
     { "path": "./packages/host/webserver" },
+    { "path": "./packages/host/runtime-supervisor" },
+    { "path": "./packages/orchestrator/nc-dsh" },
     { "path": "./packages/sdk/client" },
     { "path": "./packages/sdk/protocol" },
     { "path": "./packages/sdk/sidecar-updates" },
