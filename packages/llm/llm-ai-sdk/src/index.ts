@@ -17,7 +17,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { assertUsableApiKey, LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
@@ -417,7 +417,21 @@ export function apply(ctx: Context, config: Config): void {
     {
       options: () => {
         const resolved = options()
-        return { binaryPath: resolved.binaryPath, routes: resolved.routes }
+        let binaryRev: string | undefined
+        try {
+          const binary = resolved.binaryPath.length > 0 ? resolved.binaryPath : managedBinary()
+          if (binary !== undefined) {
+            const stat = statSync(binary)
+            binaryRev = `${String(stat.mtimeMs)}-${String(stat.size)}`
+          }
+        } catch {
+          // Binary not present yet — no rev, will re-probe on next request.
+        }
+        return {
+          binaryPath: resolved.binaryPath,
+          ...(binaryRev === undefined ? {} : { binaryRev }),
+          routes: resolved.routes,
+        }
       },
       resolveApiKey,
       resolveAttachments: (): AttachmentStore | undefined => ctx.get('attachments'),

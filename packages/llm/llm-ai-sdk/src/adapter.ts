@@ -210,6 +210,7 @@ function toFailure(error: unknown): LlmFailure {
  */
 export class AiSdkAdapter extends LlmAdapter {
   private configuredGeneration: string | undefined
+  private quiescing = false
 
   constructor(
     private readonly config: AiSdkAdapterOptions,
@@ -218,6 +219,24 @@ export class AiSdkAdapter extends LlmAdapter {
     private readonly retryPolicyOf: (route: ResolvedRoute) => ResolvedRetryPolicy,
   ) {
     super()
+  }
+
+  /**
+   * Acquire the quiesce gate. While held, new `stream()` calls fail with a
+   * retryable TRANSPORT so the llm-retry waterfall redirects to the green
+   * generation after `quiesceAndSwap`. Old `Map<stream_id>` pumps continue to
+   * drain to `chat/done` or the deadline.
+   * @returns disposer that releases the gate.
+   */
+  acquireQuiesce(): () => void {
+    this.quiescing = true
+    let released = false
+    return () => {
+      if (!released) {
+        released = true
+        this.quiescing = false
+      }
+    }
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
@@ -273,6 +292,9 @@ export class AiSdkAdapter extends LlmAdapter {
   }
 
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    if (this.quiescing) {
+      throw new SidecarProtocolError('network', 'llm-ai-sdk: quiescing — retry on green generation', true)
+    }
     const resolved = this.config.options()
     const route = resolved.routes.get(options.provider)
     if (route === undefined) {
@@ -354,6 +376,8 @@ export class AiSdkAdapter extends LlmAdapter {
    * Push the current credential/endpoint generation to the child exactly once
    * per change. In-flight streams keep their started generation because the
    * child replaces its client only between requests it has already accepted.
+   * The binaryRev joins the generation key so a rebuilt `ai-sidecar` forces
+   * re-configure even when credentials are unchanged.
    */
   private async ensureConfigured(
     resolved: ResolvedRouteSet,
@@ -378,7 +402,7 @@ export class AiSdkAdapter extends LlmAdapter {
         // it later re-runs this step and fails with its own MISSING_CREDENTIAL.
       }
     }
-    const generation = JSON.stringify(providers)
+    const generation = JSON.stringify({ binaryRev: resolved.binaryRev ?? '', providers })
     if (generation === this.configuredGeneration) return
     await this.sidecar.configure(providers)
     this.configuredGeneration = generation
