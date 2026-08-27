@@ -21,6 +21,17 @@
 
 import { Zip, ZipDeflate } from 'fflate'
 import type { Context } from '@deepseek-ai/cordis'
+
+/**
+ * Whether the host runtime provides `Bun.Archive` with ZIP support.
+ * Mirrors the `browser-opener.ts:probeBunOpen()` runtime-detection pattern:
+ * probe `globalThis.Bun?.Archive` first, fall back to `fflate` on Node.
+ * @returns true when `Bun.Archive` is available as a constructor.
+ */
+function isBunArchiveAvailable(): boolean {
+  const bun = (globalThis as unknown as { Bun?: { Archive?: unknown } }).Bun
+  return typeof bun?.Archive === 'function'
+}
 import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionLineageNode, SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type { SessionId, SessionStore } from '@deepseek-ai/dsh-session'
@@ -393,6 +404,64 @@ export function streamSessionLogZip(
   compressionLevel: SessionLogCompressionLevel,
   signal: AbortSignal,
 ): ReadableStream<Uint8Array> {
+  // Bun-first path: when `Bun.Archive` with ZIP is available, collect entries
+  // then build the archive via the native libarchive ZIP writer (no fflate
+  // loaded at runtime). Node / bare-v8 runtimes fall back to the fflate
+  // streaming path below. Both paths preserve the same cancellation,
+  // backpressure, and error semantics.
+  if (isBunArchiveAvailable()) {
+    const consumerAbort = new AbortController()
+    const producerSignal = AbortSignal.any([signal, consumerAbort.signal])
+    const capacity = new ResponseCapacityGate()
+    return new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          const entries: SessionLogZipEntry[] = []
+          for await (const entry of sessionLogZipEntries(deps, root, sessionId, includeDescendants, producerSignal)) {
+            entries.push(entry)
+          }
+          producerSignal.throwIfAborted()
+          const data: Record<string, string | Uint8Array> = {}
+          for (const entry of entries) {
+            if ('content' in entry) data[entry.path] = entry.content
+            else data[entry.path] = entry.data
+          }
+          // eslint-disable-next-line @stylistic/max-len
+          type BunArchiveCtor = new (data: Record<string, string | Uint8Array>, opts: { format: string; compress: string; level: number }) => { bytes(): Promise<Uint8Array> }
+          const BunArchive = (globalThis as unknown as {
+            Bun: { Archive: BunArchiveCtor }
+          }).Bun.Archive
+          const archive = new BunArchive(data,
+            { format: 'zip', compress: 'deflate', level: compressionLevel })
+          const bytes = await archive.bytes()
+          producerSignal.throwIfAborted()
+          let offset = 0
+          while (offset < bytes.byteLength) {
+            producerSignal.throwIfAborted()
+            const end = Math.min(offset + PUSH_CHUNK_BYTES, bytes.byteLength)
+            controller.enqueue(bytes.subarray(offset, end))
+            offset = end
+            await capacity.wait(controller, producerSignal)
+          }
+          controller.close()
+        } catch (error) {
+          controller.error(error instanceof Error ? error : new Error(String(error)))
+        }
+      },
+      pull() {
+        capacity.pulled()
+      },
+      cancel(reason) {
+        consumerAbort.abort(
+          reason instanceof Error ? reason : new Error('session log export stream cancelled'),
+        )
+      },
+    }, {
+      highWaterMark: RESPONSE_HIGH_WATER_MARK_BYTES,
+      size: chunk => chunk.byteLength,
+    })
+  }
+
   const consumerAbort = new AbortController()
   const producerSignal = AbortSignal.any([signal, consumerAbort.signal])
   let zip: Zip | undefined

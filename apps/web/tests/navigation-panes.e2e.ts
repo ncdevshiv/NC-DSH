@@ -11,7 +11,38 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page, Response } from 'playwright'
 import { chromium } from 'playwright'
-import { strFromU8, unzipSync } from 'fflate'
+/**
+ * Unzip a ZIP archive produced by the session-export endpoint.
+ * On Bun runtimes this uses `Bun.Archive` natively; on Node (the vitest
+ * worker) it falls back to `fflate` so the test runs on either engine.
+ * @param bytes - full ZIP bytes from the download file.
+ * @returns a map of entry path to uncompressed bytes.
+ */
+async function unzipEntries(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
+  const bun = (globalThis as unknown as { Bun?: { Archive?: new (data: Uint8Array) => { files(): Promise<Map<string, File>> } } }).Bun
+  if (typeof bun?.Archive === 'function') {
+    const archive = new bun.Archive(bytes)
+    const files = await archive.files()
+    const out: Record<string, Uint8Array> = {}
+    for (const [name, file] of files) {
+      out[name] = new Uint8Array(await file.arrayBuffer())
+    }
+    return out
+  }
+  const fflate = await import('fflate') as unknown as {
+    unzipSync: (data: Uint8Array) => Record<string, Uint8Array>
+  }
+  return fflate.unzipSync(bytes)
+}
+
+/**
+ * Decode a UTF-8 ZIP entry.
+ * @param bytes - raw entry bytes.
+ * @returns the UTF-8 string.
+ */
+function entryText(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes)
+}
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFailed, vi } from 'vitest'
 import { parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -314,9 +345,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await dialog.waitFor({ timeout: 30_000 })
     // The real host streamed the ZIP; its root entry is the persisted log
     // text verbatim (the assembled seam: real route, real persistence read).
-    const files = unzipSync(await readFile(await download.path()))
+    const files = await unzipEntries(await readFile(await download.path()))
     expect(Object.keys(files)).toEqual(['session.jsonl'])
-    const content = strFromU8(files['session.jsonl'] as Uint8Array)
+    const content = entryText(files['session.jsonl'] as Uint8Array)
     expect(content.split('\n')[0]).toContain(SEED_ID)
     expect(content).toContain('FIRST_DONE')
     await dialog.getByText('Close', { exact: true }).click()
@@ -353,8 +384,8 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
       await input.press('Enter')
       const slashDownload = await slashDownloadPromise
       expect(slashDownload.suggestedFilename()).toBe(download.suggestedFilename())
-      const slashFiles = unzipSync(await readFile(await slashDownload.path()))
-      const slashContent = strFromU8(slashFiles['session.jsonl'] as Uint8Array)
+      const slashFiles = await unzipEntries(await readFile(await slashDownload.path()))
+      const slashContent = entryText(slashFiles['session.jsonl'] as Uint8Array)
       const slashEvents = parseSessionLog(slashContent)
       const exportRun = slashEvents.findLast(event => event.type === 'command/run' && event.data.name === 'export')
       if (exportRun?.type !== 'command/run') throw new Error('slash ZIP has no export command/run')
