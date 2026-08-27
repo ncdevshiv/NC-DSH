@@ -81,7 +81,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [route, setRoute] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [baseURL, setBaseURL] = useState('')
-  const [protocol, setProtocol] = useState(protocols[0] ?? '')
+  const initialProtocol = protocols[0] ?? ''
+  const [protocol, setProtocol] = useState(initialProtocol)
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<readonly ModelDraft[]>([])
   const [busy, setBusy] = useState(false)
@@ -96,8 +97,10 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   /** Everything but the key stops being editable once the provider exists. */
   const profileDisabled = disabled || committed
 
-  const routeInvalid = route.length > 0 && !ROUTE_PATTERN.test(route)
-  const routeTaken = taken.includes(route)
+  const trimmedRoute = route.trim()
+  const trimmedBaseURL = baseURL.trim()
+  const routeInvalid = trimmedRoute.length > 0 && !ROUTE_PATTERN.test(trimmedRoute)
+  const routeTaken = taken.includes(trimmedRoute)
   // Rows are checked by the same per-row validator the editor cards use, so a
   // bad row is named by its position here too. Capacities have route-level
   // fallbacks; what a route cannot default is at least one model.
@@ -107,8 +110,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   // string, which the create path reads as "no key supplied" — a route may
   // legitimately authenticate through the provider's own ambient discovery.
   const keyValue = keyDraft.trim()
-  const ready = route.length > 0 && !routeInvalid && !routeTaken
-    && baseURL.length > 0 && models.length > 0 && modelFailure === undefined
+  const ready = trimmedRoute.length > 0 && !routeInvalid && !routeTaken
+    && trimmedBaseURL.length > 0 && models.length > 0 && modelFailure === undefined
     && keyFailure === undefined
   // The one blocked gate worth a line under the form. A satisfied card says
   // nothing at all rather than printing an empty paragraph.
@@ -120,9 +123,9 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
     // Same for the route id, and it must be tested rather than assumed: the
     // fallback arm below reads "no models yet", so an unmet route gate would
     // fall through to it and contradict the filled-in list right above.
-    || route.length === 0 || routeInvalid || routeTaken
+    || trimmedRoute.length === 0 || routeInvalid || routeTaken
     ? undefined
-    : baseURL.length === 0
+    : trimmedBaseURL.length === 0
       ? t('customNeedsBaseUrl')
       : modelFailure !== undefined
         ? `${t('model')} ${String(modelFailure.index + 1)}: ${t(modelFailure.key)}`
@@ -130,29 +133,34 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
 
   /** Perform the create, returning a failure message or undefined. */
   const createOnce = async (): Promise<string | undefined> => {
-    const keyRef = deriveKeyRef(route)
+    const keyRef = deriveKeyRef(trimmedRoute)
     const storesKey = keyValue.length > 0
+    const trimmedDisplayName = displayName.trim()
     if (!committed) {
       const profile = {
-        ...displayName.length === 0 ? {} : { displayName },
+        ...trimmedDisplayName.length === 0 ? {} : { displayName: trimmedDisplayName },
         // The profile names the conventional reference only when this card is
         // about to store a key, matching the editor: a route declared with the
         // key left blank keeps its provider-native auth path (a credential
         // chain, ADC) instead of resolving a reference nothing ever sets.
         ...storesKey ? { apiKeyEnv: keyRef } : {},
         api: protocol,
-        baseURL,
+        baseURL: trimmedBaseURL,
         models: models.map(model => ({ ...model })),
       }
       const response = await api.settings.mutate({
         ns: NS,
-        ops: [{ op: 'set', path: ['providers', route], value: profile }],
+        ops: [{ op: 'set', path: ['providers', trimmedRoute], value: profile }],
         // `taken` is a snapshot too, so the id check alone cannot see a route
         // declared after this card opened; the revision makes that race a
         // `settings-conflict` instead of a write over the other profile.
         expectedRevision: openedAt,
       })
-      if (!response.result.ok) return response.result.error.message
+      if (!response.result.ok) {
+        const error = response.result.error
+        if ('code' in error && error.code === 'settings-conflict') return t('conflict')
+        return error.message
+      }
       // The provider now exists. A retry after the key write below fails must
       // not re-run this mutate: the revision it holds is the one this write
       // just superseded, so the Host would answer `settings-conflict` and the
@@ -162,8 +170,13 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
     if (storesKey) {
       const stored = await api.credentials.set({ ref: keyRef, value: keyValue })
       // The profile landed; saying the key did not is the only honest report,
-      // and the retry above now goes straight back to this write.
-      if (!stored.result.ok) return stored.result.error.message
+      // and the retry above now goes straight back to this write. On credential
+      // failure the provider already exists without a stored key — surface the
+      // credential error directly so the caller can explain that state.
+      if (!stored.result.ok) {
+        const error = stored.result.error as { code?: string; message: string }
+        return error.message
+      }
     }
     return undefined
   }

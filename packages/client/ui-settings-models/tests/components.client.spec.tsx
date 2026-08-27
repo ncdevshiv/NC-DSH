@@ -539,8 +539,8 @@ describe('ModelsSection', () => {
     const call = mutate.mock.calls[0]?.[0] as { ops: { path: string[]; value?: unknown }[] }
     expect(call.ops[0]?.path).toEqual(['providers', 'deepseek-official', 'models'])
     expect(call.ops[0]?.value).toEqual([
-      { ...DEFAULT_DEEPSEEK_MODELS[0], input: ['text'] },
-      { ...DEFAULT_DEEPSEEK_MODELS[1], input: ['text', 'image'] },
+      { ...DEFAULT_DEEPSEEK_MODELS[0], inputModalities: ['text'] },
+      { ...DEFAULT_DEEPSEEK_MODELS[1], inputModalities: ['text', 'image'] },
     ])
   })
 

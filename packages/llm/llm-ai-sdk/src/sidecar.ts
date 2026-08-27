@@ -216,14 +216,23 @@ export class AiSidecarClient {
      A JSON-RPC error response rejects with {@link SidecarProtocolError} carrying
    * the sidecar's typed error kind.
    */
-  private async request(method: string, params: object): Promise<unknown> {
+  private async request(method: string, params: object, signal?: AbortSignal): Promise<unknown> {
+    if (signal?.aborted) {
+      throw new SidecarProtocolError('cancelled', 'llm-ai-sdk: sidecar request cancelled', false, signal.reason)
+    }
     const transport = await this.start()
     const id = ++this.nextRequestId
+    const abortOnSignal = signal === undefined
+      ? undefined
+      : new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          reject(new SidecarProtocolError('cancelled', 'llm-ai-sdk: sidecar request cancelled', false, signal.reason))
+        }, { once: true })
+      })
     try {
-      return await Promise.race([
-        transport.request(method, params),
-        this.childExitOrTimeout(id),
-      ])
+      const racers: Promise<unknown>[] = [transport.request(method, params), this.childExitOrTimeout(id)]
+      if (abortOnSignal !== undefined) racers.push(abortOnSignal)
+      return await Promise.race(racers)
     } catch (error: unknown) {
       if (error instanceof JsonRpcResponseError) {
         const data = (error.data ?? {}) as { kind?: string; retryable?: boolean }
@@ -236,21 +245,35 @@ export class AiSidecarClient {
   /** Timeout race partner; child exit or spawn failure rejects immediately. */
   private childExitOrTimeout(_id: number): Promise<never> {
     return new Promise((_resolve, reject) => {
-      const timer = setTimeout(
+      const child = this.child
+      const timer: NodeJS.Timeout = setTimeout(
         () => {
+          child?.off('exit', onExit)
+          child?.off('error', onError)
           reject(new SidecarProtocolError('timeout', 'llm-ai-sdk: sidecar request timed out', true))
         },
         DEFAULT_REQUEST_TIMEOUT_MS,
       )
-      timer.unref()
-      this.child?.once('exit', () => {
+      const onExit = (): void => {
+        clearTimeout(timer)
         reject(new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar exited mid-request'))
-      })
-      // A failed spawn emits `error` without `exit`; without this the request
-      // would hang until the ceiling instead of failing at launch.
-      this.child?.once('error', () => {
+      }
+      const onError = (): void => {
+        clearTimeout(timer)
         reject(new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar failed to launch'))
-      })
+      }
+      timer.unref()
+      if (child !== undefined) {
+        child.once('exit', onExit)
+        // A failed spawn emits `error` without `exit`; without this the request
+        // would hang until the ceiling instead of failing at launch.
+        child.once('error', onError)
+      } else {
+        // No child yet — expire immediately rather than hanging until the 120s
+        // ceiling; the caller's `start()` race will still surface the real cause.
+        clearTimeout(timer)
+        reject(new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar failed to launch'))
+      }
     })
   }
 
@@ -280,18 +303,22 @@ export class AiSidecarClient {
    */
   async discoverModels(
     request: { apiKey?: string; baseURL?: string; api?: SidecarApiKind },
+    signal?: AbortSignal,
   ): Promise<SidecarDiscoveredModel[]> {
     const params: SidecarDiscoverParams = {
       ...(request.apiKey === undefined ? {} : { api_key: request.apiKey }),
       ...(request.baseURL === undefined ? {} : { base_url: request.baseURL }),
       ...(request.api === undefined ? {} : { api: request.api }),
     }
-    const result = (await this.request('model.discover', params)) as {
+    const result = (await this.request('model.discover', params, signal)) as {
       models?: readonly unknown[]
     }
     const rows = result.models ?? []
     const out: SidecarDiscoveredModel[] = []
-    for (const row of rows) out.push(row as SidecarDiscoveredModel)
+    for (const row of rows) {
+      if (typeof (row as { id?: unknown })?.id !== 'string' || (row as { id: string }).id.length === 0) continue
+      out.push(row as SidecarDiscoveredModel)
+    }
     return out
   }
 

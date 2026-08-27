@@ -196,7 +196,7 @@ function groupByWorkspace(
   const stray = list.ids
     .map(id => list.byId[id])
     .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived) && !s.blank)
+      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived))
   if (stray.length > 0) {
     groups.push(buildGroup(
       UNGROUPED_KEY,

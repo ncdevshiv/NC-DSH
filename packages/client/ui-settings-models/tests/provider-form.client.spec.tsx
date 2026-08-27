@@ -236,7 +236,7 @@ describe('model list editing', () => {
 
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     expect(firstMutate(mutate).ops[0]?.value).toEqual([
-      { id: 'ox-vision', input: ['text', 'image'] },
+      { id: 'ox-vision', inputModalities: ['text', 'image'] },
     ])
   })
 
@@ -245,7 +245,7 @@ describe('model list editing', () => {
       providers: {
         openai: {
           baseURL: 'https://proxy.example/v1',
-          models: [{ id: 'seeing', input: ['text', 'image'] }, { id: 'blind', input: ['text'] }],
+          models: [{ id: 'seeing', inputModalities: ['text', 'image'] }, { id: 'blind', inputModalities: ['text'] }],
         },
       },
     })
@@ -556,8 +556,8 @@ describe('endpoint interrogation', () => {
     fireEvent.click(screen.getByText(en.apply))
     await waitFor(() => { expect(mutate).toHaveBeenCalled() })
     expect(firstMutate(mutate).ops[0]?.value).toEqual([
-      { id: 'seeing', input: ['text', 'image'] },
-      { id: 'unlisted', input: ['text'] },
+      { id: 'seeing', inputModalities: ['text', 'image'] },
+      { id: 'unlisted', inputModalities: ['text'] },
       { id: 'silent' },
     ])
   })
