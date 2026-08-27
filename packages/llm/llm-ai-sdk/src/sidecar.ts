@@ -248,8 +248,10 @@ export class AiSidecarClient {
       const child = this.child
       const timer: NodeJS.Timeout = setTimeout(
         () => {
-          child?.off('exit', onExit)
-          child?.off('error', onError)
+          if (child !== undefined) {
+            child.off('exit', onExit)
+            child.off('error', onError)
+          }
           reject(new SidecarProtocolError('timeout', 'llm-ai-sdk: sidecar request timed out', true))
         },
         DEFAULT_REQUEST_TIMEOUT_MS,
@@ -316,7 +318,9 @@ export class AiSidecarClient {
     const rows = result.models ?? []
     const out: SidecarDiscoveredModel[] = []
     for (const row of rows) {
-      if (typeof (row as { id?: unknown })?.id !== 'string' || (row as { id: string }).id.length === 0) continue
+      if (row === null || typeof row !== 'object') continue
+      const candidateId = (row as { id?: unknown }).id
+      if (typeof candidateId !== 'string' || candidateId.length === 0) continue
       out.push(row as SidecarDiscoveredModel)
     }
     return out
@@ -354,7 +358,7 @@ export class AiSidecarClient {
    */
   /**
    * Start one streamed completion over the live transport.
-   * @param reference -oute:model selector the child resolves.
+   * @param reference - route:model selector the child resolves.
    * @param request - the assembled wire request (see {@link WireChatRequest}).
    * @param readSignal - aborts settle an outstanding read as cancelled/timeout.
    * @returns an async iterable of events terminated by chat/done.
@@ -456,7 +460,7 @@ export class AiSidecarClient {
   async promoteShadow(shadow: AiSidecarClient, drainDeadlineMs = 5000): Promise<void> {
     if (shadow === this) throw new Error('llm-ai-sdk: cannot promote self as shadow')
     const shadowChild = (shadow as unknown as { child: ReturnType<typeof import('node:child_process').spawn> | undefined }).child
-    const shadowTransport = (shadow as unknown as { transport: unknown }).transport
+    const shadowTransport = (shadow as unknown as { transport: JsonRpcLineTransport | undefined }).transport
     const shadowInitialized = (shadow as unknown as { initialized: Promise<void> | undefined }).initialized
     ;(shadow as unknown as { child: unknown }).child = undefined
     ;(shadow as unknown as { transport: unknown }).transport = undefined
@@ -464,8 +468,8 @@ export class AiSidecarClient {
     ;(shadow as unknown as { disposed: boolean }).disposed = true
     const oldChild = this.child
     const oldTransport = this.transport
-    this.child = shadowChild as ReturnType<typeof import('node:child_process').spawn> | undefined
-    this.transport = shadowTransport as typeof this.transport
+    this.child = shadowChild
+    this.transport = shadowTransport
     this.initialized = shadowInitialized
     if (oldChild !== undefined && oldChild !== shadowChild) {
       try { oldTransport?.close() } catch {}

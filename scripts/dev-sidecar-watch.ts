@@ -79,7 +79,8 @@ if (isMain) {
     }
   }
 
-  setInterval(poll, pollMs).unref?.()
+  const handle = setInterval(poll, pollMs)
+  if (typeof handle.unref === 'function') handle.unref()
 
   const onSignal = (): void => {
     process.exit(0)
