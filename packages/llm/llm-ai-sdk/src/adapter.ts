@@ -73,6 +73,8 @@ export interface ResolvedRoute {
 export interface ResolvedRouteSet {
   /** Absolute `ai-sidecar` executable path shared by every route. */
   binaryPath: string
+  /** Content hash of the sidecar binary when known; empty when not probed. */
+  binaryRev?: string
   routes: ReadonlyMap<string, ResolvedRoute>
 }
 

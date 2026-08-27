@@ -389,4 +389,6 @@ export interface GenerateOptions {
    * generation policy. Ordinary conversation requests leave it unset.
    */
   purpose?: 'compaction' | 'session-title'
+  /** Provider-specific options forwarded verbatim (e.g. Anthropic `cache_control`). */
+  providerOptions?: Record<string, unknown>
 }

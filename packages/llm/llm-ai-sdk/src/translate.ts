@@ -41,7 +41,8 @@ export interface WireChatRequest {
   temperature?: number
   max_tokens?: number
   stop?: string[]
-  reasoning_effort?: 'low' | 'medium' | 'high'
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'max'
+  provider_options?: Record<string, unknown>
 }
 
 /**
@@ -143,15 +144,17 @@ export function toChatRequest(options: GenerateOptions, images: ResolvedImages):
     ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens }),
     ...(options.stop === undefined || options.stop.length === 0 ? {} : { stop: [...options.stop] }),
     ...(effort === undefined ? {} : { reasoning_effort: effort }),
+    ...(options.providerOptions === undefined ? {} : { provider_options: options.providerOptions }),
   }
 }
 
-/** Harness effort vocabulary projected onto the sidecar's three levels; `off` keeps the provider default. */
-function reasoningEffortOf(options: GenerateOptions): 'low' | 'medium' | 'high' | undefined {
+/** Harness effort vocabulary projected onto the sidecar's four levels; `off` keeps the provider default. */
+function reasoningEffortOf(options: GenerateOptions): 'low' | 'medium' | 'high' | 'max' | undefined {
   switch (options.reasoningEffort) {
     case 'low': return 'low'
-    case 'high':
-    case 'max': return 'high'
+    case 'medium': return 'medium'
+    case 'high': return 'high'
+    case 'max': return 'max'
     default: return undefined
   }
 }

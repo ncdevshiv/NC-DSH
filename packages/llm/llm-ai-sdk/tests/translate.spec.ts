@@ -88,7 +88,7 @@ describe('toChatRequest', () => {
       tools: [{ name: 't', description: 'd', parameters: { type: 'object' } }],
       messages: [message({ role: 'user', content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } })],
     }, new Map())
-    expect(request.reasoning_effort).toBe('high')
+    expect(request.reasoning_effort).toBe('max')
     expect(request.temperature).toBe(0.5)
     expect(request.max_tokens).toBe(128)
     expect(request.stop).toEqual(['END'])

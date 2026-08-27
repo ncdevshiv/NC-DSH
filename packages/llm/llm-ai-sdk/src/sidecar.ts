@@ -181,7 +181,7 @@ export class AiSidecarClient {
     this.transport = undefined
     this.initialized = undefined
     this.failAllStreams(
-      new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar exited before completing its streams'),
+      new SidecarProtocolError('network', 'llm-ai-sdk: ai-sidecar exited before completing its streams', true),
     )
     this.child = undefined
     if (child === undefined || child.exitCode !== null) return
@@ -248,8 +248,10 @@ export class AiSidecarClient {
       const child = this.child
       const timer: NodeJS.Timeout = setTimeout(
         () => {
-          child?.off('exit', onExit)
-          child?.off('error', onError)
+          if (child !== undefined) {
+            child.off('exit', onExit)
+            child.off('error', onError)
+          }
           reject(new SidecarProtocolError('timeout', 'llm-ai-sdk: sidecar request timed out', true))
         },
         DEFAULT_REQUEST_TIMEOUT_MS,
@@ -316,7 +318,9 @@ export class AiSidecarClient {
     const rows = result.models ?? []
     const out: SidecarDiscoveredModel[] = []
     for (const row of rows) {
-      if (typeof (row as { id?: unknown })?.id !== 'string' || (row as { id: string }).id.length === 0) continue
+      if (row === null || typeof row !== 'object') continue
+      const candidateId = (row as { id?: unknown }).id
+      if (typeof candidateId !== 'string' || candidateId.length === 0) continue
       out.push(row as SidecarDiscoveredModel)
     }
     return out
@@ -354,7 +358,7 @@ export class AiSidecarClient {
    */
   /**
    * Start one streamed completion over the live transport.
-   * @param reference -oute:model selector the child resolves.
+   * @param reference - route:model selector the child resolves.
    * @param request - the assembled wire request (see {@link WireChatRequest}).
    * @param readSignal - aborts settle an outstanding read as cancelled/timeout.
    * @returns an async iterable of events terminated by chat/done.
@@ -410,6 +414,67 @@ export class AiSidecarClient {
       if (!state.finished) {
         transport.notify('stream.cancel', { stream_id: streamId })
       }
+    }
+  }
+
+  /** Drain deadline for a quiesce: let in-flight pumps reach chat/done before failing them. */
+  async drain(deadlineMs: number): Promise<void> {
+    if (this.streams.size === 0) return
+    const deadline = Date.now() + deadlineMs
+    while (this.streams.size > 0 && Date.now() < deadline) {
+      await new Promise<void>(resolve => setTimeout(resolve, 50))
+    }
+    if (this.streams.size > 0) {
+      this.failAllStreams(
+        new SidecarProtocolError('network', 'llm-ai-sdk: sidecar drain deadline exceeded', true),
+      )
+    }
+  }
+
+  /**
+   * Spawn a fresh shadow client probing the same binary. Callers must
+   * `configure()` the shadow with the current generation before promoting.
+   * @param connection - connection facts for the shadow (may be same binary).
+   * @returns a new client that has completed initialize.
+   */
+  async spawnShadow(connection: SidecarConnection): Promise<AiSidecarClient> {
+    const shadow = new AiSidecarClient(() => connection)
+    await (shadow as unknown as { start: () => Promise<unknown> }).start()
+    return shadow
+  }
+
+  /**
+   * Health probe: list providers on this client.
+   * @returns provider ids; throws on failure.
+   */
+  async healthProbe(): Promise<string[]> {
+    return await this.listProviders()
+  }
+
+  /**
+   * Atomically promote a healthy shadow by stealing its transport. The shadow
+   * is disposed after promotion; the old generation drains to its deadline.
+   * @param shadow - a healthy shadow that has been configured.
+   * @param drainDeadlineMs - wall time to let old pumps reach chat/done.
+   */
+  async promoteShadow(shadow: AiSidecarClient, drainDeadlineMs = 5000): Promise<void> {
+    if (shadow === this) throw new Error('llm-ai-sdk: cannot promote self as shadow')
+    const shadowChild = (shadow as unknown as { child: ReturnType<typeof import('node:child_process').spawn> | undefined }).child
+    const shadowTransport = (shadow as unknown as { transport: JsonRpcLineTransport | undefined }).transport
+    const shadowInitialized = (shadow as unknown as { initialized: Promise<void> | undefined }).initialized
+    ;(shadow as unknown as { child: unknown }).child = undefined
+    ;(shadow as unknown as { transport: unknown }).transport = undefined
+    ;(shadow as unknown as { initialized: unknown }).initialized = undefined
+    ;(shadow as unknown as { disposed: boolean }).disposed = true
+    const oldChild = this.child
+    const oldTransport = this.transport
+    this.child = shadowChild
+    this.transport = shadowTransport
+    this.initialized = shadowInitialized
+    if (oldChild !== undefined && oldChild !== shadowChild) {
+      try { oldTransport?.close() } catch {}
+      await new Promise<void>(resolve => setTimeout(resolve, Math.min(drainDeadlineMs, 200)))
+      try { oldChild.kill() } catch {}
     }
   }
 
