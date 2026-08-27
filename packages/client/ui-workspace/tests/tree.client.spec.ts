@@ -92,6 +92,15 @@ describe('deriveGroups', () => {
     expect(strayGroups.map(group => group.key)).toEqual(['first'])
   })
 
+  it('shows the current ungrouped blank session in the Ungrouped bucket', () => {
+    const currentBlank = { ...summary('current-blank', 5), blank: true }
+    const sessions = { ...list(currentBlank), current: currentBlank.id }
+    const groups = deriveGroups(sessions, [workspace('first', [])], noArchive, view([UNGROUPED_KEY]))
+    expect(groups.map(group => group.key)).toEqual(['first', UNGROUPED_KEY])
+    expect(groups[1]!.sessions.map(session => session.id)).toEqual([currentBlank.id])
+    expect(groups[1]!.sessions[0]!.blank).toBe(true)
+  })
+
   it('projects the completion reminder into session and search rows (absent = false)', () => {
     const done = { ...summary('done', 3), completed: true }
     const plain = summary('plain', 2)

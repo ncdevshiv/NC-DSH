@@ -484,7 +484,7 @@ export function apply(ctx: Context, config: Config): void {
       ...(apiKey === undefined ? {} : { apiKey }),
       ...(resolvedBaseURL === undefined ? {} : { baseURL: resolvedBaseURL }),
       ...(api === undefined ? {} : { api }),
-    })
+    }, request.signal)
     return rows.flatMap((row) => {
       const discovered = discoveredOf(row)
       return discovered === undefined ? [] : [discovered]

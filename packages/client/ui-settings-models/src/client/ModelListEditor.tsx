@@ -46,15 +46,20 @@ function numberOf(model: ModelDraft, key: string): number | undefined {
 }
 
 /**
- * Whether one row declares image input. An explicit `input` field is
+ * Whether one row declares image input. An explicit `inputModalities` field is
  * authoritative (adopted from a source that carried modalities or set by hand);
- * when absent, infer from the model's id and name so well-known multimodal
+ * legacy `input` is read for backwards compatibility with earlier drafts.
+ * When absent, infer from the model's id and name so well-known multimodal
  * models default to checked, matching what the adapter resolves to.
  */
 function declaresVision(model: ModelDraft): boolean {
-  const value = model['input']
-  if (Array.isArray(value)) {
-    return value.includes('image')
+  const canonical = model['inputModalities']
+  if (Array.isArray(canonical)) {
+    return canonical.includes('image')
+  }
+  const legacy = model['input']
+  if (Array.isArray(legacy)) {
+    return legacy.includes('image')
   }
   const id = typeof model['id'] === 'string' ? model['id'] : ''
   const name = typeof model['name'] === 'string' ? model['name'] : undefined
@@ -169,7 +174,7 @@ function adopt(candidate: DiscoveredModelView): ModelDraft {
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
     ...(candidate.inputModalities === undefined || candidate.inputModalities.length === 0)
       ? {}
-      : { input: [...candidate.inputModalities] },
+      : { inputModalities: [...candidate.inputModalities] },
   }
 }
 
@@ -249,13 +254,14 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
 
   /**
    * Pin one row's image capability. Both states write the explicit
-   * declaration — checked pins `['text', 'image']`, unchecked pins
-   * `['text']` — because on a catalog route an absent field would inherit the
-   * installed entry's declaration, and "unchecked" has to mean text-only,
-   * not "whatever the catalog says".
+   * `inputModalities` declaration — checked pins `['text', 'image']`,
+   * unchecked pins `['text']` — because on a catalog route an absent field
+   * would inherit the installed entry's declaration, and "unchecked" has to
+   * mean text-only, not "whatever the catalog says". Legacy `input` is
+   * dropped when present so repaired rows do not carry both shapes.
    */
   const setVision = (index: number, vision: boolean): void => {
-    patch(index, { input: vision ? ['text', 'image'] : ['text'] })
+    patch(index, { input: undefined, inputModalities: vision ? ['text', 'image'] : ['text'] })
   }
 
   const fetchModels = async (): Promise<void> => {
