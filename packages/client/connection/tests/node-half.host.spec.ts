@@ -165,14 +165,18 @@ describe('connection node half', () => {
     const { routes, dispose } = await mounted({ trustedHosts: ['harness.example'] })
     // The privileged set: native dialogs plus the whole settings/credential
     // configuration plane, reads included, plus the one method that makes the
-    // host fetch a caller-chosen URL. The same declared authority reaches
-    // ordinary reads (carrier-level 404 from the empty proxy proves the fence
-    // passed), but each privileged method stays loopback-only and 403s.
+    // host fetch a caller-chosen URL, and the update/notification maintenance
+    // surfaces (host-local install pointer and store state). The same declared
+    // authority reaches ordinary reads (carrier-level 404 from the empty proxy
+    // proves the fence passed), but each privileged method stays loopback-only
+    // and 403s.
     for (const method of [
       'host.pickDirectory', 'host.openPath',
       'settings.describe', 'settings.openDocument', 'settings.update', 'settings.replace', 'settings.mutate',
       'credentials.describe', 'credentials.set', 'credentials.unset',
       'llm.discoverModels',
+      'updates.status', 'updates.check', 'updates.install', 'updates.ignore',
+      'notifications.list', 'notifications.setRead', 'notifications.dismiss',
       // A composition names the plugins a session runs: reading one is
       // reconnaissance, and copy/remove/openDocument manage the roster and
       // drive the host desktop.
@@ -470,6 +474,10 @@ describe('connection node half over a real HTTP server', () => {
         // Carries a draft credential and turns the host into a fetcher for a
         // URL the caller picked: an anonymous LAN caller must not reach it.
         'llm.discoverModels',
+        // Host-local maintenance state: the update pointer and the
+        // notification store are reconnaissance like describe.
+        'updates.status', 'updates.check', 'updates.install', 'updates.ignore',
+        'notifications.list', 'notifications.setRead', 'notifications.dismiss',
         'agentPreset.read', 'agentPreset.copy', 'agentPreset.openDocument', 'agentPreset.remove',
       ]) {
         expect([method, await call(port, method, 'harness.example')]).toEqual([method, 403])

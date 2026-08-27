@@ -13,6 +13,8 @@ import type { GoalsApi } from './goals.ts'
 import type { SettingsApi } from './settings.ts'
 import type { CredentialsApi } from './credentials.ts'
 import type { LlmApi } from './llm.ts'
+import type { UpdatesApi } from './updates.ts'
+import type { NotificationsApi } from './notifications.ts'
 import type { SubagentsApi } from './subagents.ts'
 import type { RpcResponse } from './rpc.ts'
 
@@ -74,6 +76,13 @@ export interface RpcMethodMap {
   'llm.providers': LlmApi['providers']
   'llm.models': LlmApi['models']
   'llm.discoverModels': LlmApi['discoverModels']
+  'updates.status': UpdatesApi['status']
+  'updates.check': UpdatesApi['check']
+  'updates.install': UpdatesApi['install']
+  'updates.ignore': UpdatesApi['ignore']
+  'notifications.list': NotificationsApi['list']
+  'notifications.setRead': NotificationsApi['setRead']
+  'notifications.dismiss': NotificationsApi['dismiss']
 }
 
 /** Business request payload of method K (reaches through the RpcRequest narrow form to payload). */

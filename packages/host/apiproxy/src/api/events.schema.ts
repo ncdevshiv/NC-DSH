@@ -15,6 +15,7 @@ import {
 } from './sessions.schema.ts'
 import { taskViewSchema } from './jobs.schema.ts'
 import { workspaceIdSchema, workspaceViewSchema } from './workspace.schema.ts'
+import { updateStatusViewSchema } from './updates.schema.ts'
 
 /** Question fields validated strictly against core dsh-user-questions. */
 export const askUserQuestionItemSchema = z.object({
@@ -89,5 +90,8 @@ export const hostFrameSchema = z.discriminatedUnion('type', [
   // structural contract belongs to the owner package's cordis `Events`
   // declaration — the host validated JSON-safety before forwarding.
   z.object({ type: z.literal('host/remote-event'), event: z.string().min(1), args: z.array(z.unknown()) }),
+  // The status view is the exePath-stripped projection; a frame whose install
+  // entry still carries one fails here instead of reaching the browser.
+  z.object({ type: z.literal('updates/status'), status: updateStatusViewSchema }),
   z.object({ type: z.literal('stream/error'), error: rpcErrorSchema }),
 ]) as unknown as z.ZodType<HostFrame>

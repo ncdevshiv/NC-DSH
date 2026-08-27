@@ -17,6 +17,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { assertUsableApiKey, LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { LlmConfigurableProvider, LlmDiscoveredModel, ModelModality, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
@@ -361,16 +363,35 @@ export function apply(ctx: Context, config: Config): void {
     )
   }
 
+  /**
+   * The auto-updater's managed install pointer: `core-deps/ai-sidecar/current.json`
+   * beside the launch cwd, written by @deepseek-ai/dsh-sidecar-updates. Absent or
+   * unreadable means "no managed install" — never an error.
+   */
+  const managedBinary = (): string | undefined => {
+    try {
+      const pointerPath = join(process.cwd(), 'core-deps', 'ai-sidecar', 'current.json')
+      const pointer = JSON.parse(readFileSync(pointerPath, 'utf8')) as { exePath?: unknown }
+      const exePath = typeof pointer.exePath === 'string' ? pointer.exePath : undefined
+      if (exePath !== undefined && existsSync(exePath)) return exePath
+    } catch {
+      // No managed install (or a torn pointer mid-swap) is a normal state.
+    }
+    return undefined
+  }
+
   const connection = (): SidecarConnection => {
     const resolved = options()
-    if (resolved.binaryPath.length === 0) {
+    const command = resolved.binaryPath.length > 0 ? resolved.binaryPath : managedBinary()
+    if (command === undefined || command.trim().length === 0) {
       throw new LlmError(
         'llm-ai-sdk: no ai-sidecar binary is configured. Set llm-ai-sdk.binaryPath in cordis.yml or the'
-        + ` ${NS} settings section, or export $${BINARY_ENV} in the launching environment.`,
+        + ` ${NS} settings section, export $${BINARY_ENV} in the launching environment,`
+        + ' or install the managed copy via the bell-icon update flow (core-deps/ai-sidecar).',
         'CONFIG',
       )
     }
-    return { command: resolved.binaryPath, args: [] }
+    return { command, args: [] }
   }
 
   const sidecar = new AiSidecarClient(connection)

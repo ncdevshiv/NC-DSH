@@ -99,6 +99,16 @@ export interface RpcErrorDetailsMap {
   'subagent-not-resumable': { childSessionId: SessionId }
   'subagent-unauthorized': { childSessionId: SessionId }
   'subagent-delivery-unavailable': { childSessionId: SessionId }
+  /**
+   * A sidecar-update operation failed (lookup, unsupported target, download,
+   * checksum, or pointer commit); the message is the seam's own text.
+   */
+  'update-failed': {}
+  /**
+   * A notification mutation named an id the store does not hold, or the seam
+   * refused it; the message is the seam's own text.
+   */
+  'notification-rejected': { id: string }
   'internal': {}
 }
 

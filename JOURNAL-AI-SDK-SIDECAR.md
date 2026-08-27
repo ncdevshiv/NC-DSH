@@ -284,3 +284,110 @@ docs/config-catalog.md regenerated after the JSDoc touch.
 ### Expected goal next
 `bun run hygiene` + `bun run doc-sync` + fresh `typecheck`, fix whatever they
 surface, update MEMORY, leave commit for explicit say-so.
+
+### 2026-08-26 landing round (auto-update + bell on dev)
+
+### Wanted
+Land the auto-update AI SDK binary feature (notifications seam, sidecar-updates
+service, apiproxy updates/notifications RPC, ui-notifications bell) onto the
+current `dev` so it ships as a PR under `ncdevshiv`. The feature was already
+built and merged as PR #12 on `feat/single-llm-adapter-migration` but never
+reached `dev` because PR #9 merged before #12 was stacked on top — the
+107-file commit `888d3c2b` was stranded on the migration branch, and local
+`dev` was stale (2 ahead / 8 behind `origin/dev`).
+
+### Had
+- Feature fully implemented, tested, and committed as `888d3c2b` on the
+  migration branch; typecheck and the 533 focused tests were green there.
+- Three overlapping files (`.gitignore`, `pack-release.mjs`,
+  `verify-packed-install.mjs`) were already present identically on
+  `origin/dev` (via the merged CI fix `5ffbfd53`), so they were no-ops.
+- Local `dev` had untracked `.design/` files byte-identical to
+  `origin/dev` that blocked checkout; residue, safe to remove.
+
+### Did
+- Created `feat/sdk-auto-update-2026-08-26` from fresh `origin/dev` and
+  cherry-picked `888d3c2b` clean (107 files, no conflicts). Confirmed the
+  cherry-pick tree differs from the migration head only in the 8 files
+  already merged on dev via PRs #10/#11.
+- Brought `doc-sync` green on the new base. The original commit had never
+  passed doc-sync; landing it surfaced a chain of required fixes, each
+  applied as the gate it belonged to demanded:
+  1. `verify-cordis-catalog` / `verify-doc-graphs`: real code defect
+     (`packages/host/notifications/src/index.ts` — `setRead` public param
+     missing explicit type → `read: boolean`) plus 5 unclassified self-owned
+     types (`SidecarUpdatesService`, `UpdateStatus`, `InstallResult`,
+     `NotificationPublishInput`, `NotificationView`) added to the
+     `TYPE_LINK_EXEMPTIONS` map, and two new subsystem pages
+     (`notifications.md`, `sidecar-updates.md`) with bilingual `.zh.md`
+     mirrors and page/role mappings.
+  2. `verify-agent-note-format`: `Status: implemented` must sit on line 3
+     — reordered the `sidecar-auto-update` note (both languages) so the
+     language link no longer displaces it.
+  3. `verify-translation-pairing`: the `web-notification-center` feature
+     note had no counterpart — wrote a full Chinese `.zh.md` and recorded
+     the `.i18n.yaml` pair; re-recorded `config-catalog` and the two new
+     subsystem-page pairs.
+  4. `verify-client-catalog` / `verify-config-catalog`: regenerated
+     `slot-catalog.ts` and `docs/config-catalog.md` (+ Chinese mirror,
+     link targets kept byte-identical to EN per the pairing signature).
+  5. `verify-md-links`: two new subsystem-page intros pointed at
+     `../../host/...` (resolved to `docs/host/…`); fixed to
+     `../../packages/host/...`.
+  6. `verify-doc-graphs` / `documentation site checks`: added
+     `notifications` and `sidecarUpdates` to `SERVICE_ROLES`, mirrored the
+     new mermaid nodes/edges/tables into the `.zh.md` counterparts, and
+     added the three new event rows (`notifications/removed`,
+     `notifications/updated`, `sidecar-updates/status`) to the event matrix
+     mirror.
+- All bilingual pairs re-recorded with `verify-translation-pairing --write`
+  after the mirrors landed.
+
+### Errors + root causes
+- `doc-sync` started at 6/28 failing, then walked down gate-by-gate
+  (6→4→2→1→1→1→0). No regressions introduced; each failure was a
+  pre-existing gap in the stranded commit that only surfaced once it was
+  checked against a current base.
+- The Chinese mirror edits tripped on fullwidth punctuation (`：`/`，`/
+  `（`/`）` and CRLF checkout presentation under `core.autocrlf=true`),
+  which made hand-edits fail to match; rewritten those edits with Node
+  scripts using explicit `\u` escapes and byte-identical EN mermaid copy
+  for the pairing-sensitive code block. The canonical stored form is LF
+  (`.gitattributes` `eol=lf`); the clean `git diff --stat` (56
+  insertions / 3 deletions on `config-catalog.zh.md`) confirms no
+  line-ending churn reached the index.
+- `gen-doc-graphs` rewrites `capability-seams.md` / `event-producer-consumer.md`
+  whole-file, so the Chinese counterparts had to be mirrored structurally
+  rather than region-spliced; done and re-recorded.
+
+### Files edited (beyond the 107-file feature commit)
+packages/host/notifications/src/index.ts (`setRead` explicit `boolean`),
+scripts/gen-cordis-catalog.ts (type-link exemptions + service/event page
+mappings for the two new subsystems), scripts/gen-doc-graphs.ts
+(`SERVICE_ROLES` for `notifications`, `sidecarUpdates`),
+docs/subsystems/{notifications.md,notifications.zh.md,sidecar-updates.md,
+sidecar-updates.zh.md} (+ `.i18n.yaml` pair records),
+docs/subsystems/README.md + .zh.md (new rows),
+docs/capability-seams.{md,zh.md} + .i18n.yaml,
+docs/event-producer-consumer.{md,zh.md} + .i18n.yaml,
+docs/config-catalog.{md,zh.md} + .i18n.yaml,
+.agents/notes/implemented/architecture/2026-08-26-sidecar-auto-update-*.i18n.yaml,
+.agents/notes/implemented/feature/2026-08-26-web-notification-center.{md,zh.md,i18n.yaml},
+packages/extensions/cordis-client-runner/src/client/slot-catalog.ts (regen).
+
+### Test + review
+- Typecheck (`bun run typecheck`): 0 errors (exit 0).
+- Focused suites on the `dev` base:
+  `sidecar-updates` + `notifications` + `ui-notifications` + `apiproxy`:
+  30 test files, 533 tests, 0 failed.
+- `bun run doc-sync`: 28 passed, 0 failed, 0 skipped (exit 0).
+- Feature byte-identical to the migration branch (`git diff --stat` = the
+  107-file feature diff only), modulo the 8 files already on dev and the
+  doc-sync gate fixes above.
+
+### Expected goal next
+Push `feat/sdk-auto-update-2026-08-26` and open a PR to `dev` under
+`ncdevshiv`. The AI SDK sidecar binary is still published from
+`F:\alisia\ai-sdk`; no new release tag was cut in this round — the
+updater points at `ncdevshiv/ai-sdk` by default and first-run installs
+whatever `releases/latest` reports.

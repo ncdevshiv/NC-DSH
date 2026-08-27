@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/config-catalog.md
-config-catalog.md: 070a8b72de804e04617c1dffea0b6ad0a3eed128
-config-catalog.zh.md: 41bf359749126e33f4b4efd43e0d0f17497bc426
+config-catalog.md: d746c2dbe1e7591c0df754b9f433ba3ea5893239
+config-catalog.zh.md: f98ee63a578fabe62934a83a70d6eb58b4c1adb9

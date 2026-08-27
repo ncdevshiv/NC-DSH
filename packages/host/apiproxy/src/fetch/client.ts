@@ -62,6 +62,14 @@ import {
 } from '../api/credentials.schema.ts'
 import { llmDiscoverModelsValueSchema, llmModelsValueSchema, llmProvidersValueSchema } from '../api/llm.schema.ts'
 import {
+  updatesCheckValueSchema, updatesIgnoreValueSchema, updatesInstallValueSchema,
+  updatesStatusValueSchema,
+} from '../api/updates.schema.ts'
+import {
+  notificationsDismissValueSchema, notificationsListValueSchema,
+  notificationsSetReadValueSchema,
+} from '../api/notifications.schema.ts'
+import {
   subagentHistoryValueSchema,
   subagentInterruptValueSchema,
   subagentListValueSchema,
@@ -161,6 +169,17 @@ export interface IApiClient {
     models(payload: RequestPayload<'llm.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.models'>>>
     discoverModels(payload: RequestPayload<'llm.discoverModels'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.discoverModels'>>>
   }
+  updates: {
+    status(payload: RequestPayload<'updates.status'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'updates.status'>>>
+    check(payload: RequestPayload<'updates.check'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'updates.check'>>>
+    install(payload: RequestPayload<'updates.install'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'updates.install'>>>
+    ignore(payload: RequestPayload<'updates.ignore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'updates.ignore'>>>
+  }
+  notifications: {
+    list(payload: RequestPayload<'notifications.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'notifications.list'>>>
+    setRead(payload: RequestPayload<'notifications.setRead'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'notifications.setRead'>>>
+    dismiss(payload: RequestPayload<'notifications.dismiss'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'notifications.dismiss'>>>
+  }
   /** client-response passthrough (rpcId is a backfill of the server-request's id — never minted here). */
   respond(message: ClientResponse, signal?: AbortSignal): Promise<RpcReceipt>
 }
@@ -222,6 +241,13 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'llm.providers': llmProvidersValueSchema,
   'llm.models': llmModelsValueSchema,
   'llm.discoverModels': llmDiscoverModelsValueSchema,
+  'updates.status': updatesStatusValueSchema,
+  'updates.check': updatesCheckValueSchema,
+  'updates.install': updatesInstallValueSchema,
+  'updates.ignore': updatesIgnoreValueSchema,
+  'notifications.list': notificationsListValueSchema,
+  'notifications.setRead': notificationsSetReadValueSchema,
+  'notifications.dismiss': notificationsDismissValueSchema,
 }
 
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
@@ -498,6 +524,21 @@ export abstract class AbstractApiClient implements IApiClient {
     providers: (payload, signal) => this.callUnary('llm.providers', payload, signal),
     models: (payload, signal) => this.callUnary('llm.models', payload, signal),
     discoverModels: (payload, signal) => this.callUnary('llm.discoverModels', payload, signal),
+  }
+
+  // An update install legitimately outlasts the unary deadline (a full binary
+  // download), so it carries only caller/connection cancellation.
+  readonly updates: IApiClient['updates'] = {
+    status: (payload, signal) => this.callUnary('updates.status', payload, signal),
+    check: (payload, signal) => this.callUnary('updates.check', payload, signal),
+    install: (payload, signal) => this.callUnary('updates.install', payload, signal, 'caller-signal-only'),
+    ignore: (payload, signal) => this.callUnary('updates.ignore', payload, signal),
+  }
+
+  readonly notifications: IApiClient['notifications'] = {
+    list: (payload, signal) => this.callUnary('notifications.list', payload, signal),
+    setRead: (payload, signal) => this.callUnary('notifications.setRead', payload, signal),
+    dismiss: (payload, signal) => this.callUnary('notifications.dismiss', payload, signal),
   }
 
   readonly events: IApiClient['events'] = {

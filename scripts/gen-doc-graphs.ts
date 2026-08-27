@@ -148,6 +148,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Companion subpaths register owner-local checks; the service owns selection, uniqueness, child fibers, and package-attributed failures.',
   },
   {
+    key: 'notifications',
+    pkg: 'notifications',
+    title: 'Dismissible notification seam',
+    mode: 'seam',
+    consumers: ['sidecar-updates', 'apiproxy'],
+    note: 'Plugins publish user-visible notices under a stable id; the seam owns read, dismissed and deleted state, one harness-home document, and notifications/* mutations consumed by the sidecar updater and the web gateway.',
+  },
+  {
     key: 'typert',
     pkg: 'typert-registry',
     title: 'Runtime type registry',
@@ -161,6 +169,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Typert Host invocation gateway',
     mode: 'core',
     note: 'Associates generated Remote descriptors with live Cordis services, resolves registered identities, and exposes unary calls through the shared Connection RPC carrier.',
+  },
+  {
+    key: 'sidecarUpdates',
+    pkg: 'sidecar-updates',
+    title: 'AI sidecar auto-update pipeline',
+    mode: 'core',
+    consumers: ['apiproxy'],
+    note: 'Polls a GitHub repo for the ai-sidecar release, verifies against SHA256SUMS, installs per tag, repoints current.json atomically, and emits sidecar-updates/status snapshots surfaced through the notification seam.',
   },
   {
     key: 'sessionPersistence',
