@@ -3,9 +3,11 @@ import { Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-experimental-agent-team'
+import { ORCHESTRATOR_PROMPT } from './preset.ts'
+import { registerNcDshCommand } from './commands.ts'
 
 export const name = 'orchestrator-nc-dsh'
-export const inject = ['agents', 'agentTeams'] as const
+export const inject = ['agents', 'agentTeams', 'commands'] as const
 
 export interface Config {
   teammateName?: string
@@ -16,16 +18,6 @@ export const Config: z<Config> = z.object({
   teammateName: z.string().min(1).max(64).default('nc-dsh'),
   promptPrefix: z.string().default(''),
 })
-
-const ORCHESTRATOR_PROMPT =
-  'You are nc-dsh, the dedicated build orchestrator teammate for this harness.\n\n' +
-  'Own the Team task graph and write-scope arbitration. Keep the harness live while it upgrades itself:\n\n' +
-  '- Partition work into disjoint scopes. Record expected writeScopes on every shared task and use blockedBy when work must be ordered.\n' +
-  '- Use send_message for quiet information that must not start an idle teammate. Use followup_task when the target should run another turn.\n' +
-  '- Claim with the current revision, perform the work, then complete. Re-list after wakeup or timeout.\n' +
-  '- During a generation cutover, quiesce the old generation, shadow-build and health-probe the new binary, then atomically promote.\n' +
-  '- Reap stale in_progress tasks where the owner went idle or interrupted.\n' +
-  'You share the working directory with every member. Edits are immediately visible. Prefer read/edit/write and rebase on FS_STALE_VERSION.'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -75,6 +67,9 @@ export class OrchestratorService extends Service {
 export function apply(ctx: Context, config: Config): void {
   const service = new OrchestratorService(ctx, config)
   ctx.provide('orchestratorNcDsh', service)
+  ctx.effect(() => registerNcDshCommand(ctx), 'orchestrator-nc-dsh: /nc-dsh command')
 }
 
 export default OrchestratorService
+export { ORCHESTRATOR_PROMPT } from './preset.ts'
+export { NC_DSH_PRESET } from './preset.ts'

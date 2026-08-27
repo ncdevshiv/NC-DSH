@@ -78,6 +78,7 @@ export class AiSidecarClient {
   private initialized: Promise<void> | undefined
   private nextRequestId = 0
   private readonly streams = new Map<string, StreamState>()
+  private readonly pendingTimeouts = new Map<number, NodeJS.Timeout>()
   private disposed = false
 
   constructor(private readonly resolveConnection: () => SidecarConnection) {}
@@ -232,8 +233,20 @@ export class AiSidecarClient {
     try {
       const racers: Promise<unknown>[] = [transport.request(method, params), this.childExitOrTimeout(id)]
       if (abortOnSignal !== undefined) racers.push(abortOnSignal)
-      return await Promise.race(racers)
+      const result = await Promise.race(racers)
+      // Success path clears its timeout so the map doesn't leak.
+      const timer = this.pendingTimeouts.get(id)
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        this.pendingTimeouts.delete(id)
+      }
+      return result
     } catch (error: unknown) {
+      const timer = this.pendingTimeouts.get(id)
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        this.pendingTimeouts.delete(id)
+      }
       if (error instanceof JsonRpcResponseError) {
         const data = (error.data ?? {}) as { kind?: string; retryable?: boolean }
         throw new SidecarProtocolError(data.kind, error.message, data.retryable, error)
@@ -242,12 +255,13 @@ export class AiSidecarClient {
     }
   }
 
-  /** Timeout race partner; child exit or spawn failure rejects immediately. */
-  private childExitOrTimeout(_id: number): Promise<never> {
+  /** Timeout race partner; child exit or spawn failure rejects immediately. Per-request timer map survives swap. */
+  private childExitOrTimeout(id: number): Promise<never> {
     return new Promise((_resolve, reject) => {
       const child = this.child
       const timer: NodeJS.Timeout = setTimeout(
         () => {
+          this.pendingTimeouts.delete(id)
           if (child !== undefined) {
             child.off('exit', onExit)
             child.off('error', onError)
@@ -256,12 +270,21 @@ export class AiSidecarClient {
         },
         DEFAULT_REQUEST_TIMEOUT_MS,
       )
+      this.pendingTimeouts.set(id, timer)
       const onExit = (): void => {
-        clearTimeout(timer)
+        const t = this.pendingTimeouts.get(id)
+        if (t !== undefined) {
+          clearTimeout(t)
+          this.pendingTimeouts.delete(id)
+        }
         reject(new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar exited mid-request'))
       }
       const onError = (): void => {
-        clearTimeout(timer)
+        const t = this.pendingTimeouts.get(id)
+        if (t !== undefined) {
+          clearTimeout(t)
+          this.pendingTimeouts.delete(id)
+        }
         reject(new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar failed to launch'))
       }
       timer.unref()
@@ -274,6 +297,7 @@ export class AiSidecarClient {
         // No child yet — expire immediately rather than hanging until the 120s
         // ceiling; the caller's `start()` race will still surface the real cause.
         clearTimeout(timer)
+        this.pendingTimeouts.delete(id)
         reject(new SidecarProtocolError(undefined, 'llm-ai-sdk: ai-sidecar failed to launch'))
       }
     })
@@ -490,6 +514,8 @@ export class AiSidecarClient {
   /** Kill the child and reject everything still outstanding. Idempotent. */
   dispose(): void {
     this.disposed = true
+    for (const timer of this.pendingTimeouts.values()) clearTimeout(timer)
+    this.pendingTimeouts.clear()
     // The disposal wording wins over the generic exit wording: streams still
     // outstanding when the client is torn down report why, not how.
     this.failAllStreams(new SidecarProtocolError(undefined, 'llm-ai-sdk: sidecar disposed'))

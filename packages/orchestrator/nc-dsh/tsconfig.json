@@ -21,6 +21,9 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../interaction/commands"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {

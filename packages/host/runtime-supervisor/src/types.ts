@@ -24,3 +24,12 @@ export interface PromotionResult {
   readonly to: GenerationId
   readonly reason?: string | undefined
 }
+export interface SpawnShadowOptions {
+  readonly kind: GenerationKind
+  readonly buildRev: string
+  readonly pid?: number | undefined
+}
+export interface HealthProbeResult {
+  readonly ok: boolean
+  readonly reason?: string | undefined
+}
