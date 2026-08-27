@@ -1,8 +1,24 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { GenerationId, GenerationKind, GenerationPhase, GenerationRecord, QuiesceOptions, PromotionResult, SupervisorSnapshot } from './types.ts'
+import type {
+  GenerationId,
+  GenerationKind,
+  GenerationPhase,
+  GenerationRecord,
+  PromotionResult,
+  QuiesceOptions,
+  SupervisorSnapshot,
+} from './types.ts'
 
-export type { GenerationId, GenerationKind, GenerationPhase, GenerationRecord, QuiesceOptions, PromotionResult, SupervisorSnapshot } from './types.ts'
+export type {
+  GenerationId,
+  GenerationKind,
+  GenerationPhase,
+  GenerationRecord,
+  PromotionResult,
+  QuiesceOptions,
+  SupervisorSnapshot,
+} from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -33,6 +49,11 @@ let nextGenerationCounter = 0
 function nextGenerationId(): GenerationId {
   nextGenerationCounter += 1
   return generationId(`gen-${String(nextGenerationCounter)}-${String(Date.now())}`)
+}
+
+function scheduleRetire(callback: () => void, deadlineMs: number): void {
+  const handle = setTimeout(callback, deadlineMs)
+  if (typeof handle.unref === 'function') handle.unref()
 }
 
 export class RuntimeSupervisor extends Service {
@@ -69,14 +90,14 @@ export class RuntimeSupervisor extends Service {
   register(record: Omit<GenerationRecord, 'phase'> & { phase?: GenerationPhase }): GenerationRecord {
     const kind = record.kind
     const state = this.kinds.get(kind)
-    if (state === undefined) throw new Error(`runtime-supervisor: unknown generation kind "${String(kind)}"`)
+    if (state === undefined) throw new Error(`runtime-supervisor: unknown generation kind "${kind}"`)
     const previous = state.active
-    const promoted: GenerationRecord = { ...record, phase: 'active' as GenerationPhase, promotedAt: new Date().toISOString() }
+    const promoted: GenerationRecord = { ...record, phase: 'active', promotedAt: new Date().toISOString() }
     state.active = promoted
     if (previous !== undefined) {
-      state.draining.push({ ...previous, phase: 'draining' as GenerationPhase })
+      state.draining.push({ ...previous, phase: 'draining' })
       const deadlineMs = this.config.deadlineMs
-      setTimeout(() => { this.retireDraining(kind, previous.id) }, deadlineMs).unref?.()
+      scheduleRetire(() => { this.retireDraining(kind, previous.id) }, deadlineMs)
     }
     this.notify()
     return promoted
@@ -84,8 +105,8 @@ export class RuntimeSupervisor extends Service {
 
   registerShadow(record: Omit<GenerationRecord, 'phase'>): GenerationRecord {
     const state = this.kinds.get(record.kind)
-    if (state === undefined) throw new Error(`runtime-supervisor: unknown generation kind "${String(record.kind)}"`)
-    const shadow: GenerationRecord = { ...record, phase: 'shadow' as GenerationPhase }
+    if (state === undefined) throw new Error(`runtime-supervisor: unknown generation kind "${record.kind}"`)
+    const shadow: GenerationRecord = { ...record, phase: 'shadow' }
     state.shadow = shadow
     this.notify()
     return shadow
@@ -93,16 +114,16 @@ export class RuntimeSupervisor extends Service {
 
   promoteShadow(kind: GenerationKind, options?: Partial<QuiesceOptions>): PromotionResult {
     const state = this.kinds.get(kind)
-    if (state === undefined) return { ok: false, to: generationId('unknown'), reason: `unknown kind "${String(kind)}"` }
+    if (state === undefined) return { ok: false, to: generationId('unknown'), reason: `unknown kind "${kind}"` }
     const shadow = state.shadow
-    if (shadow === undefined) return { ok: false, to: generationId('unknown'), reason: `no shadow generation for "${String(kind)}"` }
+    if (shadow === undefined) return { ok: false, to: generationId('unknown'), reason: `no shadow generation for "${kind}"` }
     const from = state.active?.id
-    const promoted: GenerationRecord = { ...shadow, phase: 'active' as GenerationPhase, promotedAt: new Date().toISOString() }
+    const promoted: GenerationRecord = { ...shadow, phase: 'active', promotedAt: new Date().toISOString() }
     if (state.active !== undefined) {
-      state.draining.push({ ...state.active, phase: 'draining' as GenerationPhase })
+      state.draining.push({ ...state.active, phase: 'draining' })
       const deadlineMs = options?.deadlineMs ?? this.config.deadlineMs
       const previousId = state.active.id
-      setTimeout(() => { this.retireDraining(kind, previousId) }, deadlineMs).unref?.()
+      scheduleRetire(() => { this.retireDraining(kind, previousId) }, deadlineMs)
     }
     state.active = promoted
     state.shadow = undefined

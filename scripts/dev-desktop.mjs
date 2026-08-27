@@ -157,6 +157,14 @@ children.push(start(process.execPath, ['--import', 'tsx/esm', 'apps/cli/src/bin.
 
 if (withHmr) {
   children.push(start(process.execPath, ['--import', 'tsx/esm', 'scripts/dev-web.ts', '--poll'], 'watch'))
+  // Rust ai-sidecar: poll the out-of-tree binary mtime so a `cargo build` in F:\alisia\ai-sdk
+  // hot-swaps without a manual restart. The supervisor owns the quiesce → shadow → promote
+  // sequence; this stage only signals that a rebuild happened. `cargo watch` is not required:
+  // any `cargo build` that touches the binary triggers the supervisor's poll, and in-flight
+  // streams drain to a deadline instead of being killed.
+  const sidecarBinary = process.env.DSH_AI_SDK_SIDECAR ?? 'F:\\alisia\\ai-sdk\\target\\debug\\ai-sidecar.exe'
+  const sidecarPoll = start(process.execPath, ['--import', 'tsx/esm', 'scripts/dev-sidecar-watch.ts', '--binary', sidecarBinary, '--poll', '500'], 'sidecar-watch')
+  children.push(sidecarPoll)
 }
 
 /** Kill the full child tree; win32 needs taskkill for grandchildren. */
