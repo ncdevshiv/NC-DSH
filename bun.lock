@@ -4805,6 +4805,21 @@
         "@deepseek-ai/dsh-timeout": "workspace:^",
       },
     },
+    "packages/session/turn-restore": {
+      "name": "@deepseek-ai/dsh-turn-restore",
+      "version": "0.1.0-rc.8",
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+        "@deepseek-ai/dsh-session": "workspace:^",
+        "@deepseek-ai/dsh-tool-fs": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-session": "workspace:^",
+        "@deepseek-ai/dsh-tool-fs": "workspace:^",
+      },
+    },
     "packages/settings/settings": {
       "name": "@deepseek-ai/dsh-settings",
       "version": "0.1.0-rc.8",
@@ -7283,6 +7298,8 @@
     "@deepseek-ai/dsh-tool-workflow": ["@deepseek-ai/dsh-tool-workflow@workspace:packages/workflow/tool-workflow"],
 
     "@deepseek-ai/dsh-tools": ["@deepseek-ai/dsh-tools@workspace:packages/core/tools"],
+
+    "@deepseek-ai/dsh-turn-restore": ["@deepseek-ai/dsh-turn-restore@workspace:packages/session/turn-restore"],
 
     "@deepseek-ai/dsh-typert-generator": ["@deepseek-ai/dsh-typert-generator@workspace:packages/typert/generator"],
 
