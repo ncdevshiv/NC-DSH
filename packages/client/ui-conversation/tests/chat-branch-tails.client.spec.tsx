@@ -11,7 +11,7 @@ import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type {
-  ChatConversationViewNode, ConversationNode,
+  ChatConversationViewNode, ConversationLocation, ConversationNode, SessionId,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNodeViewProps } from '../src/client/contract/slots.ts'
 import {
@@ -43,6 +43,23 @@ afterEach(() => {
 // Mirrors the real lookup chain (conversation namespace, then common).
 const t: ChatNodeViewProps['t'] = makeTranslate(zh, commonZh)
 const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
+const openNoop = (): void => {}
+const inspectNoop = (): void => {}
+const forkNoop = (): void => {}
+const fileMentionsNoop: ChatNodeViewProps['fileMentions'] = () => undefined
+const useTurnDataNoop: ChatNodeViewProps['useTurnData'] = () => undefined
+const useSessionNoop: ChatNodeViewProps['useSession'] = () => undefined as never
+const useSessionsNoop: ChatNodeViewProps['useSessions'] = () => undefined as never
+const useWorkspacesNoop: ChatNodeViewProps['useWorkspaces'] = () => undefined as never
+const useProjectionNoop: ChatNodeViewProps['useProjection'] = () => undefined
+const useInputNoop: ChatNodeViewProps['useInput'] = () => undefined as never
+const inputActionsStub: ChatNodeViewProps['inputActions'] = {
+  setDraft: () => {},
+  addImages: () => true,
+  removeImage: () => {},
+  pruneImages: () => {},
+  submit: () => {},
+}
 const RETRY_ID = 'retry-fixture' as Extract<ConversationNode, { kind: 'model-retry' }>['retryId']
 
 interface MessageItemProps {
@@ -1020,6 +1037,134 @@ describe('small branch tails', () => {
       />,
     )
     expect(view.getByText('one-liner')).toBeTruthy()
+  })
+
+  it('offers edit-and-rewind only on a closed-turn user opener', () => {
+    const editResend = vi.fn()
+    const closedTurn: ConversationLocation = {
+      kind: 'turn',
+      turn: {
+        turn: 1,
+        start: undefined,
+        end: undefined,
+        status: 'closed',
+        steps: [],
+        data: {} as never,
+      },
+    }
+    const node: ChatConversationViewNode = {
+      key: 'fixture:user:1',
+      kind: 'user',
+      id: '1',
+      target: 'chat',
+      anchorSeq: 5,
+      location: closedTurn,
+      visibility: 'visible',
+      data: {
+        kind: 'user', seq: 5, time: 1_000,
+        content: [{ type: 'text', text: 'hello' }],
+        source: { kind: 'user' },
+      },
+    }
+    const view = render(
+      <UserMessageNodeView
+        node={node as never}
+        t={t}
+        sessionId={'s1' as SessionId}
+        useSession={useSessionNoop}
+        useSessions={useSessionsNoop}
+        useWorkspaces={useWorkspacesNoop}
+        useProjection={useProjectionNoop}
+        useInput={useInputNoop}
+        inputActions={inputActionsStub}
+        openFile={openNoop}
+        inspectCall={inspectNoop}
+        forkAt={forkNoop}
+        editResend={editResend}
+        renderMessageImages={renderMessageImages}
+        fileMentions={fileMentionsNoop}
+        useTurnData={useTurnDataNoop}
+      />,
+    )
+    fireEvent.click(view.getByLabelText('编辑并重发'))
+    expect(editResend).toHaveBeenCalledWith({ seq: 5, text: 'hello', turn: 1 })
+  })
+
+  it('keeps edit-and-rewind off a steering bubble and an open turn', () => {
+    const editResend = vi.fn()
+    const openTurn: ConversationLocation = {
+      kind: 'turn',
+      turn: {
+        turn: 1,
+        start: undefined,
+        end: undefined,
+        status: 'open',
+        steps: [],
+        data: {} as never,
+      },
+    }
+    const steeringLocation: ConversationLocation = {
+      kind: 'step',
+      turn: {
+        turn: 1,
+        start: undefined,
+        end: undefined,
+        status: 'open',
+        steps: [],
+        data: {} as never,
+      },
+      step: { turn: 1, step: 0, start: undefined, end: undefined, status: 'open', data: {} as never },
+    }
+    const owner = {
+      t,
+      sessionId: 's1' as SessionId,
+      useSession: useSessionNoop,
+      useSessions: useSessionsNoop,
+      useWorkspaces: useWorkspacesNoop,
+      useProjection: useProjectionNoop,
+      useInput: useInputNoop,
+      inputActions: inputActionsStub,
+      openFile: openNoop,
+      inspectCall: inspectNoop,
+      forkAt: forkNoop,
+      editResend,
+      renderMessageImages,
+      fileMentions: fileMentionsNoop,
+      useTurnData: useTurnDataNoop,
+    }
+    const open = render(
+      <UserMessageNodeView
+        node={{
+          kind: 'user',
+          anchorSeq: 5,
+          location: openTurn,
+          data: {
+            kind: 'user', seq: 5, time: 1_000,
+            content: [{ type: 'text', text: 'run' }],
+            source: { kind: 'user' },
+          },
+        } as never}
+        {...owner}
+      />,
+    )
+    expect(open.queryByLabelText('编辑并重发')).toBeNull()
+    const steer = render(
+      <UserMessageNodeView
+        node={{
+          kind: 'steering',
+          anchorSeq: 7,
+          location: steeringLocation,
+          data: {
+            kind: 'steering', messageId: 'm1', seq: 7, time: 2_000,
+            content: [{ type: 'text', text: 'steer' }],
+            source: { kind: 'user' },
+          },
+        } as never}
+        {...owner}
+      />,
+    )
+    expect(steer.queryByLabelText('编辑并重发')).toBeNull()
+    expect(editResend).not.toHaveBeenCalled()
   })
 
   it('StatsLine omits the cache-hit segment when no input accounting exists at all', () => {

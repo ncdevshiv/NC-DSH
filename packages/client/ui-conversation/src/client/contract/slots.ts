@@ -393,6 +393,16 @@ export interface ChatNodeTurnDataInjected {
   }
 }
 
+/** One user message the chat view offers to edit and resend. */
+export interface EditMessageTarget {
+  /** The durable user/message event seq addressing the message. */
+  readonly seq: number
+  /** Plain text restored into the child composer (text blocks joined). */
+  readonly text: string
+  /** Containing turn number, for discard accounting against the timeline. */
+  readonly turn: number
+}
+
 /** Stable owner currency delivered to one keyed Chat business renderer. */
 export interface ChatNodeOwnerProps {
   /** Selected Tool call, when the shared details store names one. */
@@ -402,6 +412,8 @@ export interface ChatNodeOwnerProps {
   openFile: (path: string) => void
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
+  /** Rewind the session to just before the message's turn, then hand the text to the child composer. */
+  editResend: (target: EditMessageTarget) => void
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
@@ -751,6 +763,13 @@ export interface ChatViewInjected {
   }
   /** Fork through the completed turn ending at the eligible message `seq`, then open the child. */
   forkAt: (seq: number) => void
+  /**
+   * Rewind the session to just before the turn containing `target.seq`, open
+   * the child, and restore `target.text` into its composer for editing.
+   * Resolves after the child is open and prefilled; rejects with the fork
+   * failure reason (the caller keeps the rewind dialog open with the error).
+   */
+  editResendAt: (target: EditMessageTarget) => Promise<void>
   /**
    * Prose file-mention vocabulary for one closing message, from the optional
    * {@link ChatFileMentions} service (resolved lazily per call, so composing

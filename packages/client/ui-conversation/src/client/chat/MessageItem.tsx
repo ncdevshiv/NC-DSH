@@ -1,6 +1,7 @@
 // MessageItem: simple chat nodes — user and consumed-steering bubbles
-// (right-aligned, with clock + copy IconActions; branch lives only under
-// assistant answers), pending steering (copy only), context injection,
+// (right-aligned, with clock + copy IconActions; edit-and-rewind rides
+// user turn openers; branch lives only under assistant answers),
+// pending steering (copy only), context injection,
 // compaction marker, retry disclosure, and unknown-surface JSON rows.
 
 import { memo, useEffect, useMemo, useState } from 'react'
@@ -297,9 +298,16 @@ export function PendingSteeringBubble({ content, renderMessageImages, t }: {
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderMessageImages, t,
+  node, renderMessageImages, t, editResend,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
+  const location = node.location
+  // Rewind cuts at a completed turn's start, so only a message that opens a
+  // closed turn can be edited: steers ride inside another turn, and an open
+  // turn cannot be forked away from (mirrors the fork OPEN_TURN rule).
+  const editFor = location.kind === 'turn' && location.turn.status === 'closed'
+    ? (text: string): void => { editResend({ seq: data.seq, text, turn: location.turn.turn }) }
+    : undefined
   return (
     <UserStyleBubble
       content={data.content}
@@ -313,6 +321,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           clock="start"
           className={css.actions}
           t={t}
+          {...editFor === undefined ? {} : { onEdit: () => { editFor(text) } }}
         />
       )}
     />

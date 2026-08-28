@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
+import type { ChatViewSlotProps, EditMessageTarget, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { formatRunDuration } from './message-chrome.ts'
@@ -157,7 +157,7 @@ function TurnStatus({ startTime, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, t,
+  editResendAt, fileMentions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -205,6 +205,53 @@ export function ChatView({
     setFileOpenError(null)
     setFileOpenBusy(false)
   }, [])
+
+  // Edit-and-rewind: the dialog shows the count of later turns first; the
+  // confirm performs the fork, then slides the original text into the child
+  // composer for a normal send (nothing is auto-sent).
+  const [editResendTarget, setEditResendTarget] =
+    useState<{ target: EditMessageTarget; discardedTurns: number } | null>(null)
+  const [editResendBusy, setEditResendBusy] = useState(false)
+  const [editResendError, setEditResendError] = useState<string | null>(null)
+  // Stale-fork protection mirrors the file-open dialog: a settled confirm
+  // from before a close/retry must neither reopen nor re-apply.
+  const editResendRequest = useRef(0)
+
+  const startEditResend = useCallback((target: EditMessageTarget) => {
+    const index = timeline.turnOrder.indexOf(target.turn)
+    const discardedTurns = index < 0
+      ? 0
+      : Math.max(0, timeline.turnOrder.length - index - 1)
+    editResendRequest.current += 1
+    setEditResendTarget({ target, discardedTurns })
+    setEditResendBusy(false)
+    setEditResendError(null)
+  }, [timeline])
+
+  const closeEditResend = useCallback(() => {
+    editResendRequest.current += 1
+    setEditResendTarget(null)
+    setEditResendBusy(false)
+    setEditResendError(null)
+  }, [])
+
+  const confirmEditResend = useCallback(() => {
+    if (editResendTarget === null || editResendBusy) return
+    const id = ++editResendRequest.current
+    setEditResendBusy(true)
+    setEditResendError(null)
+    void editResendAt(editResendTarget.target).then(
+      () => {
+        if (id !== editResendRequest.current) return
+        closeEditResend()
+      },
+      (error: unknown) => {
+        if (id !== editResendRequest.current) return
+        setEditResendBusy(false)
+        setEditResendError(openFailureMessage(error, t('message.editResend.failed')))
+      },
+    )
+  }, [closeEditResend, editResendAt, editResendBusy, editResendTarget, t])
 
   const pendingSteering = useMemo(
     () => inbox.filter(item => item.placement === 'steering'),
@@ -439,6 +486,7 @@ export function ChatView({
               openFile={requestOpenFile}
               inspectCall={inspectCall}
               forkAt={forkAt}
+              editResend={startEditResend}
               renderMessageImages={renderMessageImages}
               fileMentions={fileMentions}
               renderSlot={renderSlot}
@@ -486,6 +534,30 @@ export function ChatView({
           onRetry={() => { requestOpenFile(fileOpenError.path) }}
           t={t}
         />
+      )}
+      {editResendTarget !== null && (
+        <Modal
+          open
+          onClose={closeEditResend}
+          closeLabel={t('close')}
+          title={t('message.editResend.title')}
+          description={t('message.editResend.body', { count: editResendTarget.discardedTurns })}
+          footer={(
+            <>
+              <Button variant="outline" className={css.modalAction} onClick={closeEditResend}>{t('cancel')}</Button>
+              <Button
+                variant="primary"
+                className={css.modalAction}
+                disabled={editResendBusy}
+                onClick={confirmEditResend}
+              >
+                {t('message.editResend.confirm')}
+              </Button>
+            </>
+          )}
+        >
+          {editResendError !== null && <p className={css.editResendError}>{editResendError}</p>}
+        </Modal>
       )}
     </div>
   )

@@ -446,6 +446,13 @@ export function apply(ctx: Context): void {
               // Fork or child-rename failure keeps the source view untouched.
             })
         },
+        editResendAt: async (target) => {
+          const childId = await sessions.fork({ sessionId, beforeSeq: target.seq })
+          // Nothing is auto-sent: the original text lands in the child
+          // composer, and the user edits it there before a normal send.
+          inputHub.shell(childId).setDraft(target.text)
+          sessions.open(childId)
+        },
       }
     },
   }, ChatView)

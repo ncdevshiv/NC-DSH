@@ -109,6 +109,8 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     // Focus-reveal the footers (hover:hover keeps them opacity-hidden until
     // hover/focus-within). Branch renders only under assistant answers — user
     // bubbles carry none — and only a completed transcript tail enables it.
+    // Edit rides the completed-turn user openers only: both fixture prompts
+    // opened closed turns, so exactly two edit controls render.
     const copyButtons = page.getByRole('button', { name: 'Copy' })
     await expect.poll(() => copyButtons.count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(4)
     await copyButtons.first().focus()
@@ -121,7 +123,8 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     await branchButtons.first().focus()
     await expect.poll(() => page.getByRole('tooltip').textContent(), { timeout: 5_000 })
       .toBe('Available only on the last message of a completed turn')
-    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(0)
+    await expect.poll(() => page.getByRole('button', { name: 'Edit and resend' }).count(), { timeout: 5_000 })
+      .toBe(2)
   }, 60_000)
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden with IconActions and clocks', async () => {
