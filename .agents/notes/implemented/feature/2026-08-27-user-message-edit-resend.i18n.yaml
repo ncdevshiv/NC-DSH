@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-user-message-edit-resend.md
-2026-08-27-user-message-edit-resend.md: 5e1ac5ddde499c890969932718b6a93f0ccb67e4
-2026-08-27-user-message-edit-resend.zh.md: f91ccb3d5b6c295bea67e14cf86682920423efb8
+2026-08-27-user-message-edit-resend.md: 89a2d9d116b0c9fa1e203dda6bcfa6618e623580
+2026-08-27-user-message-edit-resend.zh.md: a80c33281f4c3df215c9eef15985ac2dc9989e11

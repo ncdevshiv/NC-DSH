@@ -24,7 +24,7 @@ No session-log format or session event is added — the append-only invariant ho
 
 **Auto-send the edited prompt after the fork.** Codex restores the prompt into the composer instead; auto-sending removes the last look the user is asking for.
 
-**Invert the action toward file reversion.** Rewinding does not revert workspace files in this change; per-turn before-image capture on `fs-local` mutations and an inverse-replay restore are a separate phase.
+**Invert the action toward file reversion.** Rewinding now reverts workspace files through the logged `write`/`edit` bases ([rewind workspace restore](2026-08-29-rewind-workspace-restore.md)); basis-less shell and `str_replace_editor` mutations are reported, not reverted.
 
 ## Consequences
 

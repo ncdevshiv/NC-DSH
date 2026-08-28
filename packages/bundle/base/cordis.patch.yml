@@ -345,6 +345,10 @@
     - id: session-checkpoint-policy
       name: '@deepseek-ai/dsh-session-checkpoint-policy'
 
+    # Rewind-time workspace restore for edit-and-resend forks.
+    - id: turn-restore
+      name: '@deepseek-ai/dsh-turn-restore'
+
     # Compacts oversized tool results before the broader conversation compactor
     # runs, preserving the model-visible result within the configured budget.
     - id: tool-result-pruner
