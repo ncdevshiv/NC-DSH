@@ -60,6 +60,9 @@
       "path": "../../session/session-persistence"
     },
     {
+      "path": "../../session/turn-restore"
+    },
+    {
       "path": "../../session/session-projection"
     },
     {

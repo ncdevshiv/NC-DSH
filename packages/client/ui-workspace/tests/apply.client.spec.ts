@@ -26,7 +26,7 @@ async function bench() {
   }))
   const renameSession = vi.fn(async (title: string) => ({ ok: true, value: { title, seq: 1 } }))
   const binding = vi.fn(() => ({ session: { rename: renameSession } }))
-  const fork = vi.fn(async () => 'forked' as never)
+  const fork = vi.fn(async () => ({ sessionId: 'forked' } as never))
   ctx.provide('workspaces', {
     create, startSession, rename, insertSessionBefore,
   } as never)

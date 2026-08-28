@@ -28,7 +28,7 @@ import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/t
 import type { SnapshotStore } from '../contract/store.ts'
 import { createSnapshotStore } from '../contract/store.ts'
 import type { SessionFace } from '../contract/session.ts'
-import type { AgentContext, ISessions } from '../contract/sessions.ts'
+import type { AgentContext, ForkRestoreReport, ISessions } from '../contract/sessions.ts'
 import { createScope, scopeOf as scopeTagOf } from '../agents/scope.ts'
 import type { ConversationRuntime } from './conversation-assembler.ts'
 import { SessionManager } from './manager.ts'
@@ -506,7 +506,8 @@ export class SessionRuntime implements ISessions {
    *   interrupted turn carry flow-ordering seqs between two events, and the
    *   wire takes integers only. `atSeq` and `beforeSeq` are mutually
    *   exclusive.
-   * @returns the child session id.
+   * @returns the child session id and, on a `beforeSeq` fork, the optional
+   *   workspace-restore report.
    * @throws {SessionForkError} with the source id.
    * @throws {Error} when a requested child-title rename fails after creation.
    */
@@ -517,7 +518,7 @@ export class SessionRuntime implements ISessions {
     increaseTitle?: boolean
     workspaceId?: WorkspaceId
     cwd?: string
-  }): Promise<SessionId> {
+  }): Promise<{ sessionId: SessionId; restoreReport?: ForkRestoreReport }> {
     const sourceTitle = opts.increaseTitle
       ? this.list.getSnapshot().byId[opts.sessionId]?.title
       : undefined
@@ -540,7 +541,10 @@ export class SessionRuntime implements ISessions {
       const renamed = await child.rename(increasedForkTitle(sourceTitle))
       if (!renamed.ok) throw new Error(`fork child rename failed: ${renamed.error.code}: ${renamed.error.message}`)
     }
-    return childId
+    return {
+      sessionId: childId,
+      ...(result.value.restoreReport === undefined ? {} : { restoreReport: result.value.restoreReport }),
+    }
   }
 
   /**

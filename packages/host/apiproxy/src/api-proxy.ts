@@ -88,6 +88,9 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 // `sidecar-updates/status` owner event, and `ctx.get('notifications')`.
 // Optional composition, like settings above.
 import type { UpdateStatus } from '@deepseek-ai/dsh-sidecar-updates'
+// Type-only: resolves `ctx.get('turnRestore')` to the rewind workspace
+// restore service; absent composition leaves a rewind conversation-only.
+import type { TurnRestoreReport } from '@deepseek-ai/dsh-turn-restore'
 import type {} from '@deepseek-ai/dsh-sidecar-updates'
 import type {} from '@deepseek-ai/dsh-notifications'
 // Value edge: the rename impl narrows the title service's validation failure; the import also resolves `ctx.get('sessionTitle')`.
@@ -2409,6 +2412,23 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           cut = boundary.seq + 1
           while (cut < events.length && events[cut]?.type !== 'turn/start') cut++
         }
+        // A rewind restores the workspace before the child can run, but only
+        // when nothing can race the restore: a live agent on the source means
+        // the discarded turns' file state may still be moving, and a chat-mode
+        // session has no workspace root to resolve against. Both cases carry a
+        // `skipped` reason instead of a silent best effort.
+        let restoreReport: TurnRestoreReport | undefined
+        if (beforeSeq !== undefined) {
+          const restorer = ctx.get('turnRestore')
+          if (restorer !== undefined) {
+            const sourceAgent = ctx.agents.get(sessionId)
+            restoreReport = sourceAgent?.status === 'running'
+              ? { restored: 0, conflicts: [], notRestorable: { count: 0, toolNames: [] }, shell: { count: 0, names: [] }, skipped: 'source-running' }
+              : source.header.cwd === undefined
+                ? { restored: 0, conflicts: [], notRestorable: { count: 0, toolNames: [] }, shell: { count: 0, names: [] }, skipped: 'no-cwd' }
+                : await restorer.restore({ events: events.slice(cut), cwd: source.header.cwd })
+          }
+        }
         let workspace: Workspace | undefined
         if (workspaceId !== undefined) {
           // Explicit retarget (the chat→work shift): the child joins the named
@@ -2479,7 +2499,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             })
           }
         }
-        return ok(request, { sessionId: childId })
+        return ok(request, {
+          sessionId: childId,
+          ...(restoreReport === undefined ? {} : { restoreReport }),
+        })
       },
 
       async prompt(request) {

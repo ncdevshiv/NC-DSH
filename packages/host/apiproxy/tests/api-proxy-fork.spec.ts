@@ -1,6 +1,9 @@
 /** Session-fork boundaries, lineage, and inherited model routing. */
 
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { agentEvents } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentHandle, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
@@ -9,6 +12,7 @@ import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import { apply as applyTurnRestore } from '@deepseek-ai/dsh-turn-restore'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import type { Workspace, WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import type { RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
@@ -425,6 +429,71 @@ describe('sessions.fork', () => {
       error: { code: 'fork-unavailable', details: { sessionId: source.id } },
     })
     if (!response.result.ok) expect(response.result.error.message).toMatch(/outside every turn/)
+    await ctx.fiber.dispose()
+  })
+
+  it('a beforeSeq rewind restores the discarded turns write bases', async () => {
+    const ctx = await composed()
+    applyTurnRestore(ctx)
+    const workspace = await mkdtemp(path.join(tmpdir(), 'dsh-fork-restore-'))
+    const session = ctx.sessions.create(sid('session-restore'), { meta: { cwd: workspace } })
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'one' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    session.append('turn/start', { turn: 2 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'two' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 2, step: 1, callId: 'c1' as never, name: 'write', arguments: '{}' })
+    session.append('tool/result', {
+      turn: 2,
+      step: 1,
+      message: {
+        id: 'm1' as never,
+        role: 'user',
+        content: [{
+          type: 'tool-result', toolCallId: 'c1' as never, isError: false,
+          content: [{ type: 'text', text: 'ok' }],
+        }],
+        source: { kind: 'tool', callId: 'c1' as never },
+      },
+      meta: { diffs: [], basis: { path: 'a.md', op: 'update', before: 'old', after: 'new' } },
+    }, { surfaceOp: 'append' })
+    session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+    await writeFile(path.join(workspace, 'a.md'), 'new', 'utf8')
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+
+    const response = await api(ctx).sessions.fork(request({ sessionId: session.id, beforeSeq: 4 }))
+
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    expect(response.result.value.restoreReport).toMatchObject({ restored: 1, conflicts: [] })
+    expect(await readFile(path.join(workspace, 'a.md'), 'utf8')).toBe('old')
+    await rm(workspace, { recursive: true, force: true })
+    await ctx.fiber.dispose()
+  })
+
+  it('skips the workspace restore while the source agent is running', async () => {
+    const ctx = await composed()
+    applyTurnRestore(ctx)
+    const source = liveAgent(ctx, 'session-restorebusy', 1)
+    // The registry entry is the same liveAgent handle: flip its status in place
+    // (the property is readonly by contract; runtime assignment is the test's
+    // only way to stage this state).
+    Object.assign(ctx.agents.get(source.id) as object, { status: 'running' })
+
+    const response = await api(ctx).sessions.fork(request({ sessionId: source.id, beforeSeq: 1 }))
+
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    expect(response.result.value.restoreReport).toMatchObject({
+      restored: 0,
+      skipped: 'source-running',
+    })
     await ctx.fiber.dispose()
   })
 })

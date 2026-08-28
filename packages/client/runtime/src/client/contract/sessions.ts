@@ -22,6 +22,25 @@ import type { ObservableSnapshot } from './store.ts'
 
 export type { AgentContext } from '../agents/scope.ts'
 
+/**
+ * Wire-shaped result of one rewind's workspace restore (present only on
+ * `beforeSeq` forks with the host's optional `turnRestore` service composed).
+ * Mirrors the host's `ForkRestoreReport`: the UI renders counts, conflicts,
+ * and the `skipped` reason as a composer notice.
+ */
+export interface ForkRestoreReport {
+  /** Files rewritten (or created-then-deleted) to their pre-turn state. */
+  restored: number
+  /** Display paths skipped because the disk content no longer matches the basis. */
+  conflicts: string[]
+  /** Mutations whose before-text was not recorded (size cap, basis-less tool). */
+  notRestorable: { count: number; toolNames: string[] }
+  /** Shell invocations in the discarded slice; their side effects cannot be reverted. */
+  shell: { count: number; names: string[] }
+  /** Why the workspace was left untouched, when the restore could not run at all. */
+  skipped?: 'source-running' | 'no-cwd'
+}
+
 /** The sessions-service face injected as `ctx.sessions`. */
 export interface ISessions {
   /** The useSessions standard feed (list rows + current selection; read face — writes stay inside the domain). */
@@ -98,7 +117,8 @@ export interface ISessions {
    *   following the source. `cwd` is the caller-supplied display hint for
    *   that target's path (the optimistic list row); omit both to fork in
    *   place. `atSeq` and `beforeSeq` are mutually exclusive.
-   * @returns the child session id.
+   * @returns the child session id and, on a `beforeSeq` fork, the optional
+   *   workspace-restore report.
    * @throws when the fork fails, or when a requested child-title rename fails after creation.
    */
   fork(opts: {
@@ -108,7 +128,7 @@ export interface ISessions {
     increaseTitle?: boolean
     workspaceId?: WorkspaceId
     cwd?: string
-  }): Promise<SessionId>
+  }): Promise<{ sessionId: SessionId; restoreReport?: ForkRestoreReport }>
   /**
    * Register a per-session standard-props provider (hooks become `use<Name>`
    * selector hooks on the render side; props spread verbatim).

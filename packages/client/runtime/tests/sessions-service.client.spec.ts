@@ -541,7 +541,7 @@ describe('fork', () => {
 
     await expect(b.svc.fork({
       sessionId: sid('source'), atSeq: 7, increaseTitle: true,
-    })).resolves.toBe('child')
+    })).resolves.toMatchObject({ sessionId: 'child' })
 
     expect(b.api.callsOf('session.fork')).toEqual([{ sessionId: 'source', atSeq: 7 }])
     expect(b.api.callsOf('session.rename')).toEqual([{ sessionId: 'child', title: childTitle }])
@@ -559,7 +559,7 @@ describe('fork', () => {
     b.api.onFork = () => Promise.resolve(ok({ sessionId: sid('child') }))
 
     // The frozen node of an interrupted turn carries turnEnd.seq - 0.9.
-    await expect(b.svc.fork({ sessionId: sid('source'), atSeq: 41.1 })).resolves.toBe('child')
+    await expect(b.svc.fork({ sessionId: sid('source'), atSeq: 41.1 })).resolves.toMatchObject({ sessionId: 'child' })
 
     expect(b.api.callsOf('session.fork')).toEqual([{ sessionId: 'source', atSeq: 41 }])
   })
@@ -569,7 +569,7 @@ describe('fork', () => {
     await feedList(b, [{ id: 'source', cwd: '/work' }])
     b.api.onFork = () => Promise.resolve(ok({ sessionId: sid('child') }))
 
-    await expect(b.svc.fork({ sessionId: sid('source'), beforeSeq: 41.9 })).resolves.toBe('child')
+    await expect(b.svc.fork({ sessionId: sid('source'), beforeSeq: 41.9 })).resolves.toMatchObject({ sessionId: 'child' })
 
     expect(b.api.callsOf('session.fork')).toEqual([{ sessionId: 'source', beforeSeq: 41 }])
   })
@@ -578,11 +578,11 @@ describe('fork', () => {
     const b = bench()
     await feedList(b, [{ id: 'source', cwd: '/work' }])
     b.api.onFork = () => Promise.resolve(ok({ sessionId: sid('child') }))
-    await expect(b.svc.fork({ sessionId: sid('source'), increaseTitle: true })).resolves.toBe('child')
+    await expect(b.svc.fork({ sessionId: sid('source'), increaseTitle: true })).resolves.toMatchObject({ sessionId: 'child' })
     expect(b.api.callsOf('session.rename')).toEqual([])
 
     b.api.onFork = () => Promise.resolve(ok({ sessionId: sid('child-2') }))
-    await expect(b.svc.fork({ sessionId: sid('source') })).resolves.toBe('child-2')
+    await expect(b.svc.fork({ sessionId: sid('source') })).resolves.toMatchObject({ sessionId: 'child-2' })
     expect(b.api.callsOf('session.rename')).toEqual([])
   })
 
@@ -610,7 +610,7 @@ describe('fork', () => {
 
     await expect(b.svc.fork({
       sessionId: sid('source'), workspaceId: 'ws-1' as never, cwd: '/target',
-    })).resolves.toBe('child')
+    })).resolves.toMatchObject({ sessionId: 'child' })
 
     // The wire request carries only the retarget; the cwd is display hint.
     expect(b.api.callsOf('session.fork')).toEqual([

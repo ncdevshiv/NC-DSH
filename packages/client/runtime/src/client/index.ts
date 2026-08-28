@@ -54,7 +54,7 @@ export type {
 } from './contract/settings-scope.ts'
 export type { Session } from './sessions/session.ts'
 export type { ISession, ProjectionsFace, SessionFace } from './contract/session.ts'
-export type { AgentContext, ISessions } from './contract/sessions.ts'
+export type { AgentContext, ForkRestoreReport, ISessions } from './contract/sessions.ts'
 export type { IWorkspaces } from './contract/workspaces.ts'
 export type {
   SessionBinding, SessionListState, SessionProvideContribution, SessionProvideDescriptor, SessionSummary,
