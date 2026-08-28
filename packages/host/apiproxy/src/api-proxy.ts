@@ -2337,7 +2337,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
 
       async fork(request) {
-        const { sessionId, atSeq, workspaceId } = request.payload
+        const { sessionId, atSeq, beforeSeq, workspaceId } = request.payload
         let source: SessionReadState
         try {
           source = await readSessionState(sessionId)
@@ -2363,21 +2363,52 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ?? (atSeq === undefined || atSeq > lastSeq
             ? events.findLast(e => e.type === 'turn/end')
             : undefined)
-        if (boundary === undefined) {
-          return err(request, {
-            code: 'fork-unavailable',
-            message: atSeq !== undefined && atSeq <= lastSeq
-              ? `session "${sessionId}" has not completed the turn containing event ${String(atSeq)}`
-              : `session "${sessionId}" has no completed turn to fork from`,
-            details: { sessionId },
-          })
+        let cut: number
+        if (beforeSeq !== undefined) {
+          // beforeSeq inverts the anchor: the child keeps everything through
+          // the event before the containing turn's start, so the anchor's
+          // whole turn — and every later event — stays with the parent. The
+          // cut walk reuses the anchored path's rule below: standalone
+          // appends trailing the previous turn/end (a title generated right
+          // after the last kept turn) still seed the child.
+          const containingStart = events.findLastIndex(
+            e => e.type === 'turn/start' && e.seq <= beforeSeq,
+          )
+          const containingEndIndex = containingStart === -1
+            ? -1
+            : events.findIndex((e, i) => i > containingStart && e.type === 'turn/end')
+          const containingEnd = containingEndIndex === -1 ? undefined : events[containingEndIndex]
+          if (containingStart === -1 || containingEnd === undefined || containingEnd.seq < beforeSeq) {
+            return err(request, {
+              code: 'fork-unavailable',
+              message: containingStart === -1 || containingEnd === undefined
+                ? `session "${sessionId}" has not completed the turn containing event ${String(beforeSeq)}`
+                : `session "${sessionId}" has an anchor outside every turn: ${String(beforeSeq)}`,
+              details: { sessionId },
+            })
+          }
+          const previousEndIndex = events.findLastIndex(
+            (_e, i) => i < containingStart && events[i]?.type === 'turn/end',
+          )
+          cut = previousEndIndex + 1
+          while (events[cut]?.type !== 'turn/start') cut++
+        } else {
+          if (boundary === undefined) {
+            return err(request, {
+              code: 'fork-unavailable',
+              message: atSeq !== undefined && atSeq <= lastSeq
+                ? `session "${sessionId}" has not completed the turn containing event ${String(atSeq)}`
+                : `session "${sessionId}" has no completed turn to fork from`,
+              details: { sessionId },
+            })
+          }
+          // Extend the cut through trailing out-of-band appends (session/title,
+          // injections) up to the next turn/start: they are standalone events, so
+          // the seed stays balanced, and the child inherits a title generated
+          // right after the boundary turn.
+          cut = boundary.seq + 1
+          while (cut < events.length && events[cut]?.type !== 'turn/start') cut++
         }
-        // Extend the cut through trailing out-of-band appends (session/title,
-        // injections) up to the next turn/start: they are standalone events, so
-        // the seed stays balanced, and the child inherits a title generated
-        // right after the boundary turn.
-        let cut = boundary.seq + 1
-        while (cut < events.length && events[cut]?.type !== 'turn/start') cut++
         let workspace: Workspace | undefined
         if (workspaceId !== undefined) {
           // Explicit retarget (the chat→work shift): the child joins the named

@@ -7,7 +7,8 @@ import {
 import { z } from 'zod'
 import {
   contentBlockSchema, sessionCancelRequestSchema, sessionCancelValueSchema, sessionCreateRequestSchema,
-  sessionCreateValueSchema, sessionEventSchema, sessionHistoryRequestSchema, sessionHistoryValueSchema,
+  sessionCreateValueSchema, sessionEventSchema, sessionForkRequestSchema, sessionHistoryRequestSchema,
+  sessionHistoryValueSchema,
   sessionIdSchema, sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
   sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
   sessionSearchRequestSchema, sessionSearchValueSchema, sessionSelectModelRequestSchema,
@@ -101,6 +102,14 @@ describe('rpcResultSchema', () => {
 })
 
 describe('wire full-form schemas', () => {
+  it('session.fork accepts exactly one cut anchor kind', () => {
+    expect(sessionForkRequestSchema.safeParse({ sessionId: 's1', atSeq: 3 }).success).toBe(true)
+    expect(sessionForkRequestSchema.safeParse({ sessionId: 's1', beforeSeq: 3 }).success).toBe(true)
+    expect(sessionForkRequestSchema.safeParse({ sessionId: 's1' }).success).toBe(true)
+    expect(sessionForkRequestSchema.safeParse({ sessionId: 's1', atSeq: 3, beforeSeq: 3 }).success)
+      .toBe(false)
+  })
+
   it('parses the four quadrants and the union discriminates on type', () => {
     const cq = { type: 'client-request', rpcId: 'r1', method: 'session.list', payload: {} }
     const sr = { type: 'server-response', rpcId: 'r1', result: { ok: true, value: 1 } }

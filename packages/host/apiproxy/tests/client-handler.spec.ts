@@ -234,6 +234,21 @@ describe('unary round trip', () => {
     expect(response.result).toEqual({ ok: true, value: { sessionId: 's-child' } })
   })
 
+  it('routes a session fork rewind anchor beforeSeq through the wire', async () => {
+    let seen: RpcRequest<{ sessionId: SessionId; beforeSeq?: number }> | undefined
+    const api = scriptedApi({
+      sessions: {
+        fork: (request) => {
+          seen = request
+          return ok(request, { sessionId: sid('s-child') })
+        },
+      },
+    })
+    const response = await client(api).sessions.fork({ sessionId: sid('s-parent'), beforeSeq: 4 })
+    expect(seen?.payload).toEqual({ sessionId: 's-parent', beforeSeq: 4 })
+    expect(response.result).toEqual({ ok: true, value: { sessionId: 's-child' } })
+  })
+
   it('routes workspace rename, delete, and ordering through the wire', async () => {
     const api = scriptedApi()
     const c = client(api)
