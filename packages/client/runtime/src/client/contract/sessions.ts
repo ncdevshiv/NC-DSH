@@ -87,20 +87,24 @@ export interface ISessions {
   /**
    * Fork a session from a completed-turn prefix of the source; on resolution
    * the child is in the list store and `open()` can target it.
-   * @param opts - source session id, the optional event seq anchoring the
-   *   cut (the boundary is the first turn/end at or after it; an in-log
-   *   anchor in an open turn is unavailable rather than clipped backward),
-   *   whether to increment an inherited durable title before resolving, and
-   *   an optional Workspace retarget: the child adopts that Workspace's path
-   *   as its cwd and joins it instead of following the source. `cwd` is the
-   *   caller-supplied display hint for that target's path (the optimistic
-   *   list row); omit both to fork in place.
+   * @param opts - source session id; the optional event seq anchoring the
+   *   cut (`atSeq` keeps the anchor's whole turn — the boundary is the first
+   *   `turn/end` at or after it, and an in-log anchor in an open turn is
+   *   unavailable rather than clipped backward; `beforeSeq` inverts the cut
+   *   and drops the anchor's whole turn — every later event stays with the
+   *   parent, for edit-and-resend); whether to increment an inherited durable
+   *   title before resolving; and an optional Workspace retarget: the child
+   *   adopts that Workspace's path as its cwd and joins it instead of
+   *   following the source. `cwd` is the caller-supplied display hint for
+   *   that target's path (the optimistic list row); omit both to fork in
+   *   place. `atSeq` and `beforeSeq` are mutually exclusive.
    * @returns the child session id.
    * @throws when the fork fails, or when a requested child-title rename fails after creation.
    */
   fork(opts: {
     sessionId: SessionId
     atSeq?: number
+    beforeSeq?: number
     increaseTitle?: boolean
     workspaceId?: WorkspaceId
     cwd?: string

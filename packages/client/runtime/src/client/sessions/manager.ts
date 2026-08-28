@@ -630,18 +630,20 @@ export class SessionManager {
    * display hint for that path (the wire response carries no cwd), and a
    * published-before-attach-failure child keeps it — the host stamped the
    * target path as the child header cwd before attaching.
-   * @param opts - source session, the optional seq anchoring the cut, an
+   * @param opts - source session, the optional seq anchoring the cut (`atSeq`
+   *   keeps the anchor's turn; `beforeSeq` drops it), an
    *   optional Workspace retarget, and its display-cwd hint.
    * @returns the fork result (the child session id).
    */
   async fork(
-    opts: { sessionId: SessionId; atSeq?: number; workspaceId?: WorkspaceId; cwd?: string },
+    opts: { sessionId: SessionId; atSeq?: number; beforeSeq?: number; workspaceId?: WorkspaceId; cwd?: string },
   ): Promise<RpcResult<{ sessionId: SessionId }>> {
     try {
       const source = this.summaries.find(s => s.sessionId === opts.sessionId)
       const { result } = await this.api.sessions.fork({
         sessionId: opts.sessionId,
         ...opts.atSeq === undefined ? {} : { atSeq: opts.atSeq },
+        ...opts.beforeSeq === undefined ? {} : { beforeSeq: opts.beforeSeq },
         ...opts.workspaceId === undefined ? {} : { workspaceId: opts.workspaceId },
       })
       const childId = result.ok
