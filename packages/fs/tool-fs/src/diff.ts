@@ -11,13 +11,31 @@ import type { FileDiff } from '@deepseek-ai/dsh-tools'
 export const DIFF_CONTEXT = 3
 
 /**
- * The `write`/`edit` tools' private `tool/result` `meta` payload: the applied
- * contextual-diff hunks. Attached opaquely (as `unknown`) on the tool result and
- * persisted with the session log — it must be JSON-serializable (the session
- * validates this at `append`), so `presentResult` reproduces the diff card on
- * replay. The producing tool owns and narrows this opaque shape.
+ * Full-text restore basis of one write/edit: the same before/after pair the
+ * backend computed for the applied-hunk diff, kept so a rewind can replay the
+ * mutation backward. Restore capability, not presentation: the diff card still
+ * renders from `diffs`.
  */
-export type FsDiffMeta = { diffs: FileDiff[] }
+export interface FsDiffBasis {
+  /** Backend-resolved display path (relative to the session workspace root). */
+  path: string
+  /** Mutation kind; `edit` never needs a delete arm. */
+  op: 'create' | 'update' | 'edit'
+  /** Full pre-write text on the diff basis (LF-normalized); null on create or when the size cap refused capture. */
+  before: string | null
+  /** Full post-write text on the same basis; null when the size cap refused capture. */
+  after: string | null
+}
+
+/**
+ * The `write`/`edit` tools' private `tool/result` `meta` payload: the applied
+ * contextual-diff hunks plus the optional full-text restore basis. Attached
+ * opaquely (as `unknown`) on the tool result and persisted with the session
+ * log — it must be JSON-serializable (the session validates this at `append`),
+ * so `presentResult` reproduces the diff card on replay and a rewind sees the
+ * same basis it would have seen live.
+ */
+export type FsDiffMeta = { diffs: FileDiff[]; basis?: FsDiffBasis }
 
 /**
  * Compute one {@link FileDiff} per hunk between `before` and `after`, each carrying the
@@ -76,4 +94,25 @@ export function diffsFromMeta(meta: unknown): FileDiff[] | undefined {
   const diffs = (meta as Record<string, unknown>).diffs
   if (!Array.isArray(diffs) || diffs.length === 0 || !diffs.every(isFileDiff)) return undefined
   return diffs
+}
+
+/** Whether `value` is a valid restore basis (defensive narrowing from opaque `meta`). */
+function isFsDiffBasis(value: unknown): value is FsDiffBasis {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const { path, op, before, after } = value as Record<string, unknown>
+  return typeof path === 'string'
+    && (op === 'create' || op === 'update' || op === 'edit')
+    && (before === null || typeof before === 'string')
+    && (after === null || typeof after === 'string')
+}
+
+/**
+ * Narrow opaque live or replayed result metadata to its restore basis.
+ * @param meta - result metadata.
+ * @returns validated basis, or `undefined` for absent or malformed data.
+ */
+export function basisFromMeta(meta: unknown): FsDiffBasis | undefined {
+  if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) return undefined
+  const basis = (meta as Record<string, unknown>).basis
+  return isFsDiffBasis(basis) ? basis : undefined
 }
