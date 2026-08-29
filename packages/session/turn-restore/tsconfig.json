@@ -19,6 +19,9 @@
     },
     {
       "path": "../../fs/tool-fs"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

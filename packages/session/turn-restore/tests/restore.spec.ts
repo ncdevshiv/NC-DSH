@@ -4,8 +4,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { TurnRestore, workspacePath } from '../src/index.ts'
+import { apply, EMPTY_TURN_RESTORE_REPORT, TurnRestore, workspacePath } from '../src/index.ts'
 
 let cwd: string
 
@@ -52,12 +53,39 @@ describe('TurnRestore.restore', () => {
     const report = await restore.restore({
       cwd,
       events: [
+        event('turn/start', { turn: 1 }),
         toolCall('c1', 'write'),
         toolResult('c1', basis({ path: 'log.md', op: 'update', before: 'old', after: 'new' })),
       ],
     })
     expect(report.restored).toBe(1)
     expect(await readFile(file, 'utf8')).toBe('old')
+  })
+
+  it('reports a created file whose content changed as a conflict', async () => {
+    const file = path.join(cwd, 'new.md')
+    await writeFile(file, 'user-changed', 'utf8')
+    const report = await new TurnRestore().restore({
+      cwd,
+      events: [
+        toolCall('c1', 'write'),
+        toolResult('c1', basis({ path: 'new.md', op: 'create', before: null, after: 'hello' })),
+      ],
+    })
+    expect(report.conflicts).toEqual(['new.md'])
+    expect(await readFile(file, 'utf8')).toBe('user-changed')
+  })
+
+  it('reports an update whose file is already missing as a conflict', async () => {
+    const report = await new TurnRestore().restore({
+      cwd,
+      events: [
+        toolCall('c1', 'write'),
+        toolResult('c1', basis({ path: 'gone.md', op: 'update', before: 'old', after: 'new' })),
+      ],
+    })
+    expect(report.conflicts).toEqual(['gone.md'])
+    expect(report.restored).toBe(0)
   })
 
   it('steps back through repeated edits newest-first', async () => {
@@ -138,11 +166,27 @@ describe('TurnRestore.restore', () => {
         toolResult('s1', { diffs: [] }),
         toolCall('s2', 'str_replace_editor'),
         toolResult('s2', undefined),
+        // An orphan result (no paired call) names no tool and counts nothing.
+        toolResult('lost', { diffs: [] }),
       ],
     })
     expect(report.shell).toEqual({ count: 1, names: ['bash'] })
     expect(report.notRestorable).toEqual({ count: 1, toolNames: ['str_replace_editor'] })
     expect(report.restored).toBe(0)
+  })
+
+  it('reports a create without a recorded after as not restorable', async () => {
+    const file = path.join(cwd, 'huge.md')
+    await writeFile(file, 'megabytes', 'utf8')
+    const report = await new TurnRestore().restore({
+      cwd,
+      events: [
+        toolCall('c1', 'write'),
+        toolResult('c1', basis({ path: 'huge.md', op: 'create', before: null, after: null })),
+      ],
+    })
+    expect(report.notRestorable).toEqual({ count: 1, toolNames: [] })
+    expect(await readFile(file, 'utf8')).toBe('megabytes')
   })
 
   it('refuses paths that escape the workspace root', async () => {
@@ -158,6 +202,7 @@ describe('TurnRestore.restore', () => {
 
   it('resolves absolute paths only under the root', () => {
     expect(workspacePath(cwd, 'a/b.ts')).toBe(path.join(cwd, 'a', 'b.ts'))
+    expect(workspacePath(cwd, '.')).toBe(cwd)
     expect(workspacePath(cwd, path.join(cwd, 'in.ts'))).toBe(path.join(cwd, 'in.ts'))
     expect(workspacePath(cwd, '../up.ts')).toBeNull()
     expect(workspacePath(cwd, '/etc/passwd')).toBeNull()
@@ -180,5 +225,21 @@ describe('TurnRestore.restore', () => {
     expect(report.restored).toBe(3)
     expect(await readFile(a, 'utf8')).toBe('a0')
     expect(await readFile(b, 'utf8')).toBe('b0')
+  })
+
+  it('registers the turnRestore service on ctx when applied', async () => {
+    const ctx = new Context()
+    apply(ctx)
+    expect(ctx.get('turnRestore')).toBeInstanceOf(TurnRestore)
+    await ctx.fiber.dispose()
+  })
+
+  it('exports an all-zero report for skip reasons', () => {
+    expect(EMPTY_TURN_RESTORE_REPORT).toEqual({
+      restored: 0,
+      conflicts: [],
+      notRestorable: { count: 0, toolNames: [] },
+      shell: { count: 0, names: [] },
+    })
   })
 })

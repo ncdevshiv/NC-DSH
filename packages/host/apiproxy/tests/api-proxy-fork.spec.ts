@@ -496,4 +496,27 @@ describe('sessions.fork', () => {
     })
     await ctx.fiber.dispose()
   })
+
+  it('skips the workspace restore for a session without a cwd', async () => {
+    const ctx = await composed()
+    applyTurnRestore(ctx)
+    const session = ctx.sessions.create(sid('session-restore-nocwd'))
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'one' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+
+    const response = await api(ctx).sessions.fork(request({ sessionId: session.id, beforeSeq: 1 }))
+
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    expect(response.result.value.restoreReport).toMatchObject({
+      restored: 0,
+      skipped: 'no-cwd',
+    })
+    await ctx.fiber.dispose()
+  })
 })

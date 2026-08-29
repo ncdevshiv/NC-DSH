@@ -90,6 +90,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { UpdateStatus } from '@deepseek-ai/dsh-sidecar-updates'
 // Type-only: resolves `ctx.get('turnRestore')` to the rewind workspace
 // restore service; absent composition leaves a rewind conversation-only.
+import { EMPTY_TURN_RESTORE_REPORT } from '@deepseek-ai/dsh-turn-restore'
 import type { TurnRestoreReport } from '@deepseek-ai/dsh-turn-restore'
 import type {} from '@deepseek-ai/dsh-sidecar-updates'
 import type {} from '@deepseek-ai/dsh-notifications'
@@ -2423,9 +2424,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (restorer !== undefined) {
             const sourceAgent = ctx.agents.get(sessionId)
             restoreReport = sourceAgent?.status === 'running'
-              ? { restored: 0, conflicts: [], notRestorable: { count: 0, toolNames: [] }, shell: { count: 0, names: [] }, skipped: 'source-running' }
+              ? { ...EMPTY_TURN_RESTORE_REPORT, skipped: 'source-running' }
               : source.header.cwd === undefined
-                ? { restored: 0, conflicts: [], notRestorable: { count: 0, toolNames: [] }, shell: { count: 0, names: [] }, skipped: 'no-cwd' }
+                ? { ...EMPTY_TURN_RESTORE_REPORT, skipped: 'no-cwd' }
                 : await restorer.restore({ events: events.slice(cut), cwd: source.header.cwd })
           }
         }
