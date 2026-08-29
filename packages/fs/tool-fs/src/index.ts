@@ -15,6 +15,11 @@ import { applyReadImageTool } from './read-image.ts'
 import { READ_MAX_BYTES, READ_MAX_LINE_LENGTH } from './read-render.ts'
 import { FsSandboxController } from './sandbox.ts'
 
+// The applied-hunk meta contract: presentation consumes the hunks, the
+// rewind restore consumes the full-text basis.
+export { basisFromMeta, computeHunkDiffs, diffsFromMeta } from './diff.ts'
+export type { FsDiffBasis, FsDiffMeta } from './diff.ts'
+
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-fs'
 

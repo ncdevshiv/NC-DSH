@@ -24,7 +24,7 @@ Status: implemented
 
 **fork 后自动发送编辑后的提示词。** Codex 把提示词恢复到编辑器；自动发送会夺走用户要的最后一次确认。
 
-**把动作倒向文件回退。** 本次改动不涉及回退工作区文件；基于 `fs-local` 变更的轮次前后镜像捕获与逆序恢复属于独立阶段。
+**把动作倒向文件回退。** 现在回退会通过日志中的 `write`/`edit` 基准恢复工作区文件（[回退工作区恢复](2026-08-29-rewind-workspace-restore.md)）；无基准的 shell 与 `str_replace_editor` 变更会被报告，不会被回退。
 
 ## Consequences
 

@@ -119,7 +119,8 @@
     "@deepseek-ai/dsh-web-fetch-moli": "workspace:^",
     "@deepseek-ai/dsh-web-search-deepseek": "workspace:^",
     "@deepseek-ai/dsh-web-search-searxng": "workspace:^",
-    "@deepseek-ai/dsh-workflow-worker-thread": "workspace:^"
+    "@deepseek-ai/dsh-workflow-worker-thread": "workspace:^",
+    "@deepseek-ai/dsh-turn-restore": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

@@ -87,7 +87,7 @@ export function apply(ctx: ClientContext): void {
     },
     forkSession: (sessionId) => {
       ctx.sessions.fork({ sessionId, increaseTitle: true })
-        .then((childId) => { ctx.sessions.open(childId) })
+        .then(({ sessionId: childId }) => { ctx.sessions.open(childId) })
         .catch(() => {
           // Fork or child-rename failure keeps the current selection.
         })

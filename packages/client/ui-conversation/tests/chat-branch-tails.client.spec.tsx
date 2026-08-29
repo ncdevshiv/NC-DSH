@@ -21,6 +21,7 @@ import {
   CompactionNodeView, ContextMessageNodeView, RetryNodeView, UnknownNodeView,
   UserMessageNodeView,
 } from '../src/client/chat/MessageItem.tsx'
+import { restoreNotice } from '../src/client/chat/restore-notice.ts'
 import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/chat/AssistantMarkdown.tsx'
 import { StatsLine, type StatsLineProps } from '../src/client/chat/StatsLine.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -1165,6 +1166,42 @@ describe('small branch tails', () => {
     )
     expect(steer.queryByLabelText('编辑并重发')).toBeNull()
     expect(editResend).not.toHaveBeenCalled()
+  })
+
+  it('folds a restore report into the right notice level and text', () => {
+    expect(restoreNotice(
+      { restored: 5, conflicts: [], notRestorable: { count: 0, toolNames: [] }, shell: { count: 0, names: [] } },
+      t,
+    )).toEqual({ level: 'info', text: t('restore.summary', { restored: 5 }) })
+    expect(restoreNotice(
+      {
+        restored: 1, conflicts: ['log.md'], notRestorable: { count: 0, toolNames: [] },
+        shell: { count: 0, names: [] },
+      },
+      t,
+    ).level).toBe('error')
+    expect(restoreNotice(
+      {
+        restored: 0, conflicts: [], notRestorable: { count: 1, toolNames: ['bash'] },
+        shell: { count: 2, names: ['bash', 'pwsh'] },
+      },
+      t,
+    ).text).toContain(t('restore.shell', { count: 2, names: 'bash, pwsh' }))
+    expect(restoreNotice(
+      {
+        restored: 0, conflicts: [], notRestorable: { count: 0, toolNames: [] },
+        shell: { count: 0, names: [] },
+      },
+      t,
+    )).toEqual({ level: 'info', text: t('restore.summary', { restored: 0 }) })
+    expect(restoreNotice({
+      restored: 0, conflicts: [], notRestorable: { count: 0, toolNames: [] },
+      shell: { count: 0, names: [] }, skipped: 'source-running',
+    }, t)).toEqual({ level: 'info', text: t('restore.skipped.running') })
+    expect(restoreNotice({
+      restored: 0, conflicts: [], notRestorable: { count: 0, toolNames: [] },
+      shell: { count: 0, names: [] }, skipped: 'no-cwd',
+    }, t)).toEqual({ level: 'info', text: t('restore.skipped.noCwd') })
   })
 
   it('StatsLine omits the cache-hit segment when no input accounting exists at all', () => {

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { computeHunkDiffs, diffsFromMeta, DIFF_CONTEXT } from '../src/diff.ts'
+import { basisFromMeta, computeHunkDiffs, diffsFromMeta, DIFF_CONTEXT } from '../src/diff.ts'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 
 const lines = (n: number): string => Array.from({ length: n }, (_, i) => `line${i + 1}`).join('\n') + '\n'
@@ -109,5 +109,27 @@ describe('diffsFromMeta (defensive narrowing)', () => {
     expect(diffsFromMeta(m({ diffs: [null] }))).toBeUndefined()
     expect(diffsFromMeta(m({ diffs: ['x'] }))).toBeUndefined()
     expect(diffsFromMeta(m({ diffs: [[]] }))).toBeUndefined()
+  })
+})
+
+describe('basisFromMeta (restore basis narrowing)', () => {
+  const m = (value: unknown): JsonValue | undefined => value as JsonValue | undefined
+
+  it('narrows a well-formed create/update/edit basis', () => {
+    const meta = { diffs: [], basis: { path: 'f.txt', op: 'create', before: null, after: 'x' } }
+    expect(basisFromMeta(m(meta))).toEqual(meta.basis)
+    expect(basisFromMeta(m({ diffs: [], basis: { path: 'f.txt', op: 'update', before: 'a', after: 'b' } })))
+      .toEqual({ path: 'f.txt', op: 'update', before: 'a', after: 'b' })
+    expect(basisFromMeta(m({ diffs: [], basis: { path: 'f.txt', op: 'edit', before: 'a', after: null } })))
+      .toEqual({ path: 'f.txt', op: 'edit', before: 'a', after: null })
+  })
+
+  it('returns undefined for absent or malformed basis', () => {
+    expect(basisFromMeta(m({ diffs: [] }))).toBeUndefined()
+    expect(basisFromMeta(m({ diffs: [], basis: null }))).toBeUndefined()
+    expect(basisFromMeta(m({ diffs: [], basis: { path: 'f.txt', op: 'delete', before: 'a', after: 'b' } })))
+      .toBeUndefined()
+    expect(basisFromMeta(m({ diffs: [], basis: { path: 'f.txt', op: 'update', before: 5, after: 'b' } })))
+      .toBeUndefined()
   })
 })

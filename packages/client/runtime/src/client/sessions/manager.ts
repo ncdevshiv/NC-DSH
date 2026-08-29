@@ -6,6 +6,7 @@ import type {
   IApiClient, HostFrame, MuxFrame, RpcError, RpcRequest, RpcResult, SessionId,
   SessionSummary, SubagentAddress, SubagentCatalog, JobView, WorkspaceId,
 } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ForkRestoreReport } from '../contract/sessions.ts'
 // Value import from the inline-safe wire layer (not the connection plugin):
 // plugin-to-plugin value imports are a bundle purity error.
 import { transportError } from '@deepseek-ai/dsh-host-apiproxy/api'
@@ -637,7 +638,7 @@ export class SessionManager {
    */
   async fork(
     opts: { sessionId: SessionId; atSeq?: number; beforeSeq?: number; workspaceId?: WorkspaceId; cwd?: string },
-  ): Promise<RpcResult<{ sessionId: SessionId }>> {
+  ): Promise<RpcResult<{ sessionId: SessionId; restoreReport?: ForkRestoreReport }>> {
     try {
       const source = this.summaries.find(s => s.sessionId === opts.sessionId)
       const { result } = await this.api.sessions.fork({

@@ -15,6 +15,24 @@ import type { RpcId, RpcRequest, RpcResponse } from './rpc.ts'
 import type { ToolEventView } from './events.ts'
 import type { WorkspaceId } from './workspace.ts'
 
+/**
+ * Wire-shaped result of one rewind's workspace restore: what the optional
+ * `turnRestore` service computed over the discarded turns' logged write/edit
+ * bases. `skipped` carries why the workspace was left untouched.
+ */
+export interface ForkRestoreReport {
+  /** Files rewritten (or created-then-deleted) to their pre-turn state. */
+  restored: number
+  /** Display paths skipped because the disk content no longer matches the basis. */
+  conflicts: string[]
+  /** Mutations whose before-text was not recorded (size cap, basis-less tool). */
+  notRestorable: { count: number; toolNames: string[] }
+  /** Shell invocations in the discarded slice; their side effects cannot be reverted. */
+  shell: { count: number; names: string[] }
+  /** Why the workspace was left untouched, when the restore could not run at all. */
+  skipped?: 'source-running' | 'no-cwd'
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
     /**
@@ -334,7 +352,12 @@ export interface SessionsApi {
    * anchor, so the anchor's whole turn and every later event stay with the
    * parent — a message action that rewinds for edit-and-resend uses this.
    * An anchor whose turn is never completed, or that lies between turns,
-   * fails with `fork-unavailable`.
+   * fails with `fork-unavailable`. When the optional `turnRestore` service is
+   * composed, a `beforeSeq` cut additionally inverse-replays the discarded
+   * events' logged write/edit bases against the workspace root before the
+   * child is published; the returned `restoreReport` carries the restored,
+   * conflict, and un-restorable counts (or a `skipped` reason when the source
+   * agent is still running or the session has no workspace cwd).
    *
    * The child inherits the source cwd, latest logged model
    * target and `parentSessionId` lineage; the seed prefix carries the source
@@ -351,13 +374,19 @@ export interface SessionsApi {
    * `workspaceId`, Workspace attachment follows the source directly, or the
    * nearest workspace-owning ancestor when the source is a subagent.
    */
+  /**
+   * Result of one rewind's workspace-restore pass (present only on `beforeSeq`
+   * forks when the optional `turnRestore` service is composed). Mirrors the
+   * service's report shape; the client renders counts, conflicts, and the
+   * `skipped` reason as a composer notice.
+   */
   fork(request: RpcRequest<{
     sessionId: SessionId
     atSeq?: number
     beforeSeq?: number
     workspaceId?: WorkspaceId
   }>):
-  Promise<RpcResponse<{ sessionId: SessionId }>>
+  Promise<RpcResponse<{ sessionId: SessionId; restoreReport?: ForkRestoreReport }>>
 
   /**
    * Sends text and temporary image bytes to an ordinary session Agent after durable host admission.

@@ -7,8 +7,8 @@ import {
 import { z } from 'zod'
 import {
   contentBlockSchema, sessionCancelRequestSchema, sessionCancelValueSchema, sessionCreateRequestSchema,
-  sessionCreateValueSchema, sessionEventSchema, sessionForkRequestSchema, sessionHistoryRequestSchema,
-  sessionHistoryValueSchema,
+  sessionCreateValueSchema, sessionEventSchema, sessionForkRequestSchema, sessionForkValueSchema,
+  sessionHistoryRequestSchema, sessionHistoryValueSchema,
   sessionIdSchema, sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
   sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
   sessionSearchRequestSchema, sessionSearchValueSchema, sessionSelectModelRequestSchema,
@@ -108,6 +108,19 @@ describe('wire full-form schemas', () => {
     expect(sessionForkRequestSchema.safeParse({ sessionId: 's1' }).success).toBe(true)
     expect(sessionForkRequestSchema.safeParse({ sessionId: 's1', atSeq: 3, beforeSeq: 3 }).success)
       .toBe(false)
+  })
+
+  it('session.fork value accepts the optional restore report', () => {
+    const parsed = sessionForkValueSchema.parse({
+      sessionId: 's1',
+      restoreReport: {
+        restored: 1,
+        conflicts: [],
+        notRestorable: { count: 0, toolNames: [] },
+        shell: { count: 1, names: ['bash'] },
+      },
+    })
+    expect(parsed.restoreReport?.shell.count).toBe(1)
   })
 
   it('parses the four quadrants and the union discriminates on type', () => {

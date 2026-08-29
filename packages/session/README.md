@@ -12,6 +12,7 @@ Durable session persistence, semantic checkpoint policy, and the shipped storage
 |---|---|---|
 | [`session-persistence/`](session-persistence/README.md) | Defines the persistence service and shared write coordination | `ctx.sessionPersistence` |
 | [`session-checkpoint-policy/`](session-checkpoint-policy/README.md) | Applies semantic durability checkpoints | wraps `ctx.llm` and `ctx.tools` |
+| [`turn-restore/`](turn-restore/README.md) | Rewind-time workspace restore from the discarded turns' write/edit bases | `ctx.turnRestore` |
 | [`session-persistence-jsonl/`](session-persistence-jsonl/README.md) | Persists sessions in JSONL files | registers on `ctx.sessionPersistence` |
 | [`session-persistence-sqlite/`](session-persistence-sqlite/README.md) | Opt-in SQLite backend with packed physical chunk rows | registers on `ctx.sessionPersistence` |
 

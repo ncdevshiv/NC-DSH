@@ -138,9 +138,22 @@ export const sessionForkRequestSchema = z.object({
   { message: 'atSeq and beforeSeq are mutually exclusive' },
 ) satisfies z.ZodType<Wire<RequestPayload<'session.fork'>>>
 
-/** session.fork response value (the child session id). */
+/** session.fork response value (the child session id, plus the optional workspace-restore report). */
 export const sessionForkValueSchema = z.object({
   sessionId: sessionIdSchema,
+  restoreReport: z.object({
+    restored: z.number().int().nonnegative(),
+    conflicts: z.array(z.string()),
+    notRestorable: z.object({
+      count: z.number().int().nonnegative(),
+      toolNames: z.array(z.string()),
+    }),
+    shell: z.object({
+      count: z.number().int().nonnegative(),
+      names: z.array(z.string()),
+    }),
+    skipped: z.enum(['source-running', 'no-cwd']).optional(),
+  }).optional(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.fork'>>>
 
 /** session.history request payload (beforeSeq/maxMessages page backwards from the window tail). */

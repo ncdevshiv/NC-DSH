@@ -97,6 +97,15 @@ export function applyWriteTool(ctx: Context, sandbox: FsSandboxController): void
           ? []
           : computeHunkDiffs(args.file_path, value.before, value.after)
             .map(({ path, oldText, newText }) => ({ path, oldText, newText })),
+        // The restore basis is attached even when the size cap refused the
+        // pre-write text (before: null, update): a rewind must then report the
+        // mutation as un-restorable instead of silently missing it.
+        basis: {
+          path: args.file_path,
+          op: value.operation,
+          before: value.before,
+          after: value.after,
+        },
       }),
     },
     async execute(args: WriteToolArgs, exec) {

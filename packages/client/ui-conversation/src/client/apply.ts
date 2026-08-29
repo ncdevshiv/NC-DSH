@@ -28,6 +28,7 @@ import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ChatView } from './chat/ChatView.tsx'
+import { restoreNotice } from './chat/restore-notice.ts'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
@@ -247,7 +248,7 @@ export function apply(ctx: Context): void {
         }
         const targetPath = workspaces.list.getSnapshot().items
           .find(workspace => workspace.workspaceId === workspaceId)?.path
-        const childId = await sessions.fork({
+        const { sessionId: childId } = await sessions.fork({
           sessionId: current,
           workspaceId,
           ...(targetPath === undefined ? {} : { cwd: targetPath }),
@@ -441,17 +442,21 @@ export function apply(ctx: Context): void {
         },
         forkAt: (seq) => {
           sessions.fork({ sessionId, atSeq: seq, increaseTitle: true })
-            .then((childId) => { sessions.open(childId) })
+            .then(({ sessionId: childId }) => { sessions.open(childId) })
             .catch(() => {
               // Fork or child-rename failure keeps the source view untouched.
             })
         },
         editResendAt: async (target) => {
-          const childId = await sessions.fork({ sessionId, beforeSeq: target.seq })
+          const { sessionId: childId, restoreReport } = await sessions.fork({ sessionId, beforeSeq: target.seq })
           // Nothing is auto-sent: the original text lands in the child
           // composer, and the user edits it there before a normal send.
           inputHub.shell(childId).setDraft(target.text)
           sessions.open(childId)
+          if (restoreReport !== undefined) {
+            const notice = restoreNotice(restoreReport, t)
+            inputHub.shell(childId).notify(notice.level, notice.text)
+          }
         },
       }
     },

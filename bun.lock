@@ -653,6 +653,7 @@
         "@deepseek-ai/dsh-tool-web": "workspace:^",
         "@deepseek-ai/dsh-tool-workflow": "workspace:^",
         "@deepseek-ai/dsh-tools": "workspace:^",
+        "@deepseek-ai/dsh-turn-restore": "workspace:^",
         "@deepseek-ai/dsh-typert-loader": "workspace:^",
         "@deepseek-ai/dsh-typert-registry": "workspace:^",
         "@deepseek-ai/dsh-user-approval": "workspace:^",
@@ -3456,6 +3457,7 @@
         "@deepseek-ai/dsh-skill": "workspace:^",
         "@deepseek-ai/dsh-subagent": "workspace:^",
         "@deepseek-ai/dsh-tools": "workspace:^",
+        "@deepseek-ai/dsh-turn-restore": "workspace:^",
         "@deepseek-ai/dsh-user-approval": "workspace:^",
         "@deepseek-ai/dsh-user-questions": "workspace:^",
         "@deepseek-ai/dsh-workspace": "workspace:^",
@@ -4803,6 +4805,23 @@
         "@deepseek-ai/dsh-session": "workspace:^",
         "@deepseek-ai/dsh-session-title": "workspace:^",
         "@deepseek-ai/dsh-timeout": "workspace:^",
+      },
+    },
+    "packages/session/turn-restore": {
+      "name": "@deepseek-ai/dsh-turn-restore",
+      "version": "0.1.0-rc.8",
+      "devDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-session": "workspace:^",
+        "@deepseek-ai/dsh-tool-fs": "workspace:^",
+      },
+      "peerDependencies": {
+        "@deepseek-ai/cordis": "workspace:^",
+        "@deepseek-ai/dsh-invariants": "workspace:^",
+        "@deepseek-ai/dsh-session": "workspace:^",
+        "@deepseek-ai/dsh-tool-fs": "workspace:^",
       },
     },
     "packages/settings/settings": {
@@ -7283,6 +7302,8 @@
     "@deepseek-ai/dsh-tool-workflow": ["@deepseek-ai/dsh-tool-workflow@workspace:packages/workflow/tool-workflow"],
 
     "@deepseek-ai/dsh-tools": ["@deepseek-ai/dsh-tools@workspace:packages/core/tools"],
+
+    "@deepseek-ai/dsh-turn-restore": ["@deepseek-ai/dsh-turn-restore@workspace:packages/session/turn-restore"],
 
     "@deepseek-ai/dsh-typert-generator": ["@deepseek-ai/dsh-typert-generator@workspace:packages/typert/generator"],
 
