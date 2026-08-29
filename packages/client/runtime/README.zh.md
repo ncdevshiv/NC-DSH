@@ -74,7 +74,7 @@ reason 为 `max-tokens` 的 `turn/end` 会在该轮位置投影出一个 `turn-m
 
 ## 会话 fork
 
-`ISessions.fork({sessionId, atSeq?, increaseTitle?, workspaceId?, cwd?})` 只在子会话摘要已能在本地寻址后才完成；该摘要携带源会话的谱系和 cwd，且 `blank: false`，由调用方决定是否打开。传入 `workspaceId` 时 fork 会被重定向：Host 让子会话采用该 Workspace 的路径作为自身 cwd 并加入该 Workspace，而不是跟随源会话；`cwd`（调用方提供的显示提示）为乐观插入的子会话行标注路径——wire 请求只携带 `workspaceId`。`increaseTitle: true` 会在 client 端根据源会话的持久化标题重命名子会话：尾部 `(N)` 或 `（N）` 递增并保留括号样式，其余标题追加 ` (1)`；源会话没有持久化标题时跳过改名，改名失败时拒绝 promise 但保留已创建的子会话。该选项不会进入 Host fork 请求。即使响应为 `workspace-attach-failed`，其中仍会标识 Host 已发布的子会话，因此 `SessionManager` 会先将这一部分成功对账，再让 `SessionForkError` 到达调用方，避免重试创建重复的子会话；重定向场景下的部分成功保留提示的目标 cwd——Host 在附加前已把该路径写入子会话头。
+`ISessions.fork({sessionId, atSeq?, beforeSeq?, increaseTitle?, workspaceId?, cwd?})` 只在子会话摘要已能在本地寻址后才完成；该摘要携带源会话的谱系和 cwd，且 `blank: false`，由调用方决定是否打开。`atSeq` 保留锚点所在的整个轮次（消息操作的分支）；`beforeSeq` 反转切割并丢弃锚点所在的整个轮次，其后的所有事件留在父会话——这是编辑重发的路径；两个锚点互斥，并都会把小数节点 seq 向下取整为 wire 接受的整数。传入 `workspaceId` 时 fork 会被重定向：Host 让子会话采用该 Workspace 的路径作为自身 cwd 并加入该 Workspace，而不是跟随源会话；`cwd`（调用方提供的显示提示）为乐观插入的子会话行标注路径——wire 请求只携带 `workspaceId`。`increaseTitle: true` 会在 client 端根据源会话的持久化标题重命名子会话：尾部 `(N)` 或 `（N）` 递增并保留括号样式，其余标题追加 ` (1)`；源会话没有持久化标题时跳过改名，改名失败时拒绝 promise 但保留已创建的子会话。该选项不会进入 Host fork 请求。即使响应为 `workspace-attach-failed`，其中仍会标识 Host 已发布的子会话，因此 `SessionManager` 会先将这一部分成功对账，再让 `SessionForkError` 到达调用方，避免重试创建重复的子会话；重定向场景下的部分成功保留提示的目标 cwd——Host 在附加前已把该路径写入子会话头。
 
 ## 会话模型选择
 

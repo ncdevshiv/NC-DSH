@@ -365,4 +365,66 @@ describe('sessions.fork', () => {
     expect(ctx.sessions.get(details.sessionId)?.header.cwd).toBe('/target')
     await ctx.fiber.dispose()
   })
+
+  it('beforeSeq drops the whole turn containing the anchor', async () => {
+    const ctx = await composed()
+    const source = liveAgent(ctx, 'session-edit', 2)
+    // Turn 2's user/message is seq 4; the cut must not include turn 2 at all.
+    const response = await api(ctx).sessions.fork(request({ sessionId: source.id, beforeSeq: 4 }))
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    const child = ctx.sessions.get(response.result.value.sessionId)
+    expect(child?.events.map(event => event.type)).toEqual([
+      'turn/start', 'user/message', 'turn/end', 'session/end-seed',
+    ])
+    expect(child?.header.parentSession).toBe(source.id)
+    expect(child?.header.cwd).toBe('/proj')
+    await ctx.fiber.dispose()
+  })
+
+  it('beforeSeq on the first turn forks an empty-seed child', async () => {
+    const ctx = await composed()
+    const source = liveAgent(ctx, 'session-firstedit', 1)
+    // Turn 1's user/message is seq 1; nothing precedes it to retain.
+    const response = await api(ctx).sessions.fork(request({ sessionId: source.id, beforeSeq: 1 }))
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    const child = ctx.sessions.get(response.result.value.sessionId)
+    expect(child?.events.map(event => event.type)).toEqual(['session/end-seed'])
+    expect(child?.header.parentSession).toBe(source.id)
+    await ctx.fiber.dispose()
+  })
+
+  it('beforeSeq refuses an anchor inside an open turn', async () => {
+    const ctx = await composed()
+    const source = liveAgent(ctx, 'session-editopen', 1, 'open')
+    const anchor = source.events.at(-1)?.seq ?? 0
+    const response = await api(ctx).sessions.fork(request({ sessionId: source.id, beforeSeq: anchor }))
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'fork-unavailable', details: { sessionId: source.id } },
+    })
+    if (!response.result.ok) expect(response.result.error.message).toMatch(/has not completed/)
+    await ctx.fiber.dispose()
+  })
+
+  it('beforeSeq refuses an anchor outside every turn', async () => {
+    const ctx = await composed()
+    const source = liveAgent(ctx, 'session-editgap', 2)
+    // A trailing standalone title sits after the last turn/end: a rewind
+    // anchor there addresses no turn.
+    source.append('session/title', {
+      title: 'after turn 2',
+      messageSeqs: [],
+      source: { kind: 'user' },
+    })
+    const anchor = source.events.at(-1)?.seq ?? 0
+    const response = await api(ctx).sessions.fork(request({ sessionId: source.id, beforeSeq: anchor }))
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'fork-unavailable', details: { sessionId: source.id } },
+    })
+    if (!response.result.ok) expect(response.result.error.message).toMatch(/outside every turn/)
+    await ctx.fiber.dispose()
+  })
 })

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write packages/host/apiproxy/README.md
-README.md: a6d405d58be385eafc2fc7c3844f2df168e766d1
-README.zh.md: 74f9cc19c6520f55161dc5fca2e889248a5d597d
+README.md: 0d61ae59a456c0449035f096bc874b40fa071dae
+README.zh.md: c4b8ad1d4fed39cd557916d32f59dc5f0916870a

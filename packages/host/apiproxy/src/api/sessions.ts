@@ -327,7 +327,16 @@ export interface SessionsApi {
    * that whole turn); a boundary past the log end, or an omitted `atSeq`,
    * falls back to the source's last completed turn. An in-log anchor whose
    * turn is still open fails with `fork-unavailable` instead of clipping to
-   * an earlier turn. The child inherits the source cwd, latest logged model
+   * an earlier turn.
+   *
+   * `beforeSeq` inverts the cut (mutually exclusive with `atSeq`): the child
+   * inherits everything through the event before the turn containing that
+   * anchor, so the anchor's whole turn and every later event stay with the
+   * parent — a message action that rewinds for edit-and-resend uses this.
+   * An anchor whose turn is never completed, or that lies between turns,
+   * fails with `fork-unavailable`.
+   *
+   * The child inherits the source cwd, latest logged model
    * target and `parentSessionId` lineage; the seed prefix carries the source
    * title. Reading the source uses attached state or persistence inspection
    * without acquiring an Agent.
@@ -342,7 +351,12 @@ export interface SessionsApi {
    * `workspaceId`, Workspace attachment follows the source directly, or the
    * nearest workspace-owning ancestor when the source is a subagent.
    */
-  fork(request: RpcRequest<{ sessionId: SessionId; atSeq?: number; workspaceId?: WorkspaceId }>):
+  fork(request: RpcRequest<{
+    sessionId: SessionId
+    atSeq?: number
+    beforeSeq?: number
+    workspaceId?: WorkspaceId
+  }>):
   Promise<RpcResponse<{ sessionId: SessionId }>>
 
   /**
