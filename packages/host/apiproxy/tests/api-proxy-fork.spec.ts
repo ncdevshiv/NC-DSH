@@ -373,7 +373,7 @@ describe('sessions.fork', () => {
   it('beforeSeq drops the whole turn containing the anchor', async () => {
     const ctx = await composed()
     const source = liveAgent(ctx, 'session-edit', 2)
-    // Turn 2's user/message is seq 4; the cut must not include turn 2 at all.
+    // Turn 2's user/message is seq 5; the cut must not include turn 2 at all.
     const response = await api(ctx).sessions.fork(request({ sessionId: source.id, beforeSeq: 4 }))
     expect(response.result.ok).toBe(true)
     if (!response.result.ok) return

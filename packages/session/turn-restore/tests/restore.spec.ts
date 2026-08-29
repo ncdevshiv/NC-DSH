@@ -1,6 +1,6 @@
 /** Inverse-replay restore behavior over discarded turn slices. */
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -87,6 +87,34 @@ describe('TurnRestore.restore', () => {
     expect(report.conflicts).toEqual(['gone.md'])
     expect(report.restored).toBe(0)
   })
+
+  // A read-only directory makes the restore write fail: the plan must fold
+  // into a reported conflict. Windows read-only flags do not block writes the
+  // way POSIX mode 0555 does, so this case runs on POSIX (CI) only.
+  it.runIf(process.platform !== 'win32')(
+    'reports a write failure as a conflict instead of aborting the pass',
+    async () => {
+      const locked = path.join(cwd, 'locked')
+      await mkdir(locked)
+      const file = path.join(locked, 'log.md')
+      await writeFile(file, 'new', 'utf8')
+      await chmod(locked, 0o555)
+      try {
+        const report = await new TurnRestore().restore({
+          cwd,
+          events: [
+            toolCall('c1', 'write'),
+            toolResult('c1', basis({ path: 'locked/log.md', op: 'update', before: 'old', after: 'new' })),
+          ],
+        })
+        expect(report.conflicts).toEqual(['locked/log.md'])
+        expect(report.restored).toBe(0)
+        expect(await readFile(file, 'utf8')).toBe('new')
+      } finally {
+        await chmod(locked, 0o755)
+      }
+    },
+  )
 
   it('steps back through repeated edits newest-first', async () => {
     const file = path.join(cwd, 'a.ts')

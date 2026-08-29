@@ -160,7 +160,14 @@ export class TurnRestore {
       report.conflicts.push(basis.path)
       return
     }
-    await writeFile(abs, basis.before, 'utf8')
+    try {
+      await writeFile(abs, basis.before, 'utf8')
+    } catch {
+      // A read-only/ENOSPC write must fail this one plan into a reported
+      // conflict, never abort the whole rewind after earlier plans applied.
+      report.conflicts.push(basis.path)
+      return
+    }
     report.restored += 1
   }
 }
