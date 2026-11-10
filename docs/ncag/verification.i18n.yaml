@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for verification.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/verification.md
+/:
+  en: 95c2ac162555910d
+  zh: f27430e27f127ca3
+/nc-ag-verification:
+  en: eab4d6a1343f7760
+  zh: 1ebf0d29ba34d369
+/nc-ag-verification/summary:
+  en: 97c9edcff73f2388
+  zh: d6ed8b63f51410e6
+/nc-ag-verification/table-of-contents:
+  en: 3bf96c43583747a7
+  zh: c9ce6c27ed2f4bdc
+/nc-ag-verification/the-rule:
+  en: 4f71197493262cb2
+  zh: a9d7aac37e25f748
+/nc-ag-verification/where-the-command-comes-from:
+  en: 76e508f319cd00b0
+  zh: 6320c7211b355bc1
+/nc-ag-verification/what-is-recorded:
+  en: 13cd93d5c400eca4
+  zh: 1f9b9bf16113c109
+/nc-ag-verification/reviews-are-separate-evidence:
+  en: 764205fc53b0497f
+  zh: 8fb8f4f7fcf40f13
+/nc-ag-verification/reproducing-a-verification:
+  en: 02b744e05df35b90
+  zh: 2d48a75cf169a2f2
+/nc-ag-verification/why-a-check-can-fail-to-run:
+  en: c8fa0603e2f34a6d
+  zh: 6ba08ce7585b994d

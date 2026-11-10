@@ -57,12 +57,54 @@ export interface ContextPressureProjection {
  * figure. Present these as approximations of composition, never as a total.
  */
 export interface ContextBreakdownProjection {
-  /** Heuristic tokens of the newest request envelope's system prompt; 0 before any request. */
+  /** Heuristic tokens of the last nonempty surviving system prompt in surface order; 0 when none exists. */
   systemTokens: number
   /** Heuristic tokens of the newest request envelope's tool schemas; 0 before any request. */
   toolsTokens: number
-  /** Heuristic tokens of the current model-visible conversation surface. */
+  /** Heuristic tokens of every other visible surface node, including superseded system prompts. */
   messageTokens: number
+}
+
+/**
+ * Measured provider usage one UTC calendar day of one exact model route
+ * contributed to one Session.
+ *
+ * Counts are DISJOINT, mirroring `TokenUsage`: `uncachedInputTokens` excludes
+ * `cacheReadTokens` and `cacheWriteTokens`, and `reasoningTokens` is a subset
+ * of `outputTokens` already included there. Billed input is the sum of the
+ * three prompt buckets.
+ *
+ * An optional bucket is present only when every request counted in this entry
+ * reported it. Absent therefore means "not every provider disclosed it", never
+ * "zero": a partial `cacheReadTokens` cannot be shown as 0 without understating
+ * prompt traffic.
+ */
+export interface RouteUsageEntry {
+  /** UTC calendar day the counted requests were logged on, `YYYY-MM-DD`. */
+  readonly day: string
+  /** Provider route that served the requests. */
+  readonly provider: string
+  /** Model id the same route served. */
+  readonly model: string
+  /** Billed request attempts counted on this day and route. */
+  readonly requests: number
+  /** Sum of uncached prompt input across {@link requests}. */
+  readonly uncachedInputTokens: number
+  /** Sum of prompt cache reads, present only when every request reported the bucket. */
+  readonly cacheReadTokens?: number
+  /** Sum of prompt cache writes, present only when every request reported the bucket. */
+  readonly cacheWriteTokens?: number
+  /** Sum of response output, already including {@link reasoningTokens}. */
+  readonly outputTokens: number
+  /** Sum of reasoning output, present only when every request reported the bucket. */
+  readonly reasoningTokens?: number
+  /**
+   * Sum of full-call totals: each counted request's provider total, or its
+   * exact prompt plus output sum when the provider reported the complete prompt
+   * split but no total. Required because a request the meter cannot total this
+   * way is not counted at all.
+   */
+  readonly totalTokens: number
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
@@ -73,5 +115,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
     contextPressure: ContextPressureProjection
     /** Heuristic system/tools/message composition of the next request. */
     contextBreakdown: ContextBreakdownProjection
+    /** Measured per-route usage for every calendar day this Session still retains. */
+    routeUsage: readonly RouteUsageEntry[]
   }
 }

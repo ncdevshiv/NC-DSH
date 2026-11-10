@@ -22,7 +22,7 @@ Execution has two modes. `src` is the default local-development mode and uses ts
 
 Every test Cordis config must resolve its bare modules by walking upward from the config directory.
 
-- `examples/` is one pnpm workspace member and provides the shared `examples/node_modules` resolution root.
+- `examples/` is one bun workspace member and provides the shared `examples/node_modules` resolution root.
 - Every checked-in test Cordis config, including snapshot configs and package-owned fixtures, lives under its corresponding `examples/<agent>/` tree. A config owned by `packages/<group>/<package>/` maps to `examples/<agent>/tests/fixtures/<group>/<package>/cordis.yml`; the test driver and assertions remain package-local.
 - Every package named by an example Cordis config is declared in both `examples/package.json` for `lib` resolution and the root `tsconfig.json` references for `src` mode.
 

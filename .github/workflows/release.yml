@@ -1,10 +1,10 @@
-# Pack and publish the dsh release sequence: every package under packages/ plus
-# the apps/ entries, all on one version. The vendored framework and the native
-# packages are separate sequences with their own workflows and version lines.
+# Pack the dsh release sequence: every package under packages/ plus the apps/
+# entries, all on one version. The vendored framework and the native packages are
+# separate sequences with their own workflows and version lines.
 #
-# Pack runs without credentials on every pull request and master push, so a
-# pull request proves the whole publish set still packs. Publication is a
-# manual dispatch from a dsh-v* tag and consumes exactly the packed bytes.
+# Pack and dependency-layout verification run without credentials on every pull
+# request and master push. Publication is a manual workflow_dispatch of
+# release-publish.yml from a dsh-v* tag.
 name: Release (dsh)
 
 on:
@@ -12,46 +12,129 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the packed tarballs to npm. Must run from a dsh-v* tag.
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  # Pack runs per ref so concurrent pull requests never displace each
-  # other; the publish job below serializes the shared dist-tag state.
+  # Pack runs per ref so concurrent pull requests never displace each other.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   PRIMARY_NODE_VERSION: '24'
   DSH_TELEMETRY_DISABLED: '1'
 
 jobs:
+  dependencies:
+    name: Dependency layout
+    # Persistent runners accept only trusted, credential-free rehearsals.
+    runs-on: >-
+      ${{ vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
+        && github.repository == 'deepseek-harness/deepseek-harness'
+        && github.actor != 'dependabot[bot]'
+        && ((github.event_name == 'push' && github.ref == 'refs/heads/master')
+          || (github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.head.repo.fork == false
+            && github.event.pull_request.user.login != 'dependabot[bot]'))
+        && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
+        || 'ubuntu-24.04' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          clean: true
+
+      - name: Configure runner-private caches
+        run: |
+          echo "NODE_COMPILE_CACHE=${{ runner.temp }}/node-compile-cache" >> "$GITHUB_ENV"
+          echo "npm_config_devdir=${{ runner.temp }}/node-gyp" >> "$GITHUB_ENV"
+          echo "TMPDIR=${{ runner.temp }}" >> "$GITHUB_ENV"
+
+      - uses: oven-sh/setup-bun@v5.0.0
+        with:
+          dest: ${{ runner.temp }}/setup-bun-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Configure bun store path
+        id: bun-store
+        run: |
+          store_root="$HOME/.local/share/bun/store"
+          echo "BUN_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(BUN_CONFIG_STORE_DIR="$store_root" bun store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@v6.1.0
+        if: runner.environment == 'github-hosted'
+        with:
+          path: ${{ steps.bun-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-bun-
+
+      - name: Install (immutable)
+        run: bun install --frozen-lockfile
+
+      - name: Verify dependency policy
+        run: bun run verify-package-dependencies
+
+      - name: Verify npm install layout
+        run: bun run verify-npm-install-layout
+
   pack:
     name: Pack npm tarballs
-    runs-on: ubuntu-24.04
+    # Persistent runners accept only trusted, credential-free rehearsals.
+    runs-on: >-
+      ${{ vars.DSH_CI_FAILOVER_LINUX == 'selfhosted'
+        && github.repository == 'deepseek-harness/deepseek-harness'
+        && github.actor != 'dependabot[bot]'
+        && ((github.event_name == 'push' && github.ref == 'refs/heads/master')
+          || (github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.head.repo.fork == false
+            && github.event.pull_request.user.login != 'dependabot[bot]'))
+        && fromJSON('["self-hosted", "linux", "x64", "vm-backup"]')
+        || 'ubuntu-24.04' }}
     steps:
       # Complete history: the release scripts read tags.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+          clean: true
 
-      - uses: oven-sh/setup-bun@v2
+      - name: Configure runner-private caches
+        run: |
+          echo "NODE_COMPILE_CACHE=${{ runner.temp }}/node-compile-cache" >> "$GITHUB_ENV"
+          echo "npm_config_devdir=${{ runner.temp }}/node-gyp" >> "$GITHUB_ENV"
+          echo "TMPDIR=${{ runner.temp }}" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-node@v6
+      - uses: oven-sh/setup-bun@v5.0.0
+        with:
+          dest: ${{ runner.temp }}/setup-bun-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          package-manager-cache: false
 
-      - uses: actions/cache/restore@v4
+      - name: Configure bun store path
+        id: bun-store
+        run: |
+          store_root="$HOME/.local/share/bun/store"
+          echo "BUN_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(BUN_CONFIG_STORE_DIR="$store_root" bun store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@v6.1.0
+        if: runner.environment == 'github-hosted'
         with:
-          path: ~/.bun/install/cache
+          path: ${{ steps.bun-store.outputs.path }}
           key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-bun-${{ hashFiles('bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-bun-
@@ -60,15 +143,15 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Verify release version
-        env:
-          RELEASE_PUBLISH: ${{ inputs.publish }}
         run: bun run release:verify --family dsh
 
       - name: Build
-        run: bun run build:official
+        run: ${{ github.event_name == 'pull_request' && 'bun run build:artifacts --profile official' || 'bun run build:official' }}
 
+      # Concurrency here is rehearsal-only: the credentialed publish workflows
+      # invoke release:pack without the flag and keep the strictly serial path.
       - name: Pack release tarballs
-        run: bun run release:pack --family dsh --out dist/npm
+        run: bun run release:pack --family dsh --out dist/npm --concurrency 8
 
       # The harness packages declare the vendored framework as a peer, and this
       # verification must not depend on the registry already carrying matching
@@ -76,63 +159,22 @@ jobs:
       # publishes — so it installs that family's pack output too. Only dist/npm
       # is published.
       - name: Pack the vendored framework for verification
-        run: bun run release:pack --family vendor --out dist/npm-vendor
+        run: bun run release:pack --family vendor --out dist/npm-vendor --concurrency 8
 
       # dsh-sandbox-local declares the Landlock entry as a runtime dependency, so
       # the verification needs its tarball. Its platform packages stay out: they
       # are optional, and building them needs a musl toolchain per architecture.
       - name: Pack the Landlock entry for verification
         run: |
-          root="$PWD"
-          (cd native/landlock-run && bun run build:ts)
-          (cd native/landlock-run/packages/entry && bun pm pack --destination "$root/dist/npm-landlock")
+          bun --dir native/system run build:ts
+          bun --dir native/system/packages/entry pack --pack-destination "$PWD/dist/npm-landlock"
 
       - name: Verify packed install
         run: bun run release:verify-packed-install --family dsh --from dist/npm --from dist/npm-vendor --from dist/npm-landlock
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: dsh-npm-tarballs
           path: dist/npm/*
           if-no-files-found: error
           retention-days: 7
-
-  publish:
-    name: Publish to npm
-    if: inputs.publish
-    needs: pack
-    runs-on: ubuntu-24.04
-    # Required reviewers and the allowed tags live on the environment; this is
-    # the only step in the sequence that can write to the registry.
-    environment: npm-publish
-    concurrency:
-      group: Release-publish
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    steps:
-      # Checkout and install carry the release scripts only. There is no build
-      # step: publication uploads the bytes the pack job produced.
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: oven-sh/setup-bun@v2
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.PRIMARY_NODE_VERSION }}
-          registry-url: https://registry.npmjs.org
-
-      - name: Install (immutable, no package scripts)
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: dsh-npm-tarballs
-          path: dist/npm
-
-      - name: Publish tarballs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: bun run release:publish --family dsh --from dist/npm

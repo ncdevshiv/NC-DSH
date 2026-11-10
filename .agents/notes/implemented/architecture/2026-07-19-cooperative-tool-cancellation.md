@@ -16,7 +16,7 @@ Cancellation can arrive before policy, during approval, inside an around-dispatc
 
 `ToolExecutionInput.signal` is a required readonly `AbortSignal`. `ToolExecution.signal` and `ToolRunContext.signal` are therefore required and readonly as well. Every typed caller supplies the signal it owns; the registry provides no overload, default controller, never-abort sentinel, or convenience execution path.
 
-`ToolDefinition.execute(args, exec)` keeps its existing signature. `defineTool()` contextually types `exec.signal` as a required `AbortSignal`, so every registered TypeScript tool can observe or forward cancellation without a cast. First-party direct callers and nested Code Mode dispatches pass their current operation signal explicitly.
+`ToolDefinition.execute(args, exec)` keeps its existing signature. `defineTool()` contextually types `exec.signal` as a required `AbortSignal`, so every registered TypeScript tool can observe or forward cancellation without a cast. First-party direct callers and nested PTC mode dispatches pass their current operation signal explicitly.
 
 The registry trusts this typed same-process contract. It does not perform runtime `AbortSignal` validation or add hostile-input tests for an omitted or malformed signal. Validation remains at parser/config, model/tool JSON, durable/file, worker, process, and wire boundaries; untyped JavaScript that violates the TypeScript interface has no compatibility contract.
 
@@ -46,7 +46,7 @@ This decision requires cancellation at the tool invocation boundary only. Making
 
 ## Verification
 
-[`execution-signal-types.spec.ts`](../../../../packages/core/tools/tests/execution-signal-types.spec.ts) proves the required exact signal types, readonly observer and tool views, mutable-but-required around-dispatch view, and `defineTool()` inference. [`tools.spec.ts`](../../../../packages/core/tools/tests/tools.spec.ts) covers pre-aborted materialization, phase skipping, policy and wrapper races, body invocation classification, caller-signal fusion, error precedence, context retention, and quiescent drainage. [`tool-calls.spec.ts`](../../../../packages/core/agent-loop/tests/tool-calls.spec.ts) and [`contract-regressions.spec.ts`](../../../../packages/core/agent-loop/tests/contract-regressions.spec.ts) cover balanced durable results for undispatched siblings. [`code-mode.spec.ts`](../../../../packages/core/tools/tests/code-mode.spec.ts) and first-party integration suites cover explicit forwarding, while [`timeout-policy.spec.ts`](../../../../packages/guard/timeout-policy/tests/timeout-policy.spec.ts) preserves timeout ownership.
+[`execution-signal-types.spec.ts`](../../../../packages/core/tools/tests/execution-signal-types.spec.ts) proves the required exact signal types, readonly observer and tool views, mutable-but-required around-dispatch view, and `defineTool()` inference. [`tools.spec.ts`](../../../../packages/core/tools/tests/tools.spec.ts) covers pre-aborted materialization, phase skipping, policy and wrapper races, body invocation classification, caller-signal fusion, error precedence, context retention, and quiescent drainage. [`tool-calls.spec.ts`](../../../../packages/core/agent-loop/tests/tool-calls.spec.ts) and [`contract-regressions.spec.ts`](../../../../packages/core/agent-loop/tests/contract-regressions.spec.ts) cover balanced durable results for undispatched siblings. [`ptc.spec.ts`](../../../../packages/core/tools/tests/ptc.spec.ts) and first-party integration suites cover explicit forwarding, while [`timeout-policy.spec.ts`](../../../../packages/guard/timeout-policy/tests/timeout-policy.spec.ts) preserves timeout ownership.
 
 No registry test can prove that arbitrary third-party same-process code observes the signal or stops in bounded time. Capability tests continue to prove cancellation and quiescence at the boundary that owns each side effect.
 
@@ -62,7 +62,7 @@ No registry test can prove that arbitrary third-party same-process code observes
 
 **Forbid around wrappers from replacing the signal.** Rejected because deadlines and nested operational scopes need lexical derivation. Capturing and fusing the caller signal preserves composition without allowing detachment.
 
-**Race the tool promise against cancellation.** Rejected because it reports completion while side effects may remain live, violating the [quiescent-disposal rule](../../../../docs/defensive-patterns.md#dispose-must-reach-quiescence-not-just-request-it).
+**Race the tool promise against cancellation.** Rejected because it reports completion while side effects may remain live, violating the [quiescent-disposal rule](../../../../docs/defensive-patterns/general.md#dispose-must-reach-quiescence-not-just-request-it).
 
 ## Consequences
 

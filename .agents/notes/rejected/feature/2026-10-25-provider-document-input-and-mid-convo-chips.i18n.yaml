@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-25-provider-document-input-and-mid-convo-chips.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/rejected/feature/2026-10-25-provider-document-input-and-mid-convo-chips.md
+/agent-note-provider-document-input-and-mid-conversation-capability-controls:
+  en: 156566002c2942df
+  zh: ba1ae62fc20cdedb
+/agent-note-provider-document-input-and-mid-conversation-capability-controls/problem:
+  en: 8dc5bb10b12c1ff1
+  zh: 51b44a3f4f5230a2
+/agent-note-provider-document-input-and-mid-conversation-capability-controls/proposal:
+  en: 792fc6fde578a063
+  zh: c508faefaa209dea
+/agent-note-provider-document-input-and-mid-conversation-capability-controls/alternatives-considered:
+  en: 6b03e4d34b8cf0cd
+  zh: 7e10ea273ec2cee4
+/agent-note-provider-document-input-and-mid-conversation-capability-controls/consequences:
+  en: 5d4d9602c7fbc528
+  zh: 6b7301e1ff156ec3

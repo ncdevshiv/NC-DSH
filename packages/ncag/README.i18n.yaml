@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/ncag/README.md
+/:
+  en: 8d16ab189978c471
+  zh: e9cbb4d6aada76cf
+/packages-ncag:
+  en: 59ac6f653eee85bf
+  zh: ddc611373833b733
+/packages-ncag/summary:
+  en: aaf79a6f82f7c76d
+  zh: 268dee69f495e6f6
+/packages-ncag/table-of-contents:
+  en: f397901d9e6bc4cd
+  zh: dc4ba6379551f315
+/packages-ncag/packages:
+  en: c2adf0cd42473e8f
+  zh: 6e79b1f887a78a91
+/packages-ncag/how-the-pieces-fit:
+  en: c459f73ab0292d75
+  zh: 2036bbfba74a6c1b
+/packages-ncag/related-documentation:
+  en: 364b0fdf39a5dceb
+  zh: 141bfa10854c146c
+/packages-ncag/dev-note:
+  en: 74e5af2fc2bb9c08
+  zh: 9a1767e44a001a30

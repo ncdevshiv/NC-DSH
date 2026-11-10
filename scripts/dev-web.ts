@@ -1,30 +1,38 @@
 /**
- * Watch-build for the web dev loop: rebuilds every artifact the browser reads
- * from a source edit. Reload signaling is not this script's business — the host
- * webserver stat-polls the bundles it serves and broadcasts `rebuilt` frames
- * itself (`dsh web`), so any process that rewrites `lib/client.js` files
- * triggers reloads; this script is merely the convenient way to keep them all
- * rebuilt on source change.
+ * The Web development loop: build once, serve through `dsh web`, and keep every
+ * browser-side artifact rebuilt on source edits, in one terminal.
  *
- * Three stages, because the compile shell links built lib products rather than
- * sources: `tsc -b tsconfig.client.json` emits `lib/types` (the tsdown lib
- * entries are that emit, not `src`), tsdown bundles `lib/index.js` and
- * `lib/client.js`, and `vite build` rewrites `apps/web/dist`, which `dsh web`
- * serves. A missing stage does not fail — it silently shows the previous
- * artifact, so an edit appears to do nothing. A transiently crashed stage
- * restarts with backoff instead of killing the chain; only persistent
- * crash-looping fails loud (see {@link spawnStage}).
+ * Stages, in order: `bun run build:artifacts` (skipped by `--skip-build`), three
+ * long-lived watchers, then `dsh web` (skipped by `--no-serve`). The watchers
+ * exist because the compile shell links built lib products rather than
+ * sources: `tsc -b tsconfig.client.json --watch` emits `lib/types` (the tsdown
+ * lib entries are that emit, not `src`), tsdown watch bundles `lib/index.js`
+ * and `lib/client.js`, and `vite build --watch` rewrites `apps/web/dist`, which
+ * `dsh web` serves. A missing watcher does not fail — it silently shows the
+ * previous artifact, so an edit appears to do nothing; any stage exiting on its
+ * own therefore stops the loop with exit code 1.
  *
- * MUST NOT run concurrently with `bun run build`: both write the same
- * `lib/` and `apps/web/dist/` trees.
+ * Reload signaling is not this script's business — the host webserver
+ * stat-polls the bundles it serves and broadcasts `rebuilt` frames itself, so
+ * any process that rewrites `lib/client.js` files triggers reloads.
  *
- * Usage: `node --import tsx/esm scripts/dev-web.ts [--poll[=ms]]`. Requires one prior
- * `bun run build`: every stage is incremental over the previous stage's output
- * and none of them bootstraps a missing tree. `--poll` switches the source
- * watchers to polling (default 500ms): network mounts (weka) deliver no inotify
- * events, so native watching sees the initial build only and never a source
- * change. Polling has to reach tsc too — a native-watching tsc never re-emits
- * `lib/types`, which strands the other two stages on stale input.
+ * MUST NOT run beside `bun run build` or `build:artifacts`: they write the same `lib/` and
+ * `apps/web/dist/` trees. The build stage here finishes before any watcher starts.
+ *
+ * Usage: `bun run dev:web [--skip-build] [--no-serve] [--poll[=ms]] [dsh web arguments]`.
+ * `--skip-build` requires the artifact tree from a prior `build` or `build:artifacts`: every
+ * watcher is incremental over the previous stage's output and none of them
+ * bootstraps a missing tree. `--no-serve` keeps only the watchers, for a
+ * `dsh web` started elsewhere. `--poll` switches the source watchers to polling
+ * (default 500ms): network mounts (weka) deliver no inotify events, so native
+ * watching sees the initial build only and never a source change. Polling has
+ * to reach tsc too — a native-watching tsc never re-emits `lib/types`, which
+ * strands the other two stages on stale input.
+ *
+ * Shutdown: Ctrl+C reaches every stage through the terminal's process group, so
+ * the script only waits for them and escalates survivors; SIGTERM is addressed
+ * to this process alone and is forwarded once. The exit code is 130 after
+ * SIGINT, 0 after SIGTERM, and 1 when a stage exited on its own.
  *
  * Each package keeps its own tsdown.config.ts untouched: this script layers
  * `watch` through API-level inline config (tsdown workspace mode fills inline
@@ -36,6 +44,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
 import { build } from 'tsdown'
 import type { TsdownBundle } from 'tsdown'
+import {
+  CLIENT_BUILD_PROFILE_SELECTOR,
+  clientBuildProcessEnvironment,
+  repositoryClientBuildEnvironment,
+} from './client-build-environment.ts'
+import { bunInvocation } from './bun-invocation.ts'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
@@ -50,6 +64,64 @@ const SHELL_PACKAGE = '@deepseek-ai/dsh-web-frontend'
  * shell's module graph, so it is not a dev-loop artifact.
  */
 const TEST_INFRASTRUCTURE_PREFIX = 'packages/test-support/'
+
+/**
+ * Sample one local public environment for every long-lived watcher stage.
+ * @param root - repository root supplying version and Git metadata.
+ * @param environment - watcher launch environment supplying public extensions.
+ * @returns process environment shared by tsdown and spawned watcher stages.
+ */
+export function devWebBuildEnvironment(
+  root: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return clientBuildProcessEnvironment(environment, repositoryClientBuildEnvironment(root, environment))
+}
+
+/** Resolved `dev-web` command line: the script's own flags plus the arguments forwarded to `dsh web`. */
+export interface DevWebArguments {
+  /** Skip the `bun run build:artifacts` that otherwise precedes the watchers. */
+  readonly skipBuild: boolean
+  /** Start `dsh web`; false keeps only the rebuild watchers beside an already running server. */
+  readonly serve: boolean
+  /** Source-watcher polling interval in milliseconds; undefined selects native watching. */
+  readonly pollInterval: number | undefined
+  /** Arguments forwarded verbatim to `dsh web`, in order. */
+  readonly appArgs: readonly string[]
+}
+
+/** Polling interval selected by a bare `--poll`. */
+const DEFAULT_POLL_INTERVAL = 500
+
+/**
+ * Parse the script's command line. `--skip-build`, `--no-serve`, and `--poll[=ms]`
+ * belong to this script; a bare `--` is dropped; every other token is forwarded
+ * to `dsh web`.
+ * @param argv - arguments after the script path.
+ * @returns the resolved flags and forwarded arguments.
+ * @throws Error when `--poll` carries a non-positive or non-integer interval, or
+ * when `--no-serve` leaves forwarded arguments without a `dsh web` process.
+ */
+export function parseDevWebArguments(argv: readonly string[]): DevWebArguments {
+  let skipBuild = false
+  let serve = true
+  let pollInterval: number | undefined
+  const appArgs: string[] = []
+  for (const arg of argv) {
+    // `bun run` forwards a `--` separator verbatim; it carries no meaning here.
+    if (arg === '--') continue
+    if (arg === '--skip-build') skipBuild = true
+    else if (arg === '--no-serve') serve = false
+    else if (arg === '--poll' || arg.startsWith('--poll=')) {
+      pollInterval = arg === '--poll' ? DEFAULT_POLL_INTERVAL : Number(arg.slice('--poll='.length))
+      if (!Number.isInteger(pollInterval) || pollInterval <= 0) throw new Error(`dev-web: invalid --poll interval "${arg}"`)
+    } else appArgs.push(arg)
+  }
+  if (!serve && appArgs.length > 0) {
+    throw new Error(`dev-web: --no-serve leaves no dsh web process for ${appArgs[0] ?? ''}`)
+  }
+  return { skipBuild, serve, pollInterval, appArgs }
+}
 
 /**
  * Discover the watch workspace by declaration: every packages/<group>/<name>
@@ -101,7 +173,7 @@ export function discoverLibraryDirs(root = repoRoot): string[] {
  * @param root - repository or fixture root passed to tsdown.
  * @param pluginDirs - workspace-relative package directories to watch.
  * @param pollInterval - optional source-watcher polling interval in milliseconds.
- * @returns live bundles after every watcher has completed its initial build.
+ * @returns live bundles after every watcher has completed its initial build and package-owned post-build hooks.
  */
 export async function watchClientPlugins(
   root: string,
@@ -115,17 +187,17 @@ export async function watchClientPlugins(
   const bundles = await build({
     cwd: root,
     workspace: [...pluginDirs],
+    configLoader: 'native',
     watch: true,
-    hooks: {
-      'build:done': ({ options }) => {
-        if (initialized.has(options)) return
-        initialized.add(options)
-        readiness.initializedBuilds += 1
-        if (
-          readiness.expectedBuilds !== undefined
-          && readiness.initializedBuilds >= readiness.expectedBuilds
-        ) resolveInitialBuilds?.()
-      },
+    // Workspace hooks override inline hooks; onSuccess runs after each package's build:done work.
+    onSuccess: (options) => {
+      if (initialized.has(options)) return
+      initialized.add(options)
+      readiness.initializedBuilds += 1
+      if (
+        readiness.expectedBuilds !== undefined
+        && readiness.initializedBuilds >= readiness.expectedBuilds
+      ) resolveInitialBuilds?.()
     },
     ...pollInterval !== undefined
       ? { inputOptions: { watch: { watcher: { usePolling: true, pollInterval } } } }
@@ -137,84 +209,177 @@ export async function watchClientPlugins(
   return bundles
 }
 
-/**
- * Live watcher processes to terminate when this script is interrupted. Stages
- * register themselves as they start, so the set is complete from the first
- * spawn: an interrupt during a later stage's startup still tears down the
- * earlier ones instead of orphaning them.
- */
-const stages: StageHandle[] = []
+/** One long-lived stage process as the supervisor observes it. */
+export interface StageHandle {
+  /** Command label used in diagnostics. */
+  readonly name: string
+  /** Settles with the exit code, or null when a signal ended the stage. */
+  readonly exited: Promise<number | null>
+  /**
+   * Deliver one signal; a no-op once the stage has exited.
+   * @param signal - the signal to send.
+   */
+  kill(signal: NodeJS.Signals): void
+}
+
+/** How a requested stop reaches the stages. */
+export interface StageStop {
+  /** Signal sent to every live stage first; omitted when the terminal already delivered SIGINT to them. */
+  readonly signal?: NodeJS.Signals | undefined
+  /** Milliseconds to wait for exits before escalating to SIGTERM, and again before SIGKILL. */
+  readonly graceMs: number
+}
 
 /**
- * Spawn one watcher stage under a bounded restart supervisor. A transient
- * crash (the observed case: Windows EBUSY when two writers touch the same
- * `apps/web/dist` asset during vite's public-dir copy) restarts that one
- * stage after exponential backoff instead of killing the whole chain;
- * consecutive crashes past the budget, or a stage that was alive well under
- * the reset window each time, still fail loud — a permanently dead stage
- * leaves the artifact chain silently stale, which reads as "my edit did
- * nothing", the one failure this script exists to prevent.
- * @param stage - command label used in the exit diagnostic.
- * @param command - executable, resolved from the workspace bin when local.
- * @param args - command arguments.
- * @param local - whether to resolve `command` from the workspace's installed bins.
- * @param workingDir - working directory for the stage; defaults to the repository root.
+ * Own the live stages: report a stage that exits before a stop was requested,
+ * and on a requested stop signal, wait, and escalate until every stage has exited.
  */
-function spawnStage(stage: string, command: string, args: readonly string[], local: boolean, workingDir: string = repoRoot): void {
-  let attempts = 0
-  const launch = (): void => {
-    if (shuttingDown) return
-    const startedAt = Date.now()
-    const child = execa(command, [...args], {
-      cwd: workingDir,
-      stdio: 'inherit',
-      preferLocal: local,
-      reject: false,
-    })
-    const handle: StageHandle = { kill: () => { child.kill() } }
-    stages.push(handle)
-    void child.then((result) => {
-      const registered = stages.indexOf(handle)
-      if (registered >= 0) stages.splice(registered, 1)
-      if (shuttingDown || result.exitCode === 0) return
-      if (Date.now() - startedAt > STAGE_CRASH_BUDGET_RESET_MS) attempts = 0
-      attempts += 1
-      if (attempts > STAGE_MAX_CONSECUTIVE_CRASHES) {
-        console.error(
-          `dev-web: ${stage} exited (code ${String(result.exitCode)}) `
-          + `${String(attempts)} times in a row; giving up — the artifact chain is now stale`,
-        )
-        process.exit(1)
-        return
-      }
-      const delayMs = Math.min(30_000, 1000 * 2 ** (attempts - 1))
-      console.error(
-        `dev-web: ${stage} exited (code ${String(result.exitCode)}); `
-        + `restarting in ${String(delayMs)}ms (attempt ${String(attempts)} of ${String(STAGE_MAX_CONSECUTIVE_CRASHES)})`,
-      )
-      setTimeout(launch, delayMs)
+export class StageSupervisor {
+  private readonly live = new Set<StageHandle>()
+  private stopping = false
+
+  /**
+   * @param onStale - receives the stage name and exit code when a stage exits before a stop was requested.
+   */
+  constructor(private readonly onStale: (stage: string, code: number | null) => void) {}
+
+  /**
+   * Track one started stage until it exits.
+   * @param stage - the stage to supervise.
+   */
+  add(stage: StageHandle): void {
+    this.live.add(stage)
+    void stage.exited.then((code) => {
+      this.live.delete(stage)
+      if (!this.stopping) this.onStale(stage.name, code)
     })
   }
-  launch()
+
+  /**
+   * Stop every live stage and resolve once all of them have exited.
+   * @param stop - initial signal and the grace period between escalation steps.
+   */
+  async stop(stop: StageStop): Promise<void> {
+    this.stopping = true
+    const escalation: (NodeJS.Signals | undefined)[] = [stop.signal]
+    if (stop.signal !== 'SIGTERM') escalation.push('SIGTERM')
+    for (const signal of escalation) {
+      if (this.live.size === 0) return
+      if (signal !== undefined) for (const stage of this.live) stage.kill(signal)
+      await this.settled(stop.graceMs)
+    }
+    for (const stage of this.live) stage.kill('SIGKILL')
+    await Promise.all([...this.live].map(stage => stage.exited))
+  }
+
+  private async settled(graceMs: number): Promise<void> {
+    let timer: NodeJS.Timeout | undefined
+    await Promise.race([
+      Promise.all([...this.live].map(stage => stage.exited)),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, graceMs) }),
+    ])
+    clearTimeout(timer)
+  }
 }
 
-/** The only capability this script needs from a live watcher process. */
-interface StageHandle {
-  readonly kill: () => void
+/**
+ * Grace period per escalation step. `dsh web` gives its plugin tree five seconds
+ * to dispose after the first signal; escalating earlier would turn the graceful
+ * drain into a forced exit.
+ */
+const STOP_GRACE_MS = 6_000
+
+/**
+ * Spawn one long-lived stage with inherited stdio and hand it to the supervisor.
+ * @param supervisor - owner that reports an unexpected exit and stops the stage on shutdown.
+ * @param name - command label used in diagnostics.
+ * @param command - executable, resolved from the workspace bins when `local` is set.
+ * @param args - command arguments.
+ * @param local - whether to resolve `command` from the workspace's installed bins.
+ */
+function spawnStage(
+  supervisor: StageSupervisor,
+  name: string,
+  command: string,
+  args: readonly string[],
+  local: boolean,
+): void {
+  const child = execa(command, [...args], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    preferLocal: local,
+    reject: false,
+  })
+  supervisor.add({
+    name,
+    exited: child.then(result => result.exitCode ?? null),
+    kill(signal) { child.kill(signal) },
+  })
 }
 
-/** Consecutive crashes tolerated per stage before the script gives up loudly. */
-const STAGE_MAX_CONSECUTIVE_CRASHES = 5
-
-/** Stable uptime that resets a stage's consecutive-crash budget. */
-const STAGE_CRASH_BUDGET_RESET_MS = 5 * 60_000
-
-/** Set by the signal handler so an intentional stop never schedules a restart. */
-let shuttingDown = false
+/**
+ * Build every repository artifact, without the aggregate test and script
+ * typechecks, with the launch environment untouched:
+ * `scripts/build.ts` samples the public client values itself.
+ * @returns the build's exit code, or null when a signal ended it.
+ */
+async function runBuild(): Promise<number | null> {
+  const invocation = bunInvocation(['run', 'build:artifacts'])
+  const result = await execa(invocation.command, invocation.args, { cwd: repoRoot, stdio: 'inherit', reject: false })
+  return result.exitCode ?? null
+}
 
 const invokedPath = process.argv[1]
 const isMain = invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href
 if (isMain) {
+  let options: DevWebArguments
+  try {
+    options = parseDevWebArguments(process.argv.slice(2))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error)
+    console.error('dev-web: usage: bun run dev:web [--skip-build] [--no-serve] [--poll[=ms]] [dsh web arguments]')
+    process.exit(1)
+  }
+
+  // Shutdown is requested once, by a terminal signal or by a stage exiting on
+  // its own; `signal` stays unset for SIGINT because the terminal's process
+  // group already delivered it to every stage.
+  const shutdown = Promise.withResolvers<number>()
+  const requested: { code?: number; signal?: NodeJS.Signals } = {}
+  const shutdownRequested = (): boolean => requested.code !== undefined
+  const requestShutdown = (code: number, signal: NodeJS.Signals | undefined): void => {
+    if (shutdownRequested()) return
+    requested.code = code
+    if (signal !== undefined) requested.signal = signal
+    shutdown.resolve(code)
+  }
+  const supervisor = new StageSupervisor((stage, code) => {
+    console.error(`dev-web: ${stage} exited (code ${String(code)}); stopping the other stages`)
+    requestShutdown(1, 'SIGTERM')
+  })
+  // Persistent listeners, not `once`: the tsdown watchers bundle signal-exit,
+  // which re-raises a signal whenever it finds no other listener left and would
+  // terminate this process in the middle of the teardown below.
+  process.on('SIGINT', () => { requestShutdown(130, undefined) })
+  process.on('SIGTERM', () => { requestShutdown(0, 'SIGTERM') })
+
+  const buildExit = options.skipBuild ? 0 : await runBuild()
+  if (shutdownRequested()) process.exit(await shutdown.promise)
+  if (buildExit !== 0) {
+    console.error(`dev-web: bun run build:artifacts exited (code ${String(buildExit)})`)
+    process.exit(1)
+  }
+
+  const buildEnvironment = devWebBuildEnvironment(repoRoot, process.env)
+  for (const name of Object.keys(process.env)) {
+    if (name === CLIENT_BUILD_PROFILE_SELECTOR || name.startsWith('DSH_CLIENT_')) {
+      Reflect.deleteProperty(process.env, name)
+    }
+  }
+  for (const [name, value] of Object.entries(buildEnvironment)) {
+    if (name.startsWith('DSH_CLIENT_') && value !== undefined) process.env[name] = value
+  }
+
   const pluginDirs = discoverPluginDirs()
   const libraryDirs = discoverLibraryDirs()
   if (pluginDirs.length === 0) {
@@ -226,35 +391,14 @@ if (isMain) {
     process.exit(1)
   }
 
-  const args = process.argv.slice(2)
-  const pollArg = args.find(a => a === '--poll' || a.startsWith('--poll='))
-  if (args.some(a => a !== pollArg)) {
-    console.error('dev-web: usage: tsx scripts/dev-web.ts [--poll[=ms]]')
-    process.exit(1)
-  }
-  const pollInterval = pollArg === undefined ? undefined : Number(pollArg.split('=')[1] ?? '500')
-  if (pollInterval !== undefined && (!Number.isInteger(pollInterval) || pollInterval <= 0)) {
-    console.error(`dev-web: invalid --poll interval "${pollArg ?? ''}"`)
-    process.exit(1)
-  }
-
-  // Registered before any stage starts: `stages` is read at signal time, so an
-  // interrupt during tsdown's initial builds still kills whatever is running.
-  const stop = (): void => {
-    shuttingDown = true
-    for (const stage of stages) stage.kill()
-  }
-  process.once('SIGINT', stop)
-  process.once('SIGTERM', stop)
-
   // tsc has no polling interval flag, so `--poll` selects its fixed-interval
   // watchers rather than an interval. Dropping that translation leaves tsc
   // natively watching on a network mount where inotify never fires: it stops
   // re-emitting lib/types, and the two later stages then rebuild forever from
   // stale input without printing anything.
-  spawnStage(`tsc -b ${CLIENT_TYPE_PROGRAM} --watch`, 'tsc', [
+  spawnStage(supervisor, `tsc -b ${CLIENT_TYPE_PROGRAM} --watch`, 'tsc', [
     '-b', CLIENT_TYPE_PROGRAM, '--watch', '--preserveWatchOutput',
-    ...pollInterval !== undefined
+    ...options.pollInterval !== undefined
       ? ['--watchFile', 'fixedPollingInterval', '--watchDirectory', 'fixedPollingInterval']
       : [],
   ], true)
@@ -263,21 +407,34 @@ if (isMain) {
   // first build reads current lib bundles rather than whatever the last full
   // build left. Its own watch then covers later lib rewrites — those files are
   // in its module graph.
-  await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], pollInterval)
-  // Through the shell's own `watch` script rather than vite's API: vite is not a
-  // repository-root dependency, and more importantly the vite root is its
-  // working directory — `resolve.dedupe` resolves react from that root, so
-  // running vite from anywhere but apps/web silently switches which react copy
-  // the bundle gets. The script is launched with a cwd-scoped `bun run`, not
-  // `--filter`, because the filter form matches no workspace packages under
-  // bun on win32 (any pattern, including "*").
-  spawnStage('vite build --watch', 'bun', ['run', 'watch'], false, join(repoRoot, 'apps/web'))
+  const bundles = await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], options.pollInterval)
+  if (!shutdownRequested()) {
+    // Through the shell's own `watch` script rather than vite's API: vite is not a
+    // repository-root dependency, and more importantly the vite root is its
+    // working directory — `resolve.dedupe` resolves react from that root, so
+    // running vite from anywhere but apps/web silently switches which react copy
+    // the bundle gets.
+    spawnStage(supervisor, 'vite build --watch', 'bun', ['run', '--filter', SHELL_PACKAGE, 'watch'], false)
+    // The same launch vector as the root `dsh` script, so the served Host runs
+    // from source exactly as `bun dsh web` would.
+    if (options.serve) {
+      spawnStage(supervisor, 'dsh web', process.execPath, [
+        '--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', ...options.appArgs,
+      ], false)
+    }
+    console.log(
+      `dev-web: watching ${String(pluginDirs.length)} dsh.client plugin packages`
+      + ` and ${String(libraryDirs.length)} statically linked library packages`
+      + (options.pollInterval !== undefined ? ` (polling ${String(options.pollInterval)}ms)` : '')
+      + `, plus tsc -b ${CLIENT_TYPE_PROGRAM} and the ${SHELL_PACKAGE} dist build`
+      + (options.serve ? ', serving through dsh web' : '')
+      + ':\n  '
+      + [...pluginDirs, ...libraryDirs].join('\n  '),
+    )
+  }
 
-  console.log(
-    `dev-web: watching ${String(pluginDirs.length)} dsh.client plugin packages`
-    + ` and ${String(libraryDirs.length)} statically linked library packages`
-    + (pollInterval !== undefined ? ` (polling ${String(pollInterval)}ms)` : '')
-    + `, plus tsc -b ${CLIENT_TYPE_PROGRAM} and the ${SHELL_PACKAGE} dist build:\n  `
-    + [...pluginDirs, ...libraryDirs].join('\n  '),
-  )
+  const exitCode = await shutdown.promise
+  await supervisor.stop({ signal: requested.signal, graceMs: STOP_GRACE_MS })
+  for (const bundle of bundles) await bundle[Symbol.asyncDispose]()
+  process.exit(exitCode)
 }

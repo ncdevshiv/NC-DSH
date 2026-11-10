@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/fs/fs-mcp/README.md
+/:
+  en: 930edbb1018c03dd
+  zh: 4c5442686c36d742
+/deepseek-ai-dsh-fs-mcp:
+  en: 42aba7c94a104dfa
+  zh: 2c42e8d82198e22a
+/deepseek-ai-dsh-fs-mcp/summary:
+  en: ee8d5ad363967081
+  zh: 8650bb5103616e01
+/deepseek-ai-dsh-fs-mcp/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: d152484eb41ac6b4
+/deepseek-ai-dsh-fs-mcp/use-this-package:
+  en: 59065d564b54f7ee
+  zh: 976aa61181523bf8
+/deepseek-ai-dsh-fs-mcp/use-this-package/when-to-choose-it:
+  en: 3a998eaddc1dea08
+  zh: cc14220861cdc59a
+/deepseek-ai-dsh-fs-mcp/use-this-package/minimal-configuration:
+  en: 399ea9daac662d87
+  zh: 25042753a16e045b
+/deepseek-ai-dsh-fs-mcp/use-this-package/what-you-can-do:
+  en: ea40f8514fc7081e
+  zh: ddafda7e736bd394
+/deepseek-ai-dsh-fs-mcp/understand-the-implementation:
+  en: ee4615a04fa6503d
+  zh: ee4615a04fa6503d
+/deepseek-ai-dsh-fs-mcp/understand-the-implementation/the-mapping:
+  en: 7781bd2774153e22
+  zh: e4550b0e8a5789d5
+/deepseek-ai-dsh-fs-mcp/understand-the-implementation/why-the-version-token-is-a-content-digest:
+  en: 136fc54144e95070
+  zh: 0fd513dbcc57a9b9
+/deepseek-ai-dsh-fs-mcp/understand-the-implementation/why-an-edit-counts-occurrences-first:
+  en: 85573acdec759635
+  zh: b43a0b979dde7d02
+/deepseek-ai-dsh-fs-mcp/further-exploration:
+  en: ab049806b9c3ab29
+  zh: f8549acc2db0ca39
+/deepseek-ai-dsh-fs-mcp/model-experience:
+  en: 215e7ba838619b7b
+  zh: 215e7ba838619b7b
+/deepseek-ai-dsh-fs-mcp/model-experience/filesystem-tool-results:
+  en: 02f2e16b0f700f6f
+  zh: 02f2e16b0f700f6f
+/deepseek-ai-dsh-fs-mcp/model-experience/filesystem-tool-results/what-the-model-sees:
+  en: 9a2049c7b5e2dafd
+  zh: a7915a430d68ea1f
+/deepseek-ai-dsh-fs-mcp/model-experience/filesystem-tool-results/token-effect:
+  en: d2e7347534776b65
+  zh: 93c0c806c896d610
+/deepseek-ai-dsh-fs-mcp/model-experience/filesystem-tool-results/kv-cache-effect:
+  en: 40294c1c31b74824
+  zh: d592adb4934f25ae
+/deepseek-ai-dsh-fs-mcp/known-limitations-and-deferred-work:
+  en: 693797db078e0c1c
+  zh: cd55b9e0285576a0
+/deepseek-ai-dsh-fs-mcp/known-limitations-and-deferred-work/dev-note:
+  en: 0bbee45b76c42600
+  zh: 34a8669cfb72c8d1

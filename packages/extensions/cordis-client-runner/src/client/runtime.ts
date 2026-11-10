@@ -18,10 +18,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Loader } from '@deepseek-ai/cordis-plugin-loader'
 import type {
   CordisDynamicPackageId, CordisDynamicPluginId, CordisDynamicPluginRunId, DynamicCordisPackage,
+  SessionId,
 } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientModuleSystem } from '@deepseek-ai/dsh-client-modules/client'
-import type { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { DynamicCordisStyles, evaluateClientHalf, DYNAMIC_CLIENT_REDIRECTS } from './evaluator.ts'
 import type { DynamicCordisEvaluatedPlugin } from './evaluator.ts'
 import { dynamicCordisContext } from './guard.ts'
@@ -167,7 +167,7 @@ export interface DynamicCordisLivePackage {
   pluginRunId: CordisDynamicPluginRunId
   /** Label from the define call. */
   name: string
-  /** Slot names this package registered into here. */
+  /** Slot names and `factory:<name>` definitions this package registered here. */
   slots: string[]
   /** Live injected-style tag count. */
   styleCount: number
@@ -373,9 +373,17 @@ export class DynamicCordisPackageRunner {
     if (sink === undefined) {
       throw new Error('cordis-client-runner: window.__ModuleLoader__ is missing (booted outside the web shell?)')
     }
-    sink.load({ id: moduleId, factory: () => surface })
-
-    const entryId = await this.env.loader.create({ name: moduleId })
+    let entryId: string
+    try {
+      sink.load({ id: moduleId, factory: () => surface })
+      entryId = await this.env.loader.create({ name: moduleId })
+    } catch (error: unknown) {
+      // Nothing seated here, so the styles this load claimed are released now
+      // instead of being left for a later re-load to collide with; the module
+      // row was already invalidated before the registration above.
+      styles.dispose()
+      return { ok: false, cause: 'module-import', ...errorDetails(error), error }
+    }
     const fiber = this.env.loader.resolve(entryId).fiber
     if (fiber === undefined) {
       await this.teardown(half.pluginId, entryId, styles)
@@ -451,7 +459,9 @@ export class DynamicCordisPackageRunner {
     this.failures.delete(id)
     // Entry removal disposes the fiber (slot entries and facade effects
     // cascade); the factory invalidation makes a later re-load legal.
-    await this.env.loader.remove(entryId)
+    const disposal = this.env.loader.resolve(entryId).fiber?.dispose()
+    this.env.loader.remove(entryId)
+    await disposal
     this.env.modules.invalidate(moduleIdOf(id))
     styles.dispose()
   }
@@ -502,6 +512,9 @@ export function errorDetails(error: unknown): CordisErrorDetails {
 function renderFailureMessage(slot: string, message: string): string {
   const redirect = Object.entries(DYNAMIC_CLIENT_REDIRECTS)
     .find(([name, text]) => message.includes(name) && !message.includes(text))?.[1]
-  return `your entry in slot "${slot}" crashed while React rendered it: ${message}`
+  const subject = slot.startsWith('factory:')
+    ? `your component in Factory "${slot.slice('factory:'.length)}"`
+    : `your entry in slot "${slot}"`
+  return `${subject} crashed while React rendered it: ${message}`
     + (redirect === undefined ? '' : `\n${redirect}`)
 }

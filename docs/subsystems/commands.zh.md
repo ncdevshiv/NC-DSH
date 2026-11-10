@@ -2,13 +2,13 @@
 
 [English](commands.md) | 中文
 
-[`dsh-commands`](../../packages/interaction/commands) 提供的用户命令注册表服务。交互式适配器用它发现插件拥有的命令，并针对确切的 agent（智能体）直接执行这些命令，而不创建模型消息。[命令 Agent Note](../../.agents/notes/implemented/feature/2026-07-19-plugin-command-registration.md) 负责分发与生命周期的决策依据；[包 README](../../packages/interaction/commands/README.md) 负责组合方式与限制。
+[`dsh-commands`](../../packages/interaction/commands) 提供的用户命令注册表服务。交互式适配器用它发现插件拥有的命令，并针对确切的 agent（智能体）直接执行这些命令，而不创建模型消息。[历史命令 Agent Note](../../.agents/notes/archived/feature/2026-07-19-plugin-command-registration.md) 负责分发与生命周期的决策依据；[包 README](../../packages/interaction/commands/README.zh.md) 负责组合方式与限制。
 
 来源：[`packages/interaction/commands/src/index.ts`](../../packages/interaction/commands/src/index.ts)
 
 ## 输入元数据
 
-该服务公开一个可选的非结构化输入描述符：提示文本加图片接受标志。命令的可用性由插件组合决定：每个消费注册表的适配器都会看到全部生效定义。
+该服务公开一个可选的非结构化输入描述符：提示文本加附件接受标志。命令的可用性由插件组合决定：每个消费注册表的适配器都会看到全部生效定义。
 
 ```ts type-equiv
 /** Immutable metadata for a command's optional unstructured input. */
@@ -16,13 +16,13 @@ interface CommandInputDescriptor {
   /** Placeholder shown before the user supplies free-form input. */
   readonly hint: string
   /**
-   * Whether composer image attachments may accompany an invocation. Absent or
-   * false = the executor rejects an invocation carrying images and capable
+   * Whether composer attachments may accompany an invocation. Absent or
+   * false = the executor rejects an invocation carrying attachments and capable
    * composers refuse the submission before dispatch. A declaring command's
    * handler receives the admitted durable blocks and owns every further
    * grammar decision, including rejecting sub-commands that cannot use them.
    */
-  readonly images?: boolean
+  readonly attachments?: boolean
 }
 ```
 
@@ -33,6 +33,8 @@ interface CommandInputDescriptor {
 ```ts type-equiv
 /** Plugin-owned command registration. */
 interface CommandDefinition {
+  /** Stable plugin-owned identity; absent for definitions without identity-based client behavior. */
+  readonly definitionId?: CommandDefinitionId
   /** Lowercase command name without the leading slash. */
   readonly name: string
   /** Human-readable summary used in discovery UI. */
@@ -64,13 +66,13 @@ interface CommandInvocation {
   /** Exact text following the registered command name, including separator whitespace. */
   readonly rawInput: string
   /**
-   * Durably admitted image blocks accompanying this invocation, in submission
-   * order; empty unless the definition declares `input.images`. The handler
+   * Durably admitted image and file blocks accompanying this invocation, in submission
+   * order; empty unless the definition declares `input.attachments`. The handler
    * owns their model-visible use — the registry never schedules them itself —
    * and a handler whose grammar cannot use them in this invocation returns an
    * error so the dispatching composer retains the originals.
    */
-  readonly attachments: readonly ImageBlock[]
+  readonly attachments: readonly (ImageBlock | FileBlock)[]
   /** Cancellation signal owned by the dispatching UI request. */
   readonly signal: AbortSignal
 }
@@ -83,7 +85,7 @@ type CommandResult =
     readonly kind: 'success'
     readonly text?: string
     /** Earlier authoritative domain event that owns a richer presentation. */
-    readonly sourceEventSeq?: number
+    readonly sourceEventSeq?: SessionSeq
   }
   | { readonly kind: 'error'; readonly text: string }
 ```
@@ -97,6 +99,8 @@ type CommandResult =
 ```ts type-equiv
 /** Handler-free immutable command view returned to UI adapters. */
 interface CommandDescriptor {
+  /** Stable plugin-owned identity; absent for definitions without identity-based client behavior. */
+  readonly definitionId?: CommandDefinitionId
   /** Lowercase command name without the leading slash. */
   readonly name: string
   /** Human-readable summary used in discovery UI. */
@@ -122,7 +126,7 @@ interface ParsedCommand {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `bun run verify-cordis-catalog` in doc-sync; regenerate with `bun run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `bun run verify-cordis-catalog` in doc-sync; regenerate with `bun run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxcommands--commandruntime"></a>
 
@@ -137,6 +141,13 @@ Human-command registry. Plain-context definitions are global; definitions regist
  * @returns the exact effect disposer that unregisters this definition.
  */
 register(definition: CommandDefinition): () => void
+
+/**
+ * Register the sole authority that resolves staged file receipts for command submissions.
+ * @param resolver - Session-aware receipt resolver.
+ * @returns disposer that removes this exact resolver.
+ */
+registerFileReceiptResolver(resolver: CommandFileReceiptResolver): () => void
 
 /**
  * List the effective immutable command descriptors for one agent.
@@ -166,25 +177,27 @@ find(agent: Agent, name: string): CommandDefinition | undefined
  * handler-failure path is contained so the handler's own error stays the
  * reported failure.
  *
- * Image admission is enforced here, not in the composer: images sent to a
- * command that does not declare `input.images`, an absent attachment store,
- * and an exceeded attachment limit each settle as an error result before
- * the handler runs, and a rejected batch publishes no durable object.
+ * Attachment admission is enforced here, not in the composer: attachments sent to a
+ * command that does not declare `input.attachments`, an absent attachment store,
+ * and an exceeded image limit each settle as an error result before
+ * the handler runs. Validation rejection starts no attachment writes;
+ * a storage failure can leave only unreachable content-addressed objects
+ * for deferred collection.
  *
  * @param agent - exact receiving agent.
  * @param line - complete slash-command line.
- * @param images - base64-encoded composer images accompanying the line, in
- *   submission order; empty for a plain invocation.
+ * @param submittedAttachments - encoded images and staged file receipts accompanying the line,
+ *   in submission order; empty for a plain invocation.
  * @param signal - cancellation signal owned by the UI request.
  * @returns the settled execution (result + lifecycle pairing id), or
  *   `undefined` when syntax or name does not resolve.
  */
-@Remote async execute( agent: Agent, line: string, images: readonly EncodedImageAttachment[], signal: AbortSignal, ): Promise<CommandExecution | undefined>
+@Remote async execute( agent: Agent, line: string, submittedAttachments: readonly CommandSubmitAttachment[], signal: AbortSignal, ): Promise<CommandExecution | undefined>
 ```
 
-Types: [Agent](core.md) · [EncodedImageAttachment](attachment.md)
+Types: [Agent](core.zh.md)
 
-Source: [`packages/interaction/commands/src/index.ts:250`](../../packages/interaction/commands/src/index.ts)
+Source: [`packages/interaction/commands/src/index.ts`](../../packages/interaction/commands/src/index.ts)
 
 <a id="commands-events"></a>
 
@@ -206,5 +219,5 @@ A command was registered or unregistered. This is an unfiltered registry notific
 'commands/change'(): void
 ```
 
-Source: [`packages/interaction/commands/src/types.ts:80`](../../packages/interaction/commands/src/types.ts)
+Source: [`packages/interaction/commands/src/types.ts`](../../packages/interaction/commands/src/types.ts)
 <!-- END GENERATED cordis-surface -->

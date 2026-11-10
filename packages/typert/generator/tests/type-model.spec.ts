@@ -1,9 +1,9 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import ts from 'typescript'
-import { afterEach, describe, expect, it } from 'vitest'
-import { TypertAnalysisError, WorkspaceAnalyzer } from '../src/analyzer.ts'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
+import { TypertAnalysisError, WorkspaceAnalyzer, WorkspaceCaches } from '../src/analyzer.ts'
 import { FaceModelEmitter } from '../src/emitter.ts'
 import type {
   KeywordTypeName,
@@ -12,22 +12,28 @@ import type {
   TypeNodeModel,
   TypeOperatorName,
   TypeTargetModel,
+  WorkspaceModel,
 } from '../src/model.ts'
 import { TypeGraphRenderer } from '../src/renderer.ts'
 import { WorkspaceTypertGenerator } from '../src/workspace.ts'
+import { copyFixture, emptyWorkspace, pristineFixture, useMemoryWorkspaces } from './type-model-workspace.ts'
 
-const fixtureRoot = resolve(import.meta.dirname, 'fixtures/type-model')
-const temporaryRoots: string[] = []
+vi.mock('node:fs', async (importOriginal) => {
+  const { memoryFileSystem } = await import('./type-model-workspace.ts')
+  return memoryFileSystem(await importOriginal<typeof import('node:fs')>())
+})
 
 function normalizedPath(path: string): string {
   return path.replaceAll('\\', '/')
 }
 
-const parseConfigHost: ts.ParseConfigFileHost = {
-  ...ts.sys,
-  onUnRecoverableConfigFileDiagnostic(diagnostic) {
-    throw new Error(formatDiagnostic(diagnostic))
-  },
+function parseConfigHost(): ts.ParseConfigFileHost {
+  return {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic(diagnostic) {
+      throw new Error(formatDiagnostic(diagnostic))
+    },
+  }
 }
 
 const TYPE_NODE_KINDS = {
@@ -99,13 +105,25 @@ const MEMBER_KINDS = {
   index: true,
 } as const satisfies Record<MemberModel['kind'], true>
 
-afterEach(() => {
-  for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true })
-})
+useMemoryWorkspaces()
+
+let fixtureModel: WorkspaceModel | undefined
+
+/** The default analysis of the pristine fixture, computed once and deeply frozen so no case can alter what another reads. */
+function analyzedFixture(): WorkspaceModel {
+  fixtureModel ??= deepFreeze(new WorkspaceAnalyzer({ root: pristineFixture() }).analyze())
+  return fixtureModel
+}
+
+function deepFreeze<Value>(value: Value): Value {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value
+  for (const child of Object.values(value)) deepFreeze(child)
+  return Object.freeze(value)
+}
 
 describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
   it('builds independent face models with an explicit cross-face type graph', () => {
-    const model = new WorkspaceAnalyzer({ root: fixtureRoot }).analyze()
+    const model = analyzedFixture()
 
     expect(model.faces.map(face => face.face)).toEqual(['host', 'client'])
     expect(model.crossFaceLinks).toContainEqual({
@@ -160,6 +178,8 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
       location: { file: 'packages/host/src/index.ts' },
     })
     expect(agent?.text).toContain('export class Agent<State extends object = {')
+    // A static initialization block, like a private member, has no type-level meaning.
+    expect(agent?.text).not.toMatch(/static\s*\{|secret|generation|hiddenStep/)
     expect(agent?.members.map(member => member.name)).toEqual(['id', 'state', 'label', 'label', 'run'])
     const service = host?.packages[0]?.services.find(candidate => candidate.key === 'demo')
     const members = new Map(host?.graph.declarations
@@ -197,7 +217,7 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
 
   it('merges bounded package programs into the same face model', () => {
     const options = {
-      root: fixtureRoot,
+      root: pristineFixture(),
       packages: ['@fixture/host', '@fixture/client'],
     } as const
     const direct = new WorkspaceAnalyzer(options).analyze()
@@ -254,7 +274,7 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
   })
 
   it('indexes authored top-level exports without promoting them to graph roots', () => {
-    const declarations = new WorkspaceAnalyzer({ root: fixtureRoot }).indexSourceDeclarations()
+    const declarations = new WorkspaceAnalyzer({ root: pristineFixture() }).indexSourceDeclarations()
     const agent = declarations.find(declaration => declaration.name === 'Agent')
 
     expect(agent).toMatchObject({
@@ -269,7 +289,7 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
   })
 
   it('covers every modeled discriminant with source-authored fixture syntax', () => {
-    const model = new WorkspaceAnalyzer({ root: fixtureRoot }).analyze()
+    const model = analyzedFixture()
     const nodes = model.faces.flatMap(face => face.graph.nodes)
     const declarations = model.faces.flatMap(face => face.graph.declarations)
     const members = declarations.flatMap(declaration => declaration.members)
@@ -622,6 +642,227 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
     )
   })
 
+  describe('package-local forwarding modules', () => {
+    const hostPayload = '@fixture/host:packages/host/src/models.ts#Payload'
+
+    function consumerPayloadTarget(root: string): TypeTargetModel | undefined {
+      const host = new WorkspaceAnalyzer({ root }).analyze().faces.find(face => face.face === 'host')
+      const schema = host?.packages.find(candidate => candidate.name === '@fixture/consumer')?.schemas[0]
+      const consumer = host?.graph.declarations.find(candidate => candidate.id === schema?.symbol)
+      const value = consumer?.kind === 'interface'
+        ? consumer.members.find(member => member.name === 'value')
+        : undefined
+      const node = value?.kind === 'property'
+        ? host?.graph.nodes.find(candidate => candidate.id === value.type)
+        : undefined
+      return node?.kind === 'reference' ? node.target : undefined
+    }
+
+    it('follows a named re-export to the original declaration', () => {
+      const root = copyFixture('typert-forward-named-')
+      addSameFacePackage(root, './forward.ts', 'Payload', {
+        'forward.ts': "export type { Payload } from '@fixture/host/models'\n",
+      })
+
+      expect(consumerPayloadTarget(root)).toEqual({ kind: 'declaration', symbol: hostPayload })
+    })
+
+    it('follows renamed hops through several forwarding modules', () => {
+      const root = copyFixture('typert-forward-chain-')
+      addSameFacePackage(root, './outer.ts', 'Forwarded', {
+        'outer.ts': "export type { Inner as Forwarded } from './inner.ts'\n",
+        'inner.ts': "export type { Payload as Inner } from '@fixture/host/models'\n",
+      })
+
+      expect(consumerPayloadTarget(root)).toEqual({ kind: 'declaration', symbol: hostPayload })
+    })
+
+    it('follows an import re-exported without a module specifier', () => {
+      const root = copyFixture('typert-forward-import-export-')
+      addSameFacePackage(root, './forward.ts', 'Payload', {
+        'forward.ts': "import type { Payload as Imported } from '@fixture/host/models'\nexport type { Imported as Payload }\n",
+      })
+
+      expect(consumerPayloadTarget(root)).toEqual({ kind: 'declaration', symbol: hostPayload })
+    })
+
+    it('follows a star re-export', () => {
+      const root = copyFixture('typert-forward-star-')
+      addSameFacePackage(root, './forward.ts', 'Payload', {
+        'forward.ts': "export * from '@fixture/host/models'\n",
+      })
+
+      expect(consumerPayloadTarget(root)).toEqual({ kind: 'declaration', symbol: hostPayload })
+    })
+
+    it('follows a namespace import of the forwarding module', () => {
+      const root = copyFixture('typert-forward-namespace-')
+      addSameFacePackage(root, '@fixture/host/models', 'Payload', {
+        'forward.ts': "export type { Payload } from '@fixture/host/models'\n",
+      })
+      const sourcePath = join(root, 'packages/consumer/src/index.ts')
+      writeFileSync(
+        sourcePath,
+        readFileSync(sourcePath, 'utf8')
+          .replace("import type { Payload } from '@fixture/host/models'", "import type * as Forward from './forward.ts'")
+          .replace('readonly value: Payload', 'readonly value: Forward.Payload'),
+      )
+
+      expect(consumerPayloadTarget(root)).toEqual({ kind: 'declaration', symbol: hostPayload })
+    })
+
+    it('rejects a forwarded type absent from the package export', () => {
+      const root = copyFixture('typert-forward-private-')
+      writeFileSync(
+        join(root, 'packages/host/src/private.ts'),
+        'export interface PrivateHost { readonly value: string }\n',
+      )
+      addSameFacePackage(root, './forward.ts', 'PrivateHost', {
+        'forward.ts': "export type { PrivateHost } from '@fixture/host/private'\n",
+      })
+
+      expect(() => new WorkspaceAnalyzer({ root }).analyze()).toThrow(
+        'package reference PrivateHost is not exported by @fixture/host at ./private',
+      )
+    })
+
+    it('rejects a forwarding module that reaches another package by relative path', () => {
+      const root = copyFixture('typert-forward-relative-')
+      addSameFacePackage(root, './forward.ts', 'Payload', {
+        'forward.ts': "export type { Payload } from '../../host/src/models.ts'\n",
+      })
+
+      expect(() => new WorkspaceAnalyzer({ root }).analyze()).toThrow(
+        'reference to Payload crosses a package without an explicit package import',
+      )
+    })
+
+    it('follows a forwarding module across faces', () => {
+      const root = copyFixture('typert-forward-cross-face-')
+      writeFileSync(
+        join(root, 'packages/client/src/forward.ts'),
+        "export type { Payload as ForwardedPayload } from '@fixture/host'\n",
+      )
+      const sourcePath = join(root, 'packages/client/src/index.ts')
+      writeFileSync(
+        sourcePath,
+        readFileSync(sourcePath, 'utf8')
+          .replace(
+            "import type { HostAgent, Payload } from '@fixture/host'",
+            "import type { HostAgent } from '@fixture/host'\nimport type { ForwardedPayload as Payload } from './forward.ts'",
+          ),
+      )
+      const model = new WorkspaceAnalyzer({ root }).analyze()
+      const client = model.faces.find(face => face.face === 'client')
+      const payload = client?.graph.nodes.find(candidate =>
+        candidate.kind === 'reference' && candidate.name === 'Payload' && candidate.id.includes('packages/client/'))
+
+      expect(payload?.kind === 'reference' ? payload.target : undefined).toEqual({
+        kind: 'cross-face',
+        face: 'host',
+        package: '@fixture/host',
+        subpath: '.',
+        name: 'Payload',
+      })
+      expect(model.crossFaceLinks).toContainEqual({
+        fromFace: 'client',
+        fromPackage: '@fixture/client',
+        toFace: 'host',
+        toPackage: '@fixture/host',
+        subpath: '.',
+        name: 'Payload',
+      })
+    })
+
+    it('prefers an explicit re-export over a star edge that loops back', () => {
+      const root = copyFixture('typert-forward-cycle-explicit-')
+      addSameFacePackage(root, './outer.ts', 'Payload', {
+        'outer.ts': "export * from './inner.ts'\n",
+        'inner.ts': "export * from './outer.ts'\nexport type { Payload } from '@fixture/host/models'\n",
+      })
+
+      expect(consumerPayloadTarget(root)).toEqual({ kind: 'declaration', symbol: hostPayload })
+    })
+
+    it('follows a valid renamed route after another route reaches the same module', () => {
+      const root = copyFixture('typert-forward-shared-module-')
+      addSameFacePackage(root, './outer.ts', 'Payload', {
+        'outer.ts': "export * from './left.ts'\nexport * from './right.ts'\n",
+        'left.ts': "export { Left as Payload } from './shared.ts'\n",
+        'right.ts': "export { Right as Payload } from './shared.ts'\n",
+        'shared.ts': [
+          "export { Payload as Left } from './relative.ts'",
+          "export type { Payload as Right } from '@fixture/host/models'",
+          '',
+        ].join('\n'),
+        'relative.ts': "export type { Payload } from '../../host/src/models.ts'\n",
+      })
+
+      expect(consumerPayloadTarget(root)).toEqual({ kind: 'declaration', symbol: hostPayload })
+    })
+
+    it('rejects a forwarding cycle whose only exit crosses a package by relative path', () => {
+      const root = copyFixture('typert-forward-cycle-relative-')
+      addSameFacePackage(root, './outer.ts', 'Payload', {
+        'outer.ts': "export * from './inner.ts'\n",
+        'inner.ts': "export * from './outer.ts'\nexport type { Payload } from '../../host/src/models.ts'\n",
+      })
+
+      expect(() => new WorkspaceAnalyzer({ root }).analyze()).toThrow(
+        'reference to Payload crosses a package without an explicit package import',
+      )
+    })
+
+    it('rejects a namespace re-export in a forwarding module', () => {
+      const root = copyFixture('typert-forward-namespace-export-')
+      addSameFacePackage(root, '@fixture/host/models', 'Payload', {
+        'forward.ts': "export * as models from '@fixture/host/models'\n",
+      })
+      const sourcePath = join(root, 'packages/consumer/src/index.ts')
+      writeFileSync(
+        sourcePath,
+        readFileSync(sourcePath, 'utf8')
+          .replace("import type { Payload } from '@fixture/host/models'", "import type * as Forward from './forward.ts'")
+          .replace('readonly value: Payload', 'readonly value: Forward.models.Payload'),
+      )
+
+      expect(() => new WorkspaceAnalyzer({ root }).analyze()).toThrow(
+        'reference to Payload crosses a package without an explicit package import',
+      )
+    })
+
+    it('rejects a forwarding module that exports a namespace import binding', () => {
+      const root = copyFixture('typert-forward-namespace-binding-')
+      addSameFacePackage(root, '@fixture/host/models', 'Payload', {
+        'forward.ts': "import type * as Models from '@fixture/host/models'\nexport type { Models }\n",
+      })
+      const sourcePath = join(root, 'packages/consumer/src/index.ts')
+      writeFileSync(
+        sourcePath,
+        readFileSync(sourcePath, 'utf8')
+          .replace("import type { Payload } from '@fixture/host/models'", "import type { Models } from './forward.ts'")
+          .replace('readonly value: Payload', 'readonly value: Models.Payload'),
+      )
+
+      expect(() => new WorkspaceAnalyzer({ root }).analyze()).toThrow(
+        'reference to Payload crosses a package without an explicit package import',
+      )
+    })
+
+    it('produces one model regardless of batch size or package order', () => {
+      const root = copyFixture('typert-forward-batches-')
+      addSameFacePackage(root, './forward.ts', 'Payload', {
+        'forward.ts': "export type { Payload } from '@fixture/host/models'\n",
+      })
+      const packages = ['@fixture/host', '@fixture/client', '@fixture/consumer']
+      const direct = new WorkspaceAnalyzer({ root, packages }).analyze()
+
+      expect(new WorkspaceAnalyzer({ root, packages }).analyzeInBatches(1)).toEqual(direct)
+      expect(new WorkspaceAnalyzer({ root, packages }).analyzeInBatches(2)).toEqual(direct)
+      expect(new WorkspaceAnalyzer({ root, packages: [...packages].reverse() }).analyzeInBatches(2)).toEqual(direct)
+    })
+  })
+
   it('rejects TypeScript projects with source diagnostics before modeling them', () => {
     const root = copyFixture('typert-invalid-project-')
     const sourcePath = join(root, 'packages/host/src/index.ts')
@@ -712,7 +953,7 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
       config.compilerOptions ??= {}
       config.compilerOptions.typeRoots = [
         configPath === packageConfigPath ? '../../node_modules' : './node_modules',
-        resolve('node_modules/@types'),
+        join(root, 'node_modules/@types'),
       ]
       config.compilerOptions.types = ['unscoped-global', 'node']
       writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`)
@@ -727,12 +968,12 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
     const packageConfig = ts.getParsedCommandLineOfConfigFile(
       join(root, 'packages/host/tsconfig.json'),
       {},
-      parseConfigHost,
+      parseConfigHost(),
     ) as ts.ParsedCommandLine
     const aggregateConfig = ts.getParsedCommandLineOfConfigFile(
       join(root, 'tsconfig.host.json'),
       {},
-      parseConfigHost,
+      parseConfigHost(),
     ) as ts.ParsedCommandLine
     const diagnosticProgram = ts.createProgram({
       rootNames: packageConfig.fileNames,
@@ -804,8 +1045,7 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
   })
 
   it('handles empty selections and rejects malformed aggregate configs', () => {
-    const empty = mkdtempSync(join(import.meta.dirname, '.typert-empty-workspace-'))
-    temporaryRoots.push(empty)
+    const empty = emptyWorkspace('typert-empty-workspace-')
     expect(new WorkspaceAnalyzer({ root: empty }).analyze()).toEqual({ faces: [], crossFaceLinks: [] })
 
     writeFileSync(join(empty, 'empty.d.ts'), 'export {}\n')
@@ -818,8 +1058,52 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
     writeFileSync(join(empty, 'tsconfig.host.json'), JSON.stringify({ compilerOptions: { target: 'invalid' } }))
     expect(() => new WorkspaceAnalyzer({ root: empty }).analyze()).toThrow(TypertAnalysisError)
 
-    expect(new WorkspaceAnalyzer({ root: fixtureRoot, packages: ['@fixture/absent'] }).analyze())
+    expect(new WorkspaceAnalyzer({ root: pristineFixture(), packages: ['@fixture/absent'] }).analyze())
       .toEqual({ faces: [], crossFaceLinks: [] })
+  })
+
+  it('reads aggregate options and references without expanding include patterns', () => {
+    const root = copyFixture('typert-aggregate-include-')
+    const aggregatePath = join(root, 'tsconfig.host.json')
+    const aggregate = JSON.parse(readFileSync(aggregatePath, 'utf8')) as Record<string, unknown>
+    delete aggregate.files
+    aggregate.include = ['packages/host/src']
+    writeFileSync(aggregatePath, `${JSON.stringify(aggregate, null, 2)}\n`)
+    const caches = new WorkspaceCaches()
+    const listing = vi.spyOn(ts.sys, 'readDirectory')
+    const expanded = caches.config(aggregatePath).parsed
+    const expandedListings = listing.mock.calls.length
+    const unexpanded = caches.aggregate(aggregatePath)
+    const aggregateListings = listing.mock.calls.length - expandedListings
+    listing.mockRestore()
+
+    expect(expanded.fileNames).not.toEqual([])
+    expect(expandedListings).toBeGreaterThan(0)
+    expect(aggregateListings).toBe(0)
+    expect(unexpanded).toEqual({
+      path: aggregatePath,
+      options: expanded.options,
+      projectReferences: expanded.projectReferences,
+    })
+  })
+
+  it('reports an aggregate without references or inputs', () => {
+    const root = emptyWorkspace('typert-aggregate-no-inputs-')
+    writeFileSync(join(root, 'tsconfig.host.json'), '{ "include": ["missing"] }\n')
+
+    expect(() => new WorkspaceAnalyzer({ root }).discoverPackages()).toThrow('No inputs were found')
+  })
+
+  it('reads only the project configs of manifests selected for discovery', () => {
+    const root = copyFixture('typert-manifest-selection-')
+    const hostConfig = join(root, 'packages/host/tsconfig.json')
+    writeFileSync(hostConfig, JSON.stringify({ compilerOptions: { target: 'invalid' } }))
+    const caches = new WorkspaceCaches()
+
+    expect(new WorkspaceAnalyzer({ root, caches }).discoverPackages(manifest => manifest.name !== '@fixture/host'))
+      .toEqual([{ package: '@fixture/client', root: 'packages/client', faces: ['client'] }])
+    expect(caches.configs.has(hostConfig)).toBe(false)
+    expect(() => new WorkspaceAnalyzer({ root, caches }).analyze()).toThrow(TypertAnalysisError)
   })
 
   it('ignores empty Cordis augmentations during package discovery', () => {
@@ -916,6 +1200,8 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
       './client/typert': './lib/typert.client.js',
       './wildcard': './lib/*.js',
       './data': './lib/data.json',
+      './icon': './assets/icon.svg',
+      ...Object.fromEntries(['png', 'jpg', 'jpeg', 'webp', 'PNG'].map(extension => [`./image-${extension}`, `./assets/icon.${extension}`])),
       ignored: './lib/index.js',
     }
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
@@ -926,6 +1212,7 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
     expect(exports.some(item => item.subpath === './fallback' && item.name === 'RuntimeOnly')).toBe(true)
     expect(exports.some(item => item.subpath === './direct' && item.name === 'Direct')).toBe(true)
     expect(exports.some(item => item.subpath === './empty')).toBe(false)
+    expect(exports.some(item => item.subpath === './icon' || item.subpath.startsWith('./image-'))).toBe(false)
 
     manifest.exports = './lib/index.js'
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
@@ -1040,13 +1327,13 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
 
 describe('TypeGraphRenderer', { timeout: 60_000 }, () => {
   it('retains every source-authored SyntaxZoo property type through rendering', () => {
-    const host = new WorkspaceAnalyzer({ root: fixtureRoot }).analyze().faces
+    const host = analyzedFixture().faces
       .find(face => face.face === 'host')
     if (host === undefined) throw new Error('fixture has no host face')
     const declaration = host.graph.declarations.find(candidate => candidate.name === 'SyntaxZoo')
     if (declaration === undefined) throw new Error('fixture has no SyntaxZoo declaration')
 
-    const sourcePath = join(fixtureRoot, 'packages/host/src/models.ts')
+    const sourcePath = join(pristineFixture(), 'packages/host/src/models.ts')
     const source = ts.createSourceFile(
       sourcePath,
       readFileSync(sourcePath, 'utf8'),
@@ -1076,9 +1363,8 @@ describe('TypeGraphRenderer', { timeout: 60_000 }, () => {
   })
 
   it('renders every analyzed declaration as compilable TypeScript', () => {
-    const model = new WorkspaceAnalyzer({ root: fixtureRoot }).analyze()
-    const root = mkdtempSync(join(import.meta.dirname, '.rendered-model-'))
-    temporaryRoots.push(root)
+    const model = analyzedFixture()
+    const root = emptyWorkspace('rendered-model-', { dependencies: true })
     const externalTypes = join(root, 'external.d.ts')
     writeFileSync(externalTypes, [
       'declare module \'@fixture/host\' {',
@@ -1123,6 +1409,8 @@ describe('TypeGraphRenderer', { timeout: 60_000 }, () => {
         noEmit: true,
         skipLibCheck: false,
         target: ts.ScriptTarget.ES2024,
+        lib: ['lib.es2024.d.ts'],
+        types: [],
         module: ts.ModuleKind.ESNext,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
       },
@@ -1133,12 +1421,24 @@ describe('TypeGraphRenderer', { timeout: 60_000 }, () => {
 
 describe('WorkspaceTypertGenerator', { timeout: 60_000 }, () => {
   it('emits host and client faces through their exact root-level public artifacts', () => {
-    const artifacts = new WorkspaceTypertGenerator(fixtureRoot).generate()
+    const artifacts = new WorkspaceTypertGenerator(pristineFixture()).generate()
     expect(artifacts.map(artifact => ({ package: artifact.package, face: artifact.face }))).toEqual([
       { package: '@fixture/host', face: 'host' },
       { package: '@fixture/client', face: 'client' },
     ])
     expect(artifacts.every(artifact => artifact.dts.includes('export declare const TYPERT: unknown'))).toBe(true)
+  })
+
+  it('generates only contributors whose manifests declare a Typert export', () => {
+    const root = copyFixture('typert-contributors-')
+    const manifestPath = join(root, 'packages/client', 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { exports: Record<string, unknown> }
+    delete manifest.exports['./client/typert']
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+
+    expect(new WorkspaceTypertGenerator(root).generateContributors().map(artifact => artifact.package))
+      .toEqual(['@fixture/host'])
+    expect(new WorkspaceTypertGenerator(root).generateContributors(['client'])).toEqual([])
   })
 
   it('rejects a public Typert subpath that points outside the root-level face artifact', () => {
@@ -1216,13 +1516,6 @@ function canonicalType(text: string): string {
   return printType(declaration.type, source)
 }
 
-function copyFixture(prefix: string): string {
-  const root = mkdtempSync(join(import.meta.dirname, `.${prefix}`))
-  temporaryRoots.push(root)
-  cpSync(fixtureRoot, root, { recursive: true })
-  return root
-}
-
 function configureDualRuntimeClient(root: string, splitProjects: boolean): void {
   const packageRoot = join(root, 'packages/client')
   const manifestPath = join(packageRoot, 'package.json')
@@ -1280,9 +1573,15 @@ function configureDualRuntimeClient(root: string, splitProjects: boolean): void 
   writeFileSync(clientAggregatePath, `${JSON.stringify(clientAggregate, null, 2)}\n`)
 }
 
-function addSameFacePackage(root: string, specifier: string, importedName: string): void {
+function addSameFacePackage(
+  root: string,
+  specifier: string,
+  importedName: string,
+  files: Readonly<Record<string, string>> = {},
+): void {
   const packageRoot = join(root, 'packages/consumer')
   mkdirSync(join(packageRoot, 'src'), { recursive: true })
+  for (const [file, source] of Object.entries(files)) writeFileSync(join(packageRoot, 'src', file), source)
   writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
     name: '@fixture/consumer',
     private: true,
@@ -1365,31 +1664,32 @@ function addExplicitServicePackage(root: string, annotation: string, withProtoco
 
 describe('FaceModelEmitter', { timeout: 60_000 }, () => {
   it('emits runnable Zod JavaScript, precise declarations, and runtime package metadata', async () => {
-    const model = new WorkspaceAnalyzer({ root: fixtureRoot }).analyze()
-    const host = model.faces.find(face => face.face === 'host')
+    const host = analyzedFixture().faces.find(face => face.face === 'host')
     if (host === undefined) throw new Error('fixture has no host face')
     const artifact = new FaceModelEmitter(host).emit('@fixture/host')
 
     expect(artifact.js).toMatchSnapshot()
     expect(artifact.dts).toMatchSnapshot()
 
+    // The one case that runs generated code against the real zod package resolves it from beside this directory.
     const root = mkdtempSync(join(import.meta.dirname, '.generated-model-'))
-    temporaryRoots.push(root)
+    onTestFinished(() => { rmSync(root, { recursive: true, force: true }) })
     const modulePath = join(root, 'host.mjs')
     writeFileSync(modulePath, artifact.js)
     const generated = await import(`${pathToFileURL(modulePath).href}?test=${Date.now()}`) as {
-      Payload: { safeParse(value: unknown): { success: boolean } }
+      Payload: () => { safeParse(value: unknown): { success: boolean } }
       TYPERT: {
         package: string
         face: string
-        schemas: { name: string; schema: unknown }[]
+        schemas: { name: string; create: () => unknown }[]
         model: { services: { key: string; members: { signature: string }[] }[] }
       }
     }
-    expect(generated.Payload.safeParse({ name: 'ready', count: 2 }).success).toBe(true)
-    expect(generated.Payload.safeParse({ name: 'ready', count: 'two' }).success).toBe(false)
+    expect(generated.Payload().safeParse({ name: 'ready', count: 2 }).success).toBe(true)
+    expect(generated.Payload().safeParse({ name: 'ready', count: 'two' }).success).toBe(false)
+    expect(generated.Payload()).toBe(generated.Payload())
     expect(generated.TYPERT).toMatchObject({ package: '@fixture/host', face: 'host' })
-    expect(generated.TYPERT.schemas[0]?.schema).toBe(generated.Payload)
+    expect(generated.TYPERT.schemas[0]?.create).toBe(generated.Payload)
     const demo = generated.TYPERT.model.services.find(service => service.key === 'demo')
     expect(demo).toMatchObject({ key: 'demo' })
     expect(demo?.members.map(member => member.signature)).toContain(
@@ -1404,7 +1704,7 @@ describe('FaceModelEmitter', { timeout: 60_000 }, () => {
       'import { Payload } from \'./host.js\'',
       'import type { Payload as SourcePayload } from \'@fixture/host\'',
       'import type { z } from \'zod\'',
-      'const precise: z.ZodType<SourcePayload> = Payload',
+      'const precise: () => z.ZodType<SourcePayload> = Payload',
       'void precise',
       '',
     ].join('\n'))
@@ -1421,6 +1721,8 @@ describe('FaceModelEmitter', { timeout: 60_000 }, () => {
         noEmit: true,
         skipLibCheck: false,
         target: ts.ScriptTarget.ES2024,
+        lib: ['lib.es2024.d.ts'],
+        types: [],
         module: ts.ModuleKind.ESNext,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
       },

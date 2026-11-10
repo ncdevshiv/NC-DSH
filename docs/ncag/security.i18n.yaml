@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for security.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/security.md
+/:
+  en: 0e65dd5472780835
+  zh: b02a9367eb57045a
+/nc-ag-security:
+  en: b79be3ecbf1e25e5
+  zh: 7fc81819c35ad3e5
+/nc-ag-security/summary:
+  en: c351854e915da963
+  zh: 0f9947ed7c587dfc
+/nc-ag-security/table-of-contents:
+  en: 2c0dc732ee2fb5d2
+  zh: 7d5b24b57d009ff3
+/nc-ag-security/permissions:
+  en: 86b70506dfbd572c
+  zh: c37ca9455bcc807e
+/nc-ag-security/workspace-containment:
+  en: 6a64ad8d5fb59b8a
+  zh: 682fa9b9b7243803
+/nc-ag-security/destructive-commands:
+  en: 9726b82399f0e9c4
+  zh: 3f1de5b6963753e9
+/nc-ag-security/untrusted-content:
+  en: 5691080d53bc628d
+  zh: bca2bd925361c629
+/nc-ag-security/secrets:
+  en: 63d101d4a1e18e4a
+  zh: 3972be6f855887a2
+/nc-ag-security/audit-integrity:
+  en: f8668ed245d3d5fb
+  zh: dccdf534c34ccb15
+/nc-ag-security/the-control-plane:
+  en: d5a8f526f8598537
+  zh: c320f715ca88329b

@@ -34,7 +34,7 @@ interface SessionReferenceInput {
 }
 ```
 
-`SessionReferenceCandidate` is host-facing discovery output. Its label uses the latest session title when present, while filtering still searches only session id and cwd and never transcript text.
+`SessionReferenceCandidate` is host-facing discovery output. Its `label` uses the latest Session title when present, while its optional display text prefers a subagent's durable creation label; filtering searches both alongside Session id and cwd, never transcript text. The Remote candidate's canonical mention uses the display text when present.
 
 ```ts type-equiv
 /** One host-facing candidate from exact session metadata. */
@@ -43,8 +43,16 @@ interface SessionReferenceCandidate {
   sessionId: SessionId
   /** Latest log-backed title, falling back to the opaque session id. */
   label: string
+  /** Display and canonical-mention text, preferring a subagent's durable creation label over {@link label}. */
+  displayTitle?: string
   /** Source session working directory, when recorded. */
   cwd?: string
+  /**
+   * True when {@link SessionReferenceCandidate.cwd} is recorded and equals the
+   * requesting agent's. Hosts that only surface a distinguishing location
+   * read this instead of comparing paths they never received.
+   */
+  sameWorkspace: boolean
   /** Source session creation time in Unix epoch milliseconds. */
   createdAt: number
 }
@@ -62,7 +70,31 @@ interface SessionReferenceMentionCandidate extends SessionReferenceCandidate {
 
 ## Prepared messages
 
-Preparation preserves readable current-message content and returns at most one aggregated context.
+Preparation preserves readable current-message content and returns at most one aggregated context. Its durable source records keep `capturedThroughSeq` as a coordinate in the referenced Session's original generation; they never reinterpret it as a seq in the containing Session. `capturedFormatVersion` records that generation, with absence meaning released format v0.
+
+```ts type-equiv
+/** Durable source session, cited event seqs, and snapshot facts for prepared cross-session context. */
+interface SessionReferenceSource {
+  kind: 'session-reference'
+  /** Material lifted out of another session's log (`recall` context form). */
+  form: 'recall'
+  version: 1
+  references: {
+    sessionId: string
+    label: string
+    /** Source Session format generation; absence identifies version 0. */
+    capturedFormatVersion?: number
+    capturedThroughSeq: OptionalSessionSeq
+    compacted: boolean
+    originalMessages: number
+    retainedMessages: number
+    omittedMessages: number
+    omittedBytes: number
+    truncated: boolean
+    inputIndex: number
+  }[]
+}
+```
 
 ```ts type-equiv
 /** Direct message content and optional referenced-session context. */
@@ -96,7 +128,7 @@ type SessionReferenceErrorCode =
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `bun run verify-cordis-catalog` in doc-sync; regenerate with `bun run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `bun run verify-cordis-catalog` in doc-sync; regenerate with `bun run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxfilereferences--filereferenceservice-abstract-seam"></a>
 
@@ -113,21 +145,32 @@ Host capability for cancellable file-reference discovery.
  * @returns deterministic path-only candidates.
  */
 abstract list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>
-
-/**
- * Remote face of {@link list}; the decorator cannot mark the abstract
- * member, so this concrete adapter carries the identical contract.
- * @param agent - target agent whose session cwd bounds discovery.
- * @param query - path text following `@` or `@"`.
- * @param signal - caller cancellation.
- * @returns deterministic path-only candidates.
- */
-@Remote('list') remoteExportList( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>
 ```
 
 Types: [Agent](core.md)
 
-Source: [`packages/context/file-reference/src/index.ts:27`](../../packages/context/file-reference/src/index.ts)
+Source: [`packages/context/file-reference/src/index.ts`](../../packages/context/file-reference/src/index.ts)
+
+<a id="ctxsessionfilereferences--sessionfilereferences"></a>
+
+### `ctx.sessionFileReferences` — `SessionFileReferences`
+
+Host Remote adapter over the composed file-reference provider.
+
+```ts cordis-catalog
+/**
+ * List file and directory candidates for one Agent's working directory.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param query - path text following `@` or `@"`.
+ * @param signal - caller cancellation.
+ * @returns deterministic path-only candidates from the composed provider.
+ */
+@Remote list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>
+```
+
+Types: [Agent](core.md)
+
+Source: [`packages/api/session-controller/src/file-references.ts`](../../packages/api/session-controller/src/file-references.ts)
 
 <a id="ctxsessionreferenceresolver--sessionreferenceresolver"></a>
 
@@ -138,11 +181,14 @@ Exact-read consumer that prepares immutable cross-session message context.
 ```ts cordis-catalog
 /**
  * List reference candidates, ranked by working-directory affinity.
+ *
+ * Discovery runs at keystroke rate, so titles and subagent labels only ever
+ * come from projection reads; sessions without either fall back to their id.
  * @param agent - target agent; self is excluded and its cwd drives ranking.
- * @param query - optional case-insensitive session-id/cwd/title substring.
+ * @param query - optional case-insensitive session-id/cwd/title/display-title substring.
  * @param limit - optional positive result cap.
  * @param signal - optional cancellation boundary for host autocomplete teardown.
- * @returns candidates labeled by latest title or, when absent, session id.
+ * @returns candidates with canonical mention labels and presentation titles.
  */
 async listCandidates( agent: Agent, query: string = '', limit: number = this.config.candidateLimit, signal?: AbortSignal, ): Promise<SessionReferenceCandidate[]>
 
@@ -159,6 +205,10 @@ async listCandidates( agent: Agent, query: string = '', limit: number = this.con
 
 /**
  * Snapshot all references for one accepted direct message and return one aggregated durable context.
+ * Automatic budgets use the last assembled route, or agent options before any assembly.
+ * Missing model capacity or adapter uses 64 KiB; other metadata lookup failures and cancellation reject preparation.
+ * Truncated previews include omission facts and a full-snapshot spill locator, or an explicit unavailable notice.
+ * Cancellation prevents context publication, including when storage completes after cancellation.
  * @param agent - target agent; references to it are rejected.
  * @param content - already host-normalized readable message content.
  * @param references - structured source sessions in mention order.
@@ -170,5 +220,5 @@ async prepare( agent: Agent, content: ContentBlock[], references: SessionReferen
 
 Types: [Agent](core.md) · [ContentBlock](llm-streaming.md)
 
-Source: [`packages/context/session-reference/src/index.ts:75`](../../packages/context/session-reference/src/index.ts)
+Source: [`packages/context/session-reference/src/index.ts`](../../packages/context/session-reference/src/index.ts)
 <!-- END GENERATED cordis-surface -->

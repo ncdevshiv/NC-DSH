@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/ncag/ncag-runtime/README.md
+/:
+  en: 7be1e6ea3876ecc8
+  zh: 07b643a181005a87
+/deepseek-ai-dsh-ncag-runtime:
+  en: ff9ed41780606ac8
+  zh: a173cbb9f208a52d
+/deepseek-ai-dsh-ncag-runtime/summary:
+  en: 5b6b54b230c94bb7
+  zh: 12d489e74ff7919d
+/deepseek-ai-dsh-ncag-runtime/table-of-contents:
+  en: e94be59e6fc8a26a
+  zh: cafc05d512c7243c
+/deepseek-ai-dsh-ncag-runtime/ports:
+  en: 484a67c9e367eac1
+  zh: f3d9f62b43b7019e
+/deepseek-ai-dsh-ncag-runtime/tools:
+  en: 860ebcc203802fd1
+  zh: af086d88316c5aa7
+/deepseek-ai-dsh-ncag-runtime/prompt-assembly:
+  en: 2ef03eb63590a580
+  zh: 1ee9c85623a1bc6f
+/deepseek-ai-dsh-ncag-runtime/the-loop:
+  en: 95460078f16c1c01
+  zh: c3bbe2cae29536a0
+/deepseek-ai-dsh-ncag-runtime/the-harness-model-port:
+  en: ad5954fe11d763f6
+  zh: 1bb44030320c2d86
+/deepseek-ai-dsh-ncag-runtime/known-limitations-and-deferred-work:
+  en: 8b9c141e9e7e32f4
+  zh: fd5db3a38f651910
+/deepseek-ai-dsh-ncag-runtime/dev-note:
+  en: 6f562118eb3e20e1
+  zh: 9adf9d9245effe8a

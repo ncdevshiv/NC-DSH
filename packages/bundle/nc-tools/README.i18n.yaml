@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/bundle/nc-tools/README.md
+/:
+  en: e4151cf40b847375
+  zh: a7acb3e129343d3c
+/deepseek-ai-dsh-nc-tools:
+  en: 74fe158d8c1d8f12
+  zh: 7010d9dc0529f3b7
+/deepseek-ai-dsh-nc-tools/summary:
+  en: ed9b8289abce3365
+  zh: 094b091a6573af93
+/deepseek-ai-dsh-nc-tools/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: d152484eb41ac6b4
+/deepseek-ai-dsh-nc-tools/use-this-package:
+  en: 40e998d8efaa2039
+  zh: ffe410f0dc824b6b
+/deepseek-ai-dsh-nc-tools/use-this-package/what-it-replaces:
+  en: 69bd7629d10e7d91
+  zh: 4c30c05a2b746313
+/deepseek-ai-dsh-nc-tools/use-this-package/what-it-does-not-replace:
+  en: 2870adeb46854a75
+  zh: a9d38b422650eecf
+/deepseek-ai-dsh-nc-tools/use-this-package/configuration:
+  en: e4ec00302001c415
+  zh: cb83630c769515aa
+/deepseek-ai-dsh-nc-tools/understand-the-implementation:
+  en: ee4615a04fa6503d
+  zh: ee4615a04fa6503d
+/deepseek-ai-dsh-nc-tools/understand-the-implementation/the-patch-surface-over-base:
+  en: c20fa8e7daea0e2d
+  zh: d25e93bf3f497f82
+/deepseek-ai-dsh-nc-tools/understand-the-implementation/why-a-provider-swap-is-the-right-seam:
+  en: 18af6a4a39f3449c
+  zh: 12678bf70272b88c
+/deepseek-ai-dsh-nc-tools/understand-the-implementation/what-the-model-gains:
+  en: 073f1f32f81dd5c7
+  zh: f7d1d0e852d7572d
+/deepseek-ai-dsh-nc-tools/further-exploration:
+  en: 190913dbd1acfc69
+  zh: f70796673ea95723
+/deepseek-ai-dsh-nc-tools/model-experience:
+  en: 215e7ba838619b7b
+  zh: 215e7ba838619b7b
+/deepseek-ai-dsh-nc-tools/model-experience/filesystem-tool-results:
+  en: 02f2e16b0f700f6f
+  zh: 02f2e16b0f700f6f
+/deepseek-ai-dsh-nc-tools/model-experience/filesystem-tool-results/what-the-model-sees:
+  en: 28ebef21298a32f4
+  zh: c208f3950160196b
+/deepseek-ai-dsh-nc-tools/model-experience/filesystem-tool-results/token-effect:
+  en: 1a0261c6f4fe51f6
+  zh: 3dbe9aaf9d2bb35a
+/deepseek-ai-dsh-nc-tools/model-experience/filesystem-tool-results/kv-cache-effect:
+  en: 40294c1c31b74824
+  zh: d592adb4934f25ae
+/deepseek-ai-dsh-nc-tools/known-limitations-and-deferred-work:
+  en: b0dc12e67f9637d8
+  zh: c4223e744214926b
+/deepseek-ai-dsh-nc-tools/known-limitations-and-deferred-work/dev-note:
+  en: 7a38d6357df8ebdf
+  zh: 1c5b92223448b175

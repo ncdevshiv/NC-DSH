@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for 2026-11-08-ncag-settings-owned-models-and-limits.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-08-ncag-settings-owned-models-and-limits.md
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings:
+  en: 6fe060020ef2bb86
+  zh: a82da9c2a60a61e9
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/problem:
+  en: 9e13d34d4170a8d2
+  zh: 4b57b81705e76ff9
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/decision:
+  en: a15c7c13f167e5ac
+  zh: 63bcc2ef60c2f344
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/decision/the-user-s-main-model-is-the-default-route:
+  en: 5d1e9c6d996db561
+  zh: 9c7214a2caeecb35
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/decision/prices-are-optional-overrides-tokens-are-not:
+  en: ce7a76f4ca8c2220
+  zh: 0ba388aa8fe1c62a
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/decision/limits-and-overrides-live-in-one-settings-namespace:
+  en: 4ab9c1e2f16b5a12
+  zh: e1ca7420e35a596d
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/decision/ui-surface:
+  en: 5978ee2c73aaee62
+  zh: 53b791a33ff4bb24
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/alternatives-considered:
+  en: 6c7d506632b0f3bb
+  zh: a3ec4b8fdf4e80cb
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/consequences:
+  en: ed90a69cf39d7511
+  zh: 14735c53e4a8725f
+/agent-note-nc-ag-follows-the-main-model-and-owns-its-overrides-in-settings/verification:
+  en: 83139696ae11f155
+  zh: 6bc9c3f832c0fcde

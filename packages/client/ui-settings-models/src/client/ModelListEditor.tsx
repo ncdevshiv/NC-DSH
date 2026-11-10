@@ -1,35 +1,47 @@
 /**
- * The model list of one pi-ai provider profile, plus the action that asks the
- * provider what it serves.
+ * The model list of one pi-ai provider profile, plus the actions that ask the
+ * provider what it serves and probe one model's connectivity.
  *
- * The list is the profile's `models` array as the card holds it: an empty list
- * means "serve this route's built-in catalog", and any entry replaces that
- * catalog, so a row is only ever added deliberately. Fetching asks the endpoint
- * **the form currently shows** — including a key typed but not yet saved — so
- * adding a provider is one pass instead of save-then-return; the reply is
- * candidates the user picks from, never configuration written behind them.
+ * The list shows everything the route serves: the rows the user layer owns,
+ * followed by the models the route's installed catalog serves that no owned row
+ * replaces. A catalog row is adjusted through the profile's `modelOverrides`
+ * entry for its id — the mechanism the adapter merges over its own catalog — so
+ * one model's capacity or input types can be changed without rewriting the
+ * whole served list. An owned `models` array still replaces the catalog
+ * outright, and only then does it name every row.
  *
- * A provider that cannot be interrogated (an unreachable endpoint, a protocol
- * with no readable listing) is not a dead end: the failure is shown next to the
- * rows the user can still fill in by hand.
+ * Fetching asks the endpoint **the form currently shows** — including a key
+ * typed but not yet saved — and adopts the complete reply in one pass: a row
+ * already served is left untouched, and every model the provider reported that
+ * nothing serves yet joins the list. A provider that cannot be interrogated (an
+ * unreachable endpoint, a protocol with no readable listing) is not a dead end:
+ * the failure is shown next to the rows the user can still fill in by hand.
+ *
+ * A search field narrows the rows as the user types, matching a model's id or
+ * its display name. Filtering only hides rows: a hidden row keeps its place in
+ * the served list, so its number, its edits, and its removal still address the
+ * row it names.
  */
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { DiscoveredModelView, IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { inferModelModalities } from '@deepseek-ai/dsh-llm/capabilities'
+import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
+import { IconPlusOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
+import { mergeDiscoveredModels, MODEL_SOURCE_FIELD } from './mutations.ts'
+import { ModelCatalogSearch } from './ModelCatalogSearch.tsx'
+import { ModelListActions } from './ModelListActions.tsx'
+import { modelMatches } from './model-search.ts'
+import type { ModelTestFeedback, ModelsOperations } from './operations.ts'
 import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
-import { messageOf } from './store.ts'
 import type { en } from './locales.ts'
+import { ModelRow, modelProbeProps } from './ModelRow.tsx'
+import type { ModelCapabilities } from './ModelRow.tsx'
 import styles from './ModelsSection.module.css'
 
 /**
- * One configured model row. Structurally open, exactly like the DeepSeek
- * catalog editor's rows: a profile field this card does not edit — one a future
- * schema adds, or one hand-written in `settings.yaml` — has to survive being
- * edited here rather than being dropped by a rebuild.
+ * One configured model row. Fields this card does not edit must survive an
+ * edit rather than being dropped by a rebuild.
  */
 export type ModelDraft = DeepSeekModelDraft
 
@@ -43,27 +55,6 @@ function textOf(model: ModelDraft, key: string): string {
 function numberOf(model: ModelDraft, key: string): number | undefined {
   const value = model[key]
   return typeof value === 'number' ? value : undefined
-}
-
-/**
- * Whether one row declares image input. An explicit `inputModalities` field is
- * authoritative (adopted from a source that carried modalities or set by hand);
- * legacy `input` is read for backwards compatibility with earlier drafts.
- * When absent, infer from the model's id and name so well-known multimodal
- * models default to checked, matching what the adapter resolves to.
- */
-function declaresVision(model: ModelDraft): boolean {
-  const canonical = model['inputModalities']
-  if (Array.isArray(canonical)) {
-    return canonical.includes('image')
-  }
-  const legacy = model['input']
-  if (Array.isArray(legacy)) {
-    return legacy.includes('image')
-  }
-  const id = typeof model['id'] === 'string' ? model['id'] : ''
-  const name = typeof model['name'] === 'string' ? model['name'] : undefined
-  return (inferModelModalities(id, name) ?? []).includes('image')
 }
 
 /** What an interrogation needs, taken from the live form. */
@@ -84,15 +75,47 @@ export interface ProbeTarget {
   apiKey?: string
 }
 
+/** One listed row: an owned row, or one the route's installed catalog serves. */
+interface ServedRow {
+  /** The row as it will read, catalog values under the user layer's override. */
+  readonly model: ModelDraft
+  /** Whether the installed catalog supplies this row and the user layer only adjusts it. */
+  readonly catalog: boolean
+}
+
+/** The line one fetch or catalog read leaves under the list. */
+interface ListNote {
+  readonly tone: 'ok' | 'info' | 'error'
+  readonly text: string
+}
+
 /** Props of {@link ModelListEditor}. */
 export interface ModelListEditorProps {
-  /** The rows as currently drafted. */
+  /** The rows the user layer owns, as currently drafted. */
   models: readonly ModelDraft[]
-  /** Whether the user layer currently owns the whole array; absent on a create. */
+  /**
+   * The adjustments the user layer holds for catalog models, by model id: the
+   * fields the adapter merges over its own catalog entry. Absent on a card
+   * whose route has no catalog behind it, where no row can carry one.
+   */
+  overrides?: Readonly<Record<string, ModelDraft>> | undefined
+  /** Installed provider whose catalog supplies defaults without endpoint I/O. */
+  catalogProvider?: string | undefined
+  /**
+   * Reasoning levels a hand-declared route's rows may declare in
+   * `reasoningEfforts`, in escalation order; absent or empty shows no
+   * reasoning control, leaving a catalog model's levels to the catalog.
+   */
+  reasoningLevels?: readonly string[] | undefined
+  /** Route input types for models absent from the installed catalog. */
+  defaultInput?: readonly string[] | undefined
+  /** Whether the user layer currently owns the served rows; absent on a create. */
   overridden?: boolean
-  /** Replace the drafted rows. */
+  /** Replace the drafted owned rows. */
   onChange: (models: ModelDraft[]) => void
-  /** Remove the user-owned array and return to inheritance; absent on a create. */
+  /** Replace the drafted catalog adjustments; absent where the route has no catalog. */
+  onOverridesChange?: ((overrides: Record<string, ModelDraft>) => void) | undefined
+  /** Remove the user-owned rows and adjustments, returning to the catalog; absent on a create. */
   onReset?: () => void
   /** Endpoint facts for the fetch action. */
   probe: ProbeTarget
@@ -103,36 +126,27 @@ export interface ModelListEditorProps {
    * told what the field already says.
    */
   probeBlocked?: keyof typeof en | undefined
-  /** Wire face the fetch action calls. */
-  api: Pick<IApiClient, 'llm'>
+  /** The Host operations whose interrogation answers the fetch action. */
+  operations: ModelsOperations
   /** Section copy. */
   t: (key: keyof typeof en) => string
   /** Disable every control (read-only deployment or a pending write). */
   disabled: boolean
-}
-
-/** Disclosure chevron; rotates to point down while its row is open. */
-function IconChevron({ open }: { open: boolean }): ReactNode {
-  return (
-    <svg
-      width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden
-      style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform 120ms ease' }}
-    >
-      <path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-/** Removal glyph for one model row. */
-function IconTrash(): ReactNode {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9a1 1 0 001 .9h4.6a1 1 0 001-.9L12 4M6.5 6.8v4.4M9.5 6.8v4.4"
-        stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"
-      />
-    </svg>
-  )
+  /**
+   * Called once per change with whether an endpoint interrogation is in
+   * flight. The owning card folds it into its own busy state so the surface
+   * around the card — a mode switch, say — can refuse to move while the
+   * answer is still bound for this list.
+   */
+  onBusyChange: (busy: boolean) => void
+  /** Probe one model; absent when the card has no test surface. */
+  onTestModel?: ((modelId: string) => void) | undefined
+  /** Probe several models at once; absent when the card has no test surface. */
+  onTestAll?: ((modelIds: readonly string[]) => void) | undefined
+  /** Model ids whose probes are in flight. */
+  testing?: ReadonlySet<string> | undefined
+  /** Each row's settled probe, by model id. */
+  testFeedback?: ReadonlyMap<string, ModelTestFeedback> | undefined
 }
 
 /** The two token counts edited as K/M-suffixed text behind a row's disclosure. */
@@ -142,7 +156,7 @@ type CapacityField = 'contextWindow' | 'maxTokens'
  * What an empty capacity field is worth, shown as its placeholder so a row left
  * blank does not read as a model with no capacity at all.
  *
- * The magnitudes are the adapter's own route-level fallbacks (`llm-ai-sdk`'s
+ * The magnitudes are the adapter's own route-level fallbacks (`llm-pi-ai`'s
  * `defaultContextWindow` and `defaultMaxTokens`), spelled the way a person
  * would say them. They are a hint, not a mirror: this page counts `K` as 1000,
  * so typing `256K` stores 256000 while leaving the field blank keeps the
@@ -165,32 +179,57 @@ function capacitySpelling(value: number | undefined): string {
   return value === undefined ? '' : formatCapacity(value)
 }
 
-/** Adopt a candidate, keeping whatever capacities and modalities the source disclosed. */
-function adopt(candidate: DiscoveredModelView): ModelDraft {
+/** The catalog entry one served row reads under, as a comparable draft. */
+function catalogDraft(candidate: LlmDiscoveredModel): ModelDraft {
   return {
     id: candidate.id,
     ...candidate.name === undefined ? {} : { name: candidate.name },
     ...candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow },
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
-    ...(candidate.inputModalities === undefined || candidate.inputModalities.length === 0)
-      ? {}
-      : { inputModalities: [...candidate.inputModalities] },
+    ...candidate.inputModalities === undefined ? {} : { input: [...candidate.inputModalities] },
   }
 }
 
 /**
- * Render the model list with its fetch action.
+ * Render the model list with its fetch, test, and reset actions.
  * @param props - the drafted rows, probe target, wire face, and copy.
  * @returns the model-list editor.
  */
 export function ModelListEditor(props: ModelListEditorProps): ReactNode {
-  const { models, onChange, probe, api, t, disabled } = props
+  const { models, onChange, probe, operations, t, disabled, onBusyChange } = props
+  const { catalogProvider } = props
+  const overrides = props.overrides ?? {}
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | undefined>(undefined)
-  const [candidates, setCandidates] = useState<readonly DiscoveredModelView[] | undefined>(undefined)
-  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
-  // Rows carry an id and a name; capacities are the exception, so they stay
-  // folded until asked for rather than crowding every row with four inputs.
+  useEffect(() => { onBusyChange(busy) }, [busy, onBusyChange])
+  const [note, setNote] = useState<ListNote | undefined>(undefined)
+  /** The search text over the served rows. */
+  const [query, setQuery] = useState('')
+  const [inheritedCatalog, setInheritedCatalog] = useState<{
+    provider: string
+    models: readonly LlmDiscoveredModel[]
+  } | undefined>(undefined)
+  useEffect(() => {
+    if (catalogProvider === undefined) return
+    let current = true
+    void operations.discoverModels(probe.settingsNs, { provider: catalogProvider }).then((answer) => {
+      if (!current) return
+      setInheritedCatalog({ provider: catalogProvider, models: answer.kind === 'found' ? answer.models : [] })
+      if (answer.kind === 'refused') setNote({ tone: 'error', text: answer.message })
+    })
+    return () => { current = false }
+  }, [catalogProvider, operations, probe.settingsNs])
+  const catalog = inheritedCatalog?.provider === catalogProvider ? inheritedCatalog?.models : undefined
+  const inputDefaults = useMemo(() => new Map(catalog?.map(model => [model.id, model.inputModalities])), [catalog])
+  // Capability facts the listing disclosed, keyed by model id. A row with no
+  // fact keeps no chip rather than a guessed one.
+  const capabilities = useMemo(() => new Map(catalog?.flatMap((model) => {
+    const entry: ModelCapabilities = {
+      ...model.reasoning === undefined ? {} : { reasoning: model.reasoning },
+      ...model.inputModalities === undefined ? {} : { image: model.inputModalities.includes('image') },
+      ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
+    }
+    return Object.keys(entry).length === 0 ? [] : [[model.id, entry] as const]
+  }) ?? []), [catalog])
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
   // Capacities are edited as text, so a field's keystrokes are held here rather
   // than re-derived from the parsed count on every change — that would rewrite
@@ -200,12 +239,88 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   // the abandoned one would render its stored NaN as the literal `NaN`.
   const [editing, setEditing] = useState<ReadonlyMap<string, string>>(new Map())
 
+  // The rows the route serves, in the order it serves them: the owned rows
+  // first, then the installed catalog's own entries for every model no owned
+  // row names. A catalog row reads through the user layer's adjustment for its
+  // id, which is the only way the adapter lets one of its models be changed.
+  const rows: ServedRow[] = useMemo(() => {
+    const owned = models.map(model => ({ model, catalog: false }))
+    const named = new Set(models.map(model => textOf(model, 'id')).filter(id => id.length > 0))
+    const rest = (catalog ?? []).flatMap((candidate) => {
+      if (named.has(candidate.id)) return []
+      return [{ model: { ...catalogDraft(candidate), ...overrides[candidate.id] ?? {} }, catalog: true }]
+    })
+    return [...owned, ...rest]
+  }, [models, catalog, overrides])
+
+  // The rows the search term leaves visible. Each keeps its place in the
+  // served list, so a filtered row is still the row its number, its edits, and
+  // its removal action name.
+  const visibleRows = useMemo(
+    () => rows.flatMap((row, index) => modelMatches({
+      id: textOf(row.model, 'id'),
+      name: textOf(row.model, 'name'),
+    }, query) ? [{ row, index }] : []),
+    [rows, query],
+  )
+
   /** Buffer key for one capacity field; the row half moves when rows do. */
   const bufferKey = (index: number, field: CapacityField): string => `${String(index)}:${field}`
 
-  const editCapacity = (index: number, field: CapacityField, text: string): void => {
+  /**
+   * The adjustment one edited catalog row leaves: only the fields that differ
+   * from the catalog's own entry, so returning a field to the catalog's value
+   * removes it from the profile instead of storing the catalog's number. An
+   * enabled row states the catalog's own default and is left out for the same
+   * reason.
+   */
+  const overrideOf = (id: string, next: ModelDraft): ModelDraft => {
+    const base = (catalog ?? []).find(candidate => candidate.id === id)
+    const from = base === undefined ? {} : catalogDraft(base)
+    return Object.fromEntries(Object.entries(next).filter(([key, value]) =>
+      key !== 'id'
+      && !(key === 'enabled' && value === true)
+      && JSON.stringify(value) !== JSON.stringify(from[key])))
+  }
+
+  /** Store one row's adjustment, dropping the entry once it says nothing. */
+  const setOverride = (id: string, entry: ModelDraft): void => {
+    const write = props.onOverridesChange
+    /* v8 ignore next -- a catalog row exists only where the card was given the callback that writes it */
+    if (write === undefined) return
+    const next = { ...overrides }
+    if (Object.keys(entry).length === 0) Reflect.deleteProperty(next, id)
+    else next[id] = entry
+    write(next)
+  }
+
+  /** Replace one row, wherever the route's list keeps it. */
+  const replaceRow = (row: ServedRow, index: number, next: ModelDraft): void => {
+    if (row.catalog) {
+      setOverride(textOf(row.model, 'id'), overrideOf(textOf(row.model, 'id'), next))
+      return
+    }
+    onChange(models.map((model, at) => at === index ? next : model))
+  }
+
+  /**
+   * Apply one field patch to one row. Rebuilt rather than spread over: an
+   * emptied optional field has to leave the profile, not be stored as a value
+   * its schema would reject.
+   */
+  const patchRow = (row: ServedRow, index: number, fields: Record<string, string | number | undefined>): void => {
+    const cleared = new Set(
+      Object.entries(fields).filter(([, value]) => value === undefined || value === '').map(([key]) => key),
+    )
+    const next = Object.fromEntries(
+      Object.entries({ ...row.model, ...fields }).filter(([key]) => !cleared.has(key)),
+    )
+    replaceRow(row, index, next)
+  }
+
+  const editCapacity = (row: ServedRow, index: number, field: CapacityField, text: string): void => {
     setEditing(current => new Map(current).set(bufferKey(index, field), text))
-    patch(index, { [field]: parseCapacity(text) })
+    patchRow(row, index, { [field]: parseCapacity(text) })
   }
 
   /** What a capacity field shows: the buffer while typing, else the stored count. */
@@ -235,113 +350,73 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     })
   }
 
-  const patch = (index: number, next: Record<string, string | number | readonly string[] | undefined>): void => {
-    onChange(models.map((model, at) => {
-      if (at !== index) return model
-      // Rebuilt rather than spread over: an emptied optional field has to leave
-      // the profile, not be stored as a value its schema would reject.
-      // Spread first so a field this card does not edit survives; an emptied
-      // optional field is then dropped rather than stored as a value its
-      // schema would reject.
-      const cleared = new Set(
-        Object.entries(next).filter(([, value]) => value === undefined || value === '').map(([key]) => key),
-      )
-      return Object.fromEntries(
-        Object.entries({ ...model, ...next }).filter(([key]) => !cleared.has(key)),
-      )
-    }))
+  const removeRow = (index: number): void => {
+    onChange(models.filter((_model, at) => at !== index))
+    setExpanded((current) => {
+      const next = new Set<number>()
+      for (const at of current) {
+        if (at < index) next.add(at)
+        else if (at > index) next.add(at - 1)
+      }
+      return next
+    })
+    setEditing(current => reindexOnRemove(current, index))
   }
 
   /**
-   * Pin one row's image capability. Both states write the explicit
-   * `inputModalities` declaration — checked pins `['text', 'image']`,
-   * unchecked pins `['text']` — because on a catalog route an absent field
-   * would inherit the installed entry's declaration, and "unchecked" has to
-   * mean text-only, not "whatever the catalog says". Legacy `input` is
-   * dropped when present so repaired rows do not carry both shapes.
+   * Ask the provider what it serves and sync the list to the reply. An owned
+   * list keeps its tuned fields, gains every model nothing serves yet, and
+   * loses every row the endpoint no longer reports; a row the user added by
+   * hand is never removed. A route that serves its installed catalog stores no
+   * list, so its sync hides the catalog models the reply omits and shows again
+   * the ones it reports after an earlier sync hid them.
    */
-  const setVision = (index: number, vision: boolean): void => {
-    patch(index, { input: undefined, inputModalities: vision ? ['text', 'image'] : ['text'] })
-  }
-
   const fetchModels = async (): Promise<void> => {
     setBusy(true)
-    setFailure(undefined)
+    setNote(undefined)
     try {
-      const response = await api.llm.discoverModels({
-        settingsNs: probe.settingsNs,
+      const answer = await operations.discoverModels(probe.settingsNs, {
         ...probe.provider === undefined ? {} : { provider: probe.provider },
         ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
         ...probe.api === undefined ? {} : { api: probe.api },
         ...probe.apiKey === undefined ? {} : { apiKey: probe.apiKey },
       })
-      if (!response.result.ok) {
-        setFailure(response.result.error.message)
+      if (answer.kind === 'refused') {
+        setNote({ tone: 'error', text: answer.message })
         return
       }
-      const found = response.result.value.models
+      const found = answer.models
+      if (catalogProvider !== undefined) setInheritedCatalog({ provider: catalogProvider, models: found })
       if (found.length === 0) {
-        setFailure(t('fetchEmpty'))
+        setNote({ tone: 'info', text: t('fetchEmpty') })
         return
       }
-      // Everything already configured starts unchecked, so adopting a
-      // selection never silently rewrites a capacity the user corrected.
-      const known = new Set(models.map(model => textOf(model, 'id')))
-      setCandidates(found)
-      setPicked(new Set(found.filter(model => !known.has(model.id)).map(model => model.id)))
-    } catch (error) {
-      // The transport rejected rather than answering; without this the button
-      // would stay busy with nothing shown.
-      setFailure(messageOf(error))
+      const served = rows.map(row => textOf(row.model, 'id')).filter(id => id.length > 0)
+      const merged = mergeDiscoveredModels(served, models, found)
+      if (merged.added === 0 && merged.removed === 0) {
+        setNote({ tone: 'ok', text: t('fetchCompleteList') })
+        return
+      }
+      if (merged.models.length === 0) {
+        setNote({ tone: 'info', text: t('fetchEmpty') })
+        return
+      }
+      onChange(merged.models)
+      setNote({
+        tone: 'ok',
+        text: t(merged.added > 0 && merged.removed > 0 ? 'fetchSynced' : merged.removed > 0 ? 'fetchRemoved' : 'fetchAddedModels')
+          .replace('{count}', () => String(merged.added))
+          .replace('{removed}', () => String(merged.removed)),
+      })
     } finally {
       setBusy(false)
     }
   }
 
-  const closePicker = (): void => {
-    setCandidates(undefined)
-    setPicked(new Set())
-  }
-
-  const adoptPicked = (): void => {
-    /* v8 ignore next -- the dialog only renders with candidates loaded */
-    if (candidates === undefined) return
-    const byId = new Map(models.map(model => [textOf(model, 'id'), model]))
-    for (const candidate of candidates) {
-      if (!picked.has(candidate.id)) continue
-      // A row the user already tuned wins over the provider's own numbers.
-      // Keyed by id, so a half-typed row whose id is still empty is not a
-      // match and the candidate joins as its own row — correct, since a row
-      // without an id is not yet a model and the create/apply gates refuse it.
-      byId.set(candidate.id, byId.get(candidate.id) ?? adopt(candidate))
-    }
-    onChange([...byId.values()])
-    closePicker()
-  }
-
-  const toggle = (id: string): void => {
-    setPicked((current) => {
-      const next = new Set(current)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
-  }
-
-  const activeCandidates = candidates ?? []
-  const allCandidatesPicked = activeCandidates.length > 0
-    && activeCandidates.every(candidate => picked.has(candidate.id))
-
-  const toggleAllCandidates = (): void => {
-    setPicked((current) => {
-      return activeCandidates.every(candidate => current.has(candidate.id))
-        ? new Set()
-        : new Set(activeCandidates.map(candidate => candidate.id))
-    })
-  }
-
   // A route the adapter already describes answers without an endpoint; only a
   // draft with neither has nothing to ask about.
   const askable = probe.provider !== undefined || (probe.baseURL !== undefined && probe.baseURL.length > 0)
+  const testable = rows.flatMap(row => textOf(row.model, 'id')).filter(id => id.length > 0)
   return (
     <section className={styles['modelCatalog']} aria-label={t('models')}>
       <div className={styles['modelListHead']}>
@@ -355,184 +430,92 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               </span>
             )}
         </div>
-        {props.overridden === true && props.onReset !== undefined
-          ? (
-            <button
-              type="button"
-              className={styles['linkButton']}
-              disabled={disabled}
-              onClick={() => {
-                // Reset discards the rows the buffers annotate: keeping them
-                // would render restored rows with text no settings layer stores.
-                setEditing(new Map())
-                setExpanded(new Set())
-                props.onReset?.()
-              }}
-            >
-              {t('resetModels')}
-            </button>
-          )
-          : null}
-        <button
-          type="button"
-          className={styles['linkButton']}
-          disabled={disabled || busy || !askable || props.probeBlocked !== undefined}
-          title={props.probeBlocked !== undefined
-            ? t(props.probeBlocked)
-            : askable ? undefined : t('fetchNeedsBaseUrl')}
-          onClick={() => { void fetchModels() }}
+        <ModelListActions
+          t={t}
+          disabled={disabled || busy}
+          testing={(props.testing?.size ?? 0) > 0}
+          testIds={testable}
+          onTestAll={props.onTestAll}
+          onReset={props.overridden === true ? props.onReset : undefined}
         >
-          {busy ? t('fetching') : t('fetchModels')}
-        </button>
+          <button
+            type="button"
+            className={styles['linkButton']}
+            disabled={disabled || busy || !askable || props.probeBlocked !== undefined}
+            title={props.probeBlocked !== undefined
+              ? t(props.probeBlocked)
+              : askable ? t('fetchOffered') : t('fetchNeedsBaseUrl')}
+            onClick={() => { void fetchModels() }}
+          >
+            {busy ? t('fetching') : t('fetchModels')}
+          </button>
+        </ModelListActions>
       </div>
-      {models.length === 0 ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p> : null}
-      {models.map((model, index) => (
-        <div key={index} className={styles['modelEntry']}>
-          <div className={styles['modelRow']}>
-            <input
-              className={styles['input']}
-              type="text"
-              value={textOf(model, 'id')}
-              placeholder={t('modelId')}
-              aria-label={`${t('modelId')} ${index + 1}`}
+      {rows.length === 0
+        ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p>
+        : <ModelCatalogSearch value={query} t={t} onChange={setQuery} />}
+      {rows.length > 0 && visibleRows.length === 0
+        ? <p className={styles['modelEmpty']}>{t('noMatchingModels')}</p>
+        : null}
+      <div className={styles['modelList']}>
+        {visibleRows.map(({ row, index }) => {
+          const model = row.model
+          const modelId = textOf(model, 'id')
+          return (
+            <ModelRow
+              key={row.catalog ? `catalog:${modelId}` : `own:${String(index)}`}
+              model={model}
+              position={index + 1}
+              inputField="input"
+              catalog={row.catalog}
+              inputFallback={row.catalog ? undefined : inputDefaults.get(modelId) ?? props.defaultInput}
+              inputLoading={row.catalog ? false : catalogProvider !== undefined && catalog === undefined}
+              reasoningLevels={props.reasoningLevels}
+              capabilities={capabilities.get(modelId)}
+              expanded={expanded.has(index)}
               disabled={disabled}
-              onChange={(event) => { patch(index, { id: event.target.value }) }}
-            />
-            <input
-              className={styles['input']}
-              type="text"
-              value={textOf(model, 'name')}
-              placeholder={t('modelName')}
-              aria-label={`${t('modelName')} ${index + 1}`}
-              disabled={disabled}
-              onChange={(event) => { patch(index, { name: event.target.value === '' ? undefined : event.target.value }) }}
-            />
-            <label className={styles['modelVision']} title={t('modelVisionHint')}>
-              <input
-                type="checkbox"
-                checked={declaresVision(model)}
-                disabled={disabled}
-                aria-label={`${t('modelVision')} ${index + 1}`}
-                onChange={(event) => { setVision(index, event.target.checked) }}
-              />
-              <span>{t('modelVision')}</span>
-            </label>
-            <button
-              type="button"
-              className={styles['iconButton']}
-              aria-label={`${t('modelAdvanced')} ${index + 1}`}
-              aria-expanded={expanded.has(index)}
-              title={t('modelAdvanced')}
-              onClick={() => { toggleExpanded(index) }}
-            >
-              <IconChevron open={expanded.has(index)} />
-            </button>
-            <button
-              type="button"
-              className={`${styles['iconButton']} ${styles['iconButtonDanger']}`}
-              aria-label={`${t('removeModel')} ${index + 1}`}
-              title={t('removeModel')}
-              disabled={disabled}
-              onClick={() => {
-                onChange(models.filter((_model, at) => at !== index))
-                // Both stores are keyed by position, so every row after this
-                // one shifts down and would otherwise inherit its neighbour's
-                // state — a different row's capacities popping open, or its
-                // half-typed text appearing in another row's field.
-                setExpanded((current) => {
-                  const next = new Set<number>()
-                  for (const at of current) {
-                    if (at < index) next.add(at)
-                    else if (at > index) next.add(at - 1)
-                  }
-                  return next
-                })
-                setEditing(current => reindexOnRemove(current, index))
+              t={t}
+              contextWindow={{
+                value: capacityText(model, index, 'contextWindow'),
+                placeholder: CAPACITY_HINT.contextWindow,
+                onChange: (text) => { editCapacity(row, index, 'contextWindow', text) },
               }}
-            >
-              <IconTrash />
-            </button>
-          </div>
-          {expanded.has(index)
-            ? (
-              <div className={styles['modelAdvanced']}>
-                <label className={styles['modelField']}>
-                  <span className={styles['modelFieldLabel']}>{t('modelContextWindow')}</span>
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    inputMode="numeric"
-                    value={capacityText(model, index, 'contextWindow')}
-                    placeholder={CAPACITY_HINT.contextWindow}
-                    aria-label={`${t('modelContextWindow')} ${index + 1}`}
-                    disabled={disabled}
-                    onChange={(event) => { editCapacity(index, 'contextWindow', event.target.value) }}
-                  />
-                </label>
-                <label className={styles['modelField']}>
-                  <span className={styles['modelFieldLabel']}>{t('modelMaxTokens')}</span>
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    inputMode="numeric"
-                    value={capacityText(model, index, 'maxTokens')}
-                    placeholder={CAPACITY_HINT.maxTokens}
-                    aria-label={`${t('modelMaxTokens')} ${index + 1}`}
-                    disabled={disabled}
-                    onChange={(event) => { editCapacity(index, 'maxTokens', event.target.value) }}
-                  />
-                </label>
-              </div>
-            )
-            : null}
-        </div>
-      ))}
+              maxTokens={{
+                value: capacityText(model, index, 'maxTokens'),
+                placeholder: CAPACITY_HINT.maxTokens,
+                onChange: (text) => { editCapacity(row, index, 'maxTokens', text) },
+              }}
+              onFieldChange={(field, value) => { patchRow(row, index, { [field]: value }) }}
+              onChange={(next) => { replaceRow(row, index, next) }}
+              onToggle={() => { toggleExpanded(index) }}
+              {...row.catalog ? {} : { onRemove: () => { removeRow(index) } }}
+              {...modelProbeProps(props.onTestModel, props.testing, props.testFeedback, modelId)}
+            />
+          )
+        })}
+      </div>
       <button
         type="button"
         className={styles['addModelButton']}
         disabled={disabled}
-        onClick={() => { onChange([...models, { id: '' }]) }}
+        onClick={() => {
+          // A row added by hand is marked custom so a later fetch never prunes it.
+          onChange([...models.map(model => ({ ...model })), { id: '', [MODEL_SOURCE_FIELD]: 'custom' as const }])
+        }}
       >
+        <IconPlusOutlineRegular size={14} />
         {t('addModel')}
       </button>
-      {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
-      <Modal
-        open={candidates !== undefined}
-        onClose={closePicker}
-        title={t('fetchTitle')}
-        closeLabel={t('close')}
-        description={t('fetchDescription')}
-        className={styles['fetchDialog'] as string}
-        footer={(
-          <>
-            <Button variant="outline" onClick={closePicker}>{t('cancel')}</Button>
-            <Button variant="outline" onClick={adoptPicked}>{t('fetchAdopt')}</Button>
-          </>
+      {note === undefined
+        ? null
+        : (
+          <p
+            role="status"
+            className={styles[note.tone === 'error' ? 'error' : note.tone === 'ok' ? 'savedNotice' : 'advancedHint']}
+          >
+            {note.text}
+          </p>
         )}
-      >
-        <div className={styles['candidateActions']}>
-          <Button variant="ghost" size="sm" onClick={toggleAllCandidates}>
-            {t(allCandidatesPicked ? 'fetchDeselectAll' : 'fetchSelectAll')}
-          </Button>
-        </div>
-        <ul className={styles['candidateList']}>
-          {(candidates ?? []).map(candidate => (
-            <li key={candidate.id} className={styles['candidate']}>
-              <label className={styles['candidateLabel']}>
-                <input
-                  type="checkbox"
-                  checked={picked.has(candidate.id)}
-                  onChange={() => { toggle(candidate.id) }}
-                />
-                {/* The id alone: it is the string adoption writes, and the
-                    capacities the endpoint reported are adopted with it and
-                    editable in the row that appears. */}
-                <span className={styles['candidateId']}>{candidate.id}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </Modal>
     </section>
   )
 }

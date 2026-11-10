@@ -147,10 +147,10 @@ describe('ExaSearchProvider error handling', () => {
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'bad key' }))
   })
 
-  it('quotes the first line of a non-JSON error body', async () => {
+  it('keeps a status-line message when the error body is not JSON', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('gateway down', { status: 502 })))
     await expect(new ExaSearchProvider(options).search({ query: 'q' }))
-      .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'gateway down' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR', message: 'Exa API error (HTTP 502)' }))
   })
 
   it('keeps the status-line message when the JSON error body carries no detail', async () => {
@@ -190,16 +190,8 @@ describe('ExaSearchProvider error handling', () => {
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_ABORTED' }))
   })
 
-  it('surfaces an abort during error-body read as WEB_ABORTED', async () => {
-    // The shared error-body reader consumes the stream, so the fake aborts
-    // by erroring its body stream rather than rejecting a json() call.
-    const body = {
-      ok: false,
-      status: 500,
-      body: new ReadableStream<Uint8Array>({
-        start(controller) { controller.error(new DOMException('aborted', 'AbortError')) },
-      }),
-    }
+  it('surfaces an abort during error-body parse as WEB_ABORTED', async () => {
+    const body = { json: () => Promise.reject(new DOMException('aborted', 'AbortError')), ok: false, status: 500 }
     vi.stubGlobal('fetch', vi.fn(async () => body as unknown as Response))
     await expect(new ExaSearchProvider(options).search({ query: 'q' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_ABORTED' }))

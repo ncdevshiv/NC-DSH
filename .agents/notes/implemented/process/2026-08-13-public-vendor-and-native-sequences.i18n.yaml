@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   bun run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-13-public-vendor-and-native-sequences.md
-2026-08-13-public-vendor-and-native-sequences.md: 4a42ccd7d87772a7420d999c1d5e8ce60f5fb788
-2026-08-13-public-vendor-and-native-sequences.zh.md: 2f6987ac4af7a2270eb27be5647b0fee07e6a83e

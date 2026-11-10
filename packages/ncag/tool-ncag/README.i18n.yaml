@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/ncag/tool-ncag/README.md
+/:
+  en: 875de40b2b09db80
+  zh: 43286e54cc6c384b
+/deepseek-ai-dsh-tool-ncag:
+  en: 4b5817fa7291fa3d
+  zh: b90f1cb8043595b8
+/deepseek-ai-dsh-tool-ncag/summary:
+  en: 24a4e6f114b1df01
+  zh: a66ae94542def287
+/deepseek-ai-dsh-tool-ncag/table-of-contents:
+  en: 90a11b70f4d34cdf
+  zh: 415239c1387d9a58
+/deepseek-ai-dsh-tool-ncag/tools:
+  en: ecf97135a83062c1
+  zh: 09fce8bb08f4cd95
+/deepseek-ai-dsh-tool-ncag/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-ncag/model-experience/request-context-and-condition:
+  en: cd8530c72534ee6b
+  zh: 16dbf6046e7e51fd
+/deepseek-ai-dsh-tool-ncag/model-experience/request-context-and-condition/what-the-model-sees:
+  en: c80acd53eb20aad3
+  zh: 33c9131b434a683e
+/deepseek-ai-dsh-tool-ncag/model-experience/request-context-and-condition/token-effect:
+  en: 5f96fe8007ff1963
+  zh: 9d646232038f3112
+/deepseek-ai-dsh-tool-ncag/model-experience/request-context-and-condition/kv-cache-effect:
+  en: a48df6cbf0678a0b
+  zh: 6881fad9c9663f90
+/deepseek-ai-dsh-tool-ncag/known-limitations-and-deferred-work:
+  en: 193ec09860255300
+  zh: 13f4e0abeeabd98f
+/deepseek-ai-dsh-tool-ncag/dev-note:
+  en: a2df30b4dfba6051
+  zh: 09f5054b5256b70f

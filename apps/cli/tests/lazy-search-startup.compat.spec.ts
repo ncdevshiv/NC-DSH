@@ -101,7 +101,7 @@ function runBuiltWeb(cwd: string): Promise<{ stdout: string; stderr: string; cod
 
 describe.skipIf(!requireBuiltArtifacts)('built CLI lazy-search startup', () => {
   it('boots and disposes the shipped composition with full-text search off by default', async () => {
-    expect(existsSync(builtBin), `missing built CLI ${resolve(builtBin)}; run bun run build`).toBe(true)
+    expect(existsSync(builtBin), `missing built CLI ${resolve(builtBin)}; run bun build`).toBe(true)
     expect(existsSync(webDist), `missing Web dist ${resolve(webDist)}; run bun run build:web`).toBe(true)
     const baseRows = (yaml.load(await readFile(baseConfigPath, 'utf8'), { schema: configSchema }) as PatchEntry[])
       .flatMap(entry => entry.insert ?? [entry])

@@ -15,7 +15,7 @@ Archived: 2026-07-26
 
 ## 决策
 
-新增生成式关系图文档，由聚焦的生成器产出并在 [docs/graph-atlas.md](../../../../docs/graph-atlas.md) 建立索引；作为 `doc-sync` 的一部分，通过 `pnpm run verify-doc-graphs` / 现有目录新鲜度检查进行验证。
+新增生成式关系图文档，由聚焦的生成器产出并在 [docs/graph-atlas.md](../../../../docs/graph-atlas.md) 建立索引；作为 `doc-sync` 的一部分，通过 `bun run verify-doc-graphs` / 现有目录新鲜度检查进行验证。
 
 该索引是既有目录之上的关系层。它不取代精确的参考文档，而是链接到它们并解释各部分如何组合在一起。
 

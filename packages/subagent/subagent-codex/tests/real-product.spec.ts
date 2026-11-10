@@ -1,3 +1,5 @@
+import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-directory-fixture.ts'
+import { startExternalActivation } from '../../subagent/tests/external-activation-helpers.ts'
 import { execFile } from 'node:child_process'
 import {
   cpSync,
@@ -7,7 +9,6 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs'
-import { rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
@@ -17,6 +18,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type {
   SubprocessHandle,
   SubprocessOutcome,
@@ -30,6 +32,7 @@ import {
   type ResponsesBehavior,
   type ResponsesFixture,
 } from './responses-fixture.ts'
+import { cleanupRealProduct } from './real-product-cleanup.ts'
 
 const execFileAsync = promisify(execFile)
 const packageRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -46,13 +49,7 @@ const roots: string[] = []
 const fixtures: ResponsesFixture[] = []
 const contexts: Context[] = []
 
-afterEach(async () => {
-  await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
-  await Promise.all(fixtures.splice(0).map(fixture => fixture.close()))
-  for (const root of roots.splice(0)) {
-    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
-  }
-})
+afterEach(() => cleanupRealProduct({ contexts, fixtures, roots }))
 
 interface RealHarness {
   readonly ctx: Context
@@ -124,6 +121,8 @@ interface RealRuntime {
 async function realRuntime(): Promise<RealRuntime> {
   const ctx = new Context()
   contexts.push(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
+  await mountWorkingDirectoryFixture(ctx)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(LocalSubprocessRuntime)
   const handles: SubprocessHandle[] = []
@@ -183,7 +182,7 @@ function expectedProcessExitDiagnostic(outcome: SubprocessOutcome): string {
   const fields = [
     'product: Codex',
     'stage: process',
-    'category: process-exit',
+    'category: process',
   ]
   if (outcome.exitCode !== null) fields.push(`exit code: ${outcome.exitCode}`)
   if (outcome.signal !== null) fields.push(`signal: ${outcome.signal}`)
@@ -191,9 +190,6 @@ function expectedProcessExitDiagnostic(outcome: SubprocessOutcome): string {
 }
 
 interface JsonSchemaNode {
-  readonly enum?: string[]
-  readonly format?: string
-  readonly minimum?: number
   readonly properties?: Record<string, JsonSchemaNode>
   readonly required?: string[]
   readonly type?: string | string[]
@@ -215,18 +211,18 @@ function responseInputTexts(body: Record<string, unknown>): string[] {
   })
 }
 
-describe('real @openai/codex 0.147.0 product', () => {
+describe('real @openai/codex 0.153.4 product', () => {
   it('starts approve-for-me through the real app-server and returns exact text', async () => {
-    const sentinel = 'REAL_CODEX_SENTINEL_0_147_0'
+    const sentinel = 'REAL_CODEX_SENTINEL_0_149_1'
     const task = 'Return the fixture sentinel exactly.'
     const { harness, fixture } = await realHarness([
       { kind: 'complete', text: sentinel },
     ], 'approve-for-me')
-    expect(codexPackage.version).toBe('0.147.0')
+    expect(codexPackage.version).toBe('0.153.4')
     const version = await execFileAsync(process.execPath, [codexEntry, '--version'], {
       env: { ...process.env, ...harness.env },
     })
-    expect(version.stdout.trim()).toBe('codex-cli 0.147.0')
+    expect(version.stdout.trim()).toBe('codex-cli 0.153.4')
     const schemaRoot = mkdtempSync(join(tmpdir(), 'dsh-codex-schema-'))
     roots.push(schemaRoot)
     await execFileAsync(process.execPath, [
@@ -237,48 +233,19 @@ describe('real @openai/codex 0.147.0 product', () => {
       schemaRoot,
     ], { env: { ...process.env, ...harness.env } })
     const schema = JSON.parse(readFileSync(
-      join(schemaRoot, 'ServerNotification.json'),
+      join(schemaRoot, 'ClientRequest.json'),
       'utf8',
     )) as {
       definitions: {
-        CodexErrorInfo: {
-          oneOf: JsonSchemaNode[]
-        }
+        ThreadStartParams: JsonSchemaNode
       }
     }
-    expect(schema.definitions.CodexErrorInfo.oneOf[0]?.enum).toEqual([
-      'contextWindowExceeded',
-      'sessionBudgetExceeded',
-      'usageLimitExceeded',
-      'serverOverloaded',
-      'cyberPolicy',
-      'internalServerError',
-      'unauthorized',
-      'badRequest',
-      'threadRollbackFailed',
-      'sandboxError',
-      'other',
-    ])
-    expect(schema.definitions.CodexErrorInfo.oneOf.slice(1).map(variant =>
-      Object.keys(variant.properties ?? {})[0])).toEqual([
-      'httpConnectionFailed',
-      'responseStreamConnectionFailed',
-      'responseStreamDisconnected',
-      'responseTooManyFailedAttempts',
-      'activeTurnNotSteerable',
-    ])
-    for (const variant of schema.definitions.CodexErrorInfo.oneOf.slice(1, 5)) {
-      const category = Object.keys(variant.properties ?? {})[0]!
-      const detail = variant.properties?.[category]
-      expect(detail?.required).toBeUndefined()
-      expect(detail?.properties?.httpStatusCode).toEqual({
-        format: 'uint16',
-        minimum: 0,
-        type: ['integer', 'null'],
-      })
-    }
+    expect(schema.definitions.ThreadStartParams.properties?.model).toEqual({
+      type: ['string', 'null'],
+    })
+    expect(schema.definitions.ThreadStartParams.required).toBeUndefined()
 
-    const run = await harness.ctx.subagents.start('codex', {
+    const run = await startExternalActivation(harness.ctx, 'codex', {
       prompt: [{ type: 'text', text: task }],
       parent: harness.parent,
       signal: new AbortController().signal,
@@ -301,6 +268,7 @@ describe('real @openai/codex 0.147.0 product', () => {
     expect(recorded.method).toBe('POST')
     expect(recorded.path).toBe('/v1/responses')
     expect(recorded.headers.authorization).toBe('Bearer dsh-fake-openai-key')
+    expect(recorded.body.model).toBe('fixture-model')
     expect(responseInputTexts(recorded.body)).toContain(task)
     await expectQuiescent(harness.handles)
   }, 60_000)
@@ -332,12 +300,14 @@ describe('real @openai/codex 0.147.0 product', () => {
     const { ctx, handles, spawnSpecs } = await realRuntime()
     const safeFiber = await ctx.plugin(codex, {
       providerName: 'codex-safe',
+      model: 'codex-safe-model',
       env: safeInstance.env,
       permissionMode: 'never',
       disposeGraceMs: 2_000,
     })
     const bypassFiber = await ctx.plugin(codex, {
       providerName: 'codex-bypass',
+      model: 'codex-bypass-model',
       env: bypassInstance.env,
       permissionMode: 'dangerously-bypass-approvals-and-sandbox',
       disposeGraceMs: 2_000,
@@ -353,12 +323,12 @@ describe('real @openai/codex 0.147.0 product', () => {
     const safeController = new AbortController()
 
     const [safeRun, bypassRun] = await Promise.all([
-      ctx.subagents.start('codex-safe', {
+      startExternalActivation(ctx, 'codex-safe', {
         prompt: [{ type: 'text', text: 'Hold the safe instance.' }],
         parent: safeParent,
         signal: safeController.signal,
       }),
-      ctx.subagents.start('codex-bypass', {
+      startExternalActivation(ctx, 'codex-bypass', {
         prompt: [{ type: 'text', text: 'Complete the bypass instance.' }],
         parent: bypassParent,
         signal: new AbortController().signal,
@@ -367,7 +337,7 @@ describe('real @openai/codex 0.147.0 product', () => {
     await safeInstance.fixture.requestStarted
     await safeFiber.dispose()
     expect(ctx.subagents.list()).toEqual(['codex-bypass'])
-    await expect(ctx.subagents.start('codex-safe', {
+    await expect(startExternalActivation(ctx, 'codex-safe', {
       prompt: [{ type: 'text', text: 'This start must fail.' }],
       parent: safeParent,
       signal: new AbortController().signal,
@@ -377,7 +347,7 @@ describe('real @openai/codex 0.147.0 product', () => {
       output: [{ type: 'text', text: 'NAMED_CODEX_BYPASS_RESULT' }],
       stopReason: 'completed',
     })
-    safeController.abort(new Error('cancel only the published safe run'))
+    void safeRun.dispose()
     await expect(safeRun.result).resolves.toEqual({
       output: [],
       stopReason: 'aborted',
@@ -385,6 +355,8 @@ describe('real @openai/codex 0.147.0 product', () => {
     await Promise.all([safeRun.dispose(), bypassRun.dispose()])
     expect(safeInstance.fixture.requests).toHaveLength(1)
     expect(bypassInstance.fixture.requests).toHaveLength(1)
+    expect(safeInstance.fixture.requests[0]?.body.model).toBe('codex-safe-model')
+    expect(bypassInstance.fixture.requests[0]?.body.model).toBe('codex-bypass-model')
     expect(safeInstance.fixture.requests[0]?.body.input)
       .not.toEqual(bypassInstance.fixture.requests[0]?.body.input)
     expect(spawnSpecs.map(spec => spec.env?.CODEX_HOME).sort()).toEqual([
@@ -430,7 +402,7 @@ describe('real @openai/codex 0.147.0 product', () => {
       },
     ])
     const sideEffect = join(harness.workspace, 'approval-side-effect')
-    const run = await harness.ctx.subagents.start('codex', {
+    const run = await startExternalActivation(harness.ctx, 'codex', {
       prompt: [{ type: 'text', text: 'Attempt the fixture command.' }],
       parent: harness.parent,
       signal: new AbortController().signal,
@@ -440,13 +412,9 @@ describe('real @openai/codex 0.147.0 product', () => {
     expect(result.stopReason).toBe('error')
     const diagnosticLines = result.diagnostic?.split('\n') ?? []
     expect(diagnosticLines[0]).toBe(
-      'Product subagent failure (product: Codex; stage: turn; category: other)',
+      'Product subagent failure (product: Codex; stage: turn; category: product-error)',
     )
-    expect([
-      'Codex unattended decision (mode: never; request: command approval; decision: cancelled): the provider does not grant interactive approval',
-      'Codex unattended decision (mode: never; request: sandbox execution; decision: failed): Codex reported a sandbox failure',
-      'Codex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval',
-    ]).toContain(diagnosticLines[1])
+    expect(diagnosticLines).toHaveLength(1)
     expect(result.diagnostic).not.toContain(command)
     expect(result.diagnostic).not.toContain(harness.workspace)
     await run.dispose()
@@ -470,7 +438,7 @@ describe('real @openai/codex 0.147.0 product', () => {
         status: 503,
         message: 'SECRET_TOKEN in /private/secret.txt',
       }])
-      const run = await harness.ctx.subagents.start('codex', {
+      const run = await startExternalActivation(harness.ctx, 'codex', {
         prompt: [{ type: 'text', text: 'Exercise the service failure path.' }],
         parent: harness.parent,
         signal: new AbortController().signal,
@@ -478,7 +446,7 @@ describe('real @openai/codex 0.147.0 product', () => {
       const result = await run.result
       expect(result).toMatchObject({ output: [], stopReason: 'error' })
       expect(result.diagnostic).toBe(
-        'Product subagent failure (product: Codex; stage: turn; category: internalServerError)',
+        'Product subagent failure (product: Codex; stage: turn; category: service)',
       )
       expect(result.diagnostic).not.toContain('SECRET_TOKEN')
       expect(result.diagnostic).not.toContain('/private/secret.txt')
@@ -487,7 +455,7 @@ describe('real @openai/codex 0.147.0 product', () => {
     }
     {
       const { harness, fixture } = await realHarness([{ kind: 'hold' }])
-      const run = await harness.ctx.subagents.start('codex', {
+      const run = await startExternalActivation(harness.ctx, 'codex', {
         prompt: [{ type: 'text', text: 'Exercise the process failure path.' }],
         parent: harness.parent,
         signal: new AbortController().signal,
@@ -533,7 +501,7 @@ describe('real @openai/codex 0.147.0 product', () => {
       ]
     }, 'dangerously-bypass-approvals-and-sandbox')
     const target = join(harness.workspace, sideEffect)
-    const run = await harness.ctx.subagents.start('codex', {
+    const run = await startExternalActivation(harness.ctx, 'codex', {
       prompt: [{ type: 'text', text: 'Create the fixture side effect.' }],
       parent: harness.parent,
       signal: new AbortController().signal,
@@ -551,13 +519,13 @@ describe('real @openai/codex 0.147.0 product', () => {
   it('settles cancellation locally and leaves the real app-server tree quiescent', async () => {
     const { harness, fixture } = await realHarness([{ kind: 'hold' }])
     const controller = new AbortController()
-    const run = await harness.ctx.subagents.start('codex', {
+    const run = await startExternalActivation(harness.ctx, 'codex', {
       prompt: [{ type: 'text', text: 'Wait for cancellation.' }],
       parent: harness.parent,
       signal: controller.signal,
     })
     await fixture.requestStarted
-    controller.abort(new Error('real product cancellation'))
+    void run.dispose()
     await expect(run.result).resolves.toMatchObject({ stopReason: 'aborted' })
     await run.dispose()
     await expectQuiescent(harness.handles)

@@ -1,13 +1,17 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  AssistantBlock, AssistantMessageNode, ConversationLocation, ConversationMatch,
-  ConversationNodeContext, ConversationNodeDefinition, PartialAssistant, RequestView,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import {
-  displayFailureMessage, emptyAssistantBlock, isTokenDelta, toAssistantBlock,
-  toAssistantBlocks,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  AssistantBlock, AssistantMessageNode, ConversationLocation,
+  ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
+  RequestView,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm'
+import { assistantStreamFirstTokenTime } from '@deepseek-ai/dsh-llm/assistant-stream'
+import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { trajectoryNode } from './trajectory-definition-common.ts'
+import type { TrajectoryPartialAssistant } from './trajectory-contract.ts'
+import {
+  displayFailure, emptyAssistantBlock, isTokenDelta, toAssistantBlock, toAssistantBlocks,
+} from './trajectory-event-projection.ts'
 
 /* jscpd:ignore-start -- Target-owned Definitions intentionally keep their event
  * state machines independent; see ../../../../../.agents/notes/implemented/
@@ -22,6 +26,7 @@ interface UsageValue {
 
 interface RetryValue {
   readonly message: string
+  readonly code?: string
   readonly retry: number
   readonly maxRetries?: number
   readonly delayMs: number
@@ -33,8 +38,8 @@ interface AssistantState {
   readonly startSeq: number
   readonly startTime: number
   readonly started: boolean
-  readonly sawChunk: boolean
   readonly blocks: readonly (AssistantBlock | undefined)[]
+  readonly visibleBlocks: number
   readonly firstVisibleSeq: number | undefined
   readonly firstVisibleTime: number | undefined
   readonly firstTokenTime: number | undefined
@@ -57,8 +62,8 @@ function initialState(
     startSeq,
     startTime,
     started,
-    sawChunk: false,
     blocks: [],
+    visibleBlocks: 0,
     firstVisibleSeq: undefined,
     firstVisibleTime: undefined,
     firstTokenTime: undefined,
@@ -73,12 +78,16 @@ function compactBlocks(blocks: readonly (AssistantBlock | undefined)[]): Assista
   return blocks.filter((block): block is AssistantBlock => block !== undefined)
 }
 
-function hasVisibleContent(blocks: readonly AssistantBlock[]): boolean {
-  return blocks.some((block) => {
-    if (block.kind === 'tool-call') return false
-    if (block.kind === 'text' || block.kind === 'reasoning') return block.text.trim() !== ''
-    return true
-  })
+function blockIsVisible(block: AssistantBlock | undefined): boolean {
+  if (block === undefined || block.kind === 'tool-call') return false
+  if (block.kind === 'text' || block.kind === 'reasoning') return block.text.trim() !== ''
+  return true
+}
+
+function countVisibleBlocks(blocks: readonly AssistantBlock[]): number {
+  let count = 0
+  for (const block of blocks) if (blockIsVisible(block)) count++
+  return count
 }
 
 function hasInterruptionEvidence(blocks: readonly AssistantBlock[]): boolean {
@@ -104,19 +113,28 @@ function addUsage(current: UsageValue | undefined, next: UsageValue): UsageValue
   }
 }
 
-function updateChunk(state: AssistantState, match: ConversationMatch): AssistantState {
-  if (match.event.type !== 'assistant/chunk') return state
-  const chunk = match.event.data.chunk
+function updateChunk(
+  state: AssistantState,
+  chunk: StreamChunk,
+  seq: number,
+  time: number,
+): AssistantState {
   if (chunk.type === 'usage') {
-    return { ...state, sawChunk: true, usage: addUsage(state.usage, chunk.usage) }
+    return { ...state, usage: addUsage(state.usage, chunk.usage) }
   }
   const blocks = [...state.blocks]
+  let changedIndex = -1
+  let previousVisible = false
   switch (chunk.type) {
     case 'block-start':
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(blocks[chunk.index])
       blocks[chunk.index] = emptyAssistantBlock(chunk.blockType)
       break
     case 'text-delta': {
       const previous = blocks[chunk.index]
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(previous)
       blocks[chunk.index] = {
         kind: 'text',
         text: (previous?.kind === 'text' ? previous.text : '') + chunk.text,
@@ -125,6 +143,8 @@ function updateChunk(state: AssistantState, match: ConversationMatch): Assistant
     }
     case 'reasoning-delta': {
       const previous = blocks[chunk.index]
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(previous)
       blocks[chunk.index] = {
         kind: 'reasoning',
         text: (previous?.kind === 'reasoning' ? previous.text : '') + chunk.text,
@@ -133,6 +153,8 @@ function updateChunk(state: AssistantState, match: ConversationMatch): Assistant
     }
     case 'tool-call-delta': {
       const previous = blocks[chunk.index]
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(previous)
       const base = previous?.kind === 'tool-call'
         ? previous
         : { kind: 'tool-call' as const, callId: '', name: '', argsRaw: '' }
@@ -145,22 +167,52 @@ function updateChunk(state: AssistantState, match: ConversationMatch): Assistant
       break
     }
     case 'block-end':
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(blocks[chunk.index])
       blocks[chunk.index] = toAssistantBlock(chunk.block)
       break
     default:
-      return { ...state, sawChunk: true }
+      return state
   }
-  const visible = hasVisibleContent(compactBlocks(blocks))
+  const visibleBlocks = state.visibleBlocks
+    - Number(previousVisible)
+    + Number(blockIsVisible(blocks[changedIndex]))
   return {
     ...state,
-    sawChunk: true,
     blocks,
-    ...(visible && state.firstVisibleSeq === undefined
-      ? { firstVisibleSeq: match.event.seq, firstVisibleTime: match.event.time }
+    visibleBlocks,
+    ...(visibleBlocks > 0 && state.firstVisibleSeq === undefined
+      ? { firstVisibleSeq: seq, firstVisibleTime: time }
       : {}),
     ...(isTokenDelta(chunk) && state.firstTokenTime === undefined
-      ? { firstTokenTime: match.event.time }
+      ? { firstTokenTime: time }
       : {}),
+  }
+}
+
+/** The Step retains its first token across live chunks and settled retry attempts. */
+function settleTiming(
+  state: AssistantState,
+  event: SessionEvent<'assistant/message' | 'assistant/attempt'>,
+): AssistantState {
+  return {
+    ...state,
+    firstTokenTime: state.firstTokenTime ?? assistantStreamFirstTokenTime(event.data.stream),
+  }
+}
+
+function settleMessage(
+  state: AssistantState,
+  match: ConversationMatch,
+  event: SessionEvent<'assistant/message'>,
+): AssistantState {
+  const blocks = toAssistantBlocks(event.data.message.content)
+  return {
+    ...settleTiming(state, event),
+    blocks,
+    visibleBlocks: countVisibleBlocks(blocks),
+    final: match,
+    usage: event.data.usage,
   }
 }
 
@@ -180,17 +232,15 @@ function fallbackState(context: ConversationNodeContext<AssistantState>): Assist
   let state: AssistantState | undefined
   for (const match of context.matches) {
     const event = match.event
-    if (event.type === 'assistant/chunk') {
+    if (event.type === 'assistant/live-chunk') {
       state ??= initialState(event.data.turn, event.data.step, event.seq, event.time, false)
-      state = updateChunk(state, match)
+      state = updateChunk(state, event.data.chunk, event.seq, event.time)
+    } else if (event.type === 'assistant/attempt') {
+      state ??= initialState(event.data.turn, event.data.step, event.seq, event.time, false)
+      state = settleTiming(state, event)
     } else if (event.type === 'assistant/message') {
       state ??= initialState(event.data.turn, event.data.step, event.seq, event.time, false)
-      state = {
-        ...state,
-        blocks: toAssistantBlocks(event.data.message.content),
-        final: match,
-        usage: state.usage ?? event.data.usage,
-      }
+      state = settleMessage(state, match, event)
     } else if (event.type === 'step/end' && state !== undefined) {
       state = { ...state, stepEnd: match }
     }
@@ -214,7 +264,7 @@ function finalNode(
       step: state.step,
       blocks: toAssistantBlocks(event.data.message.content),
       usage: event.data.usage,
-      provenance: {
+      providerMetadata: {
         provider: event.data.message.source.provider,
         model: event.data.message.source.model,
       },
@@ -227,8 +277,9 @@ function finalNode(
     }
   }
   const boundary = closedBoundary(context)
+  if (boundary === undefined) return undefined
   const blocks = compactBlocks(state.blocks)
-  if (boundary === undefined || !hasInterruptionEvidence(blocks)) return undefined
+  if (!hasInterruptionEvidence(blocks)) return undefined
   return {
     kind: 'assistant',
     seq: boundary.seq - 0.9,
@@ -246,9 +297,9 @@ function assistantRequest(
   boundary: { seq: number; time: number } | undefined,
 ): Extract<RequestView, { purpose: 'assistant' }> | undefined {
   if (!state.started) return undefined
-  const status = node !== undefined && node.interrupted !== true
-    ? 'complete'
-    : state.retry !== undefined || boundary !== undefined ? 'error' : 'running'
+  const status = node !== undefined
+    ? node.interrupted === true ? 'error' : 'complete'
+    : boundary !== undefined ? 'error' : 'running'
   return {
     purpose: 'assistant',
     startSeq: state.startSeq,
@@ -261,6 +312,7 @@ function assistantRequest(
       ? {}
       : {
         error: state.retry.message,
+        ...(state.retry.code === undefined ? {} : { errorCode: state.retry.code }),
         retry: state.retry.retry,
         ...(state.retry.maxRetries === undefined ? {} : { maxRetries: state.retry.maxRetries }),
         retryDelayMs: state.retry.delayMs,
@@ -269,7 +321,7 @@ function assistantRequest(
       ? {}
       : {
         resultSeq: node.seq,
-        ...(node.provenance === undefined ? {} : { provenance: node.provenance }),
+        ...(node.providerMetadata === undefined ? {} : { providerMetadata: node.providerMetadata }),
       }),
     ...(state.usage === undefined ? {} : { usage: state.usage }),
   }
@@ -283,8 +335,9 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
     if (event.type === 'step/start') {
       return { id: `${event.data.turn}:${event.data.step}`, role: 'start' }
     }
-    if (event.type === 'assistant/chunk'
+    if (event.type === 'assistant/live-chunk'
       || event.type === 'assistant/message'
+      || event.type === 'assistant/attempt'
       || event.type === 'llm/retry'
       || event.type === 'step/end') {
       return { id: `${event.data.turn}:${event.data.step}`, role: 'update' }
@@ -304,18 +357,15 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
     )
   },
   update: (context, match) => {
-    if (match.event.type === 'assistant/chunk') return updateChunk(context.state, match)
-    if (match.event.type === 'assistant/message') {
-      return {
-        ...context.state,
-        blocks: toAssistantBlocks(match.event.data.message.content),
-        final: match,
-        usage: context.state.usage ?? match.event.data.usage,
-      }
+    if (match.event.type === 'assistant/live-chunk') {
+      return updateChunk(context.state, match.event.data.chunk, match.event.seq, match.event.time)
     }
+    if (match.event.type === 'assistant/message') return settleMessage(context.state, match, match.event)
+    if (match.event.type === 'assistant/attempt') return settleTiming(context.state, match.event)
     if (match.event.type === 'step/end') return { ...context.state, stepEnd: match }
     if (match.event.type !== 'llm/retry') return context.state
     const data = match.event.data
+    const failure = displayFailure(data.failure)
     return {
       ...initialState(
         context.state.turn,
@@ -327,7 +377,8 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
       firstTokenTime: context.state.firstTokenTime,
       usage: context.state.usage,
       retry: {
-        message: displayFailureMessage(data.failure),
+        message: failure.message,
+        ...(failure.code === undefined ? {} : { code: failure.code }),
         retry: data.retry,
         ...(data.mode === 'normal' ? { maxRetries: data.maxRetries } : {}),
         delayMs: data.delayMs,
@@ -335,8 +386,8 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
     }
   },
   publication: (match) => {
-    if (match.event.type === 'step/start') return 'none'
-    if (match.event.type !== 'assistant/chunk') return 'immediate'
+    if (match.event.type === 'step/start' || match.event.type === 'assistant/attempt') return 'none'
+    if (match.event.type !== 'assistant/live-chunk') return 'immediate'
     const type = match.event.data.chunk.type
     return type === 'usage' || type === 'finish' ? 'none' : 'animation-frame'
   },
@@ -345,8 +396,16 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
     if (state === undefined) return null
     const node = finalNode(state, context)
     const boundary = closedBoundary(context)
-    const partial: PartialAssistant | null = node === undefined && boundary === undefined && state.sawChunk
-      ? { turn: state.turn, step: state.step, blocks: compactBlocks(state.blocks) }
+    const partial: TrajectoryPartialAssistant | null = node === undefined && boundary === undefined && state.blocks.length > 0
+      ? {
+        turn: state.turn,
+        step: state.step,
+        blocks: compactBlocks(state.blocks),
+        timing: {
+          stepStartTime: state.started ? state.startTime : null,
+          firstTokenTime: state.firstTokenTime ?? null,
+        },
+      }
       : null
     const request = assistantRequest(state, node, boundary)
     if (node === undefined && partial === null && request === undefined) return null
@@ -364,6 +423,7 @@ interface TurnEndState {
   readonly seq: number
   readonly time: number
   readonly error?: string
+  readonly errorCode?: string
 }
 
 const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
@@ -377,11 +437,15 @@ const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
       throw new Error('trajectory-turn-end start requires turn/end')
     }
     const reason = match.event.data.reason
+    const failure = reason.kind === 'error' ? displayFailure(reason.error) : undefined
     return {
       turn: match.event.data.turn,
       seq: match.event.seq,
       time: match.event.time,
-      ...(reason.kind === 'error' ? { error: displayFailureMessage(reason.error) } : {}),
+      ...(failure === undefined ? {} : {
+        error: failure.message,
+        ...(failure.code === undefined ? {} : { errorCode: failure.code }),
+      }),
     }
   },
   update: context => context.state,
@@ -392,6 +456,7 @@ const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
       turn: context.state.turn,
       time: context.state.time,
       ...(context.state.error === undefined ? {} : { error: context.state.error }),
+      ...(context.state.errorCode === undefined ? {} : { errorCode: context.state.errorCode }),
     }),
 }
 /* jscpd:ignore-end */
@@ -402,6 +467,6 @@ const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
  * @param ctx - Plugin context receiving the Definitions.
  */
 export function registerTrajectoryAssistantDefinition(ctx: Context): void {
-  ctx.conversationEvents.register(trajectoryAssistantDefinition)
-  ctx.conversationEvents.register(trajectoryTurnEndDefinition)
+  ctx.uiConversation.events.register(trajectoryAssistantDefinition)
+  ctx.uiConversation.events.register(trajectoryTurnEndDefinition)
 }

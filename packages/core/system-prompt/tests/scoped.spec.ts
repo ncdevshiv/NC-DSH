@@ -30,10 +30,10 @@ function scopeKeyOf(scope: Scope): ScopeKey {
 }
 
 describe('scoped sections', () => {
-  it('a scoped persona shadows deployment:persona for that scope only (either order)', async () => {
-    const ctx = await mount({ persona: 'You are the deployment.' })
+  it('a scoped persona shadows deployment:persona-prefix for that scope only (either order)', async () => {
+    const ctx = await mount({ personaPrefix: 'You are the deployment.' })
     const scope = await mintScope(ctx, 'child')
-    scope.ctx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: 'You run tests.' })
+    scope.ctx.systemPrompt.section({ name: 'deployment:persona-prefix', order: 0, text: 'You run tests.' })
 
     const scoped = renderPrompt(await ctx.systemPrompt.assemble({ scope: scopeKeyOf(scope) }))
     const global = renderPrompt(await ctx.systemPrompt.assemble())
@@ -82,7 +82,7 @@ describe('scoped sections', () => {
 
 describe('scoped variables', () => {
   it('a scoped variable shadows its global name-twin for that scope', async () => {
-    const ctx = await mount({ persona: 'Mode: {{mode}}.' })
+    const ctx = await mount({ personaPrefix: 'Mode: {{mode}}.' })
     const scope = await mintScope(ctx, 'child')
     ctx.systemPrompt.variable('mode', () => 'normal')
     scope.ctx.systemPrompt.variable('mode', () => 'strict')
@@ -103,7 +103,7 @@ describe('scoped variables', () => {
   })
 
   it('defers a scoped variable that replaces the last provider in its generation', async () => {
-    const ctx = await mount({ persona: 'Mode: {{mode}}.' })
+    const ctx = await mount({ personaPrefix: 'Mode: {{mode}}.' })
     const scope = await mintScope(ctx, 'child')
     const key = scopeKeyOf(scope)
     const calls: string[] = []
@@ -205,6 +205,27 @@ describe('scoped tool providers and toolOrder × restriction', () => {
 })
 
 describe('scoped assemble dispatch', () => {
+  it('refreshes through the same scoped providers and suppression as assembly', async () => {
+    const ctx = await mount()
+    try {
+      const scope = await mintScope(ctx, 'refresh')
+      let current = 'before'
+      ctx.systemPrompt.context({ name: 'fact', order: 0, text: 'global' })
+      scope.ctx.systemPrompt.context({ name: 'fact', order: 0, required: true, text: () => current })
+      scope.ctx.systemPrompt.context({ name: 'optional', order: 10, text: 'optional' })
+      const context = { scope: scopeKeyOf(scope) }
+      const accepted = await ctx.systemPrompt.assemble(context)
+      current = 'after'
+      const restore = scope.ctx.systemPrompt.suppressRuntimeContext()
+      expect(ctx.systemPrompt.refreshContext(accepted, context).contexts).toEqual([{ name: 'fact', text: 'after' }])
+      restore()
+      expect(ctx.systemPrompt.refreshContext(await ctx.systemPrompt.assemble()).contexts).toEqual([{ name: 'fact', text: 'global' }])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+
   it('an agent.ctx assemble listener shapes only its own scope\'s assemblies', async () => {
     const ctx = await mount()
     const scope = await mintScope(ctx, 'child')

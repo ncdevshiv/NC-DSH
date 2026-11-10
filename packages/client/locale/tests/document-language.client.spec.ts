@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply, inject } from '@deepseek-ai/dsh-client-locale/client'
@@ -27,22 +27,21 @@ async function bench(preference?: string) {
     ns: LOCALE_SETTINGS_NAMESPACE,
     schema: LocaleSettingsSchema.toJSON(),
     value: stored === undefined ? {} : { preference: stored },
-    applies: 'live' as const,
+    autoGenerate: true, applies: 'live' as const,
     secrets: [],
     revision,
   })
   const describeRpc = vi.fn(async () => ({
-    rpcId: 'locale-describe' as never,
-    result: { ok: true as const, value: { writable: true, hasDocument: true, namespaces: [namespace()] } },
+    ok: true as const,
+    value: { writable: true, hasDocument: true, namespaces: [namespace()] },
   }))
-  const mutate = vi.fn(async (request: { ops: { value: string }[] }) => {
-    stored = request.ops[0]!.value
+  const mutate = vi.fn(async (_ns: string, ops: { value: string }[]) => {
+    stored = ops[0]!.value
     revision += 1
-    return { rpcId: 'locale-mutate' as never, result: { ok: true as const, value: namespace() } }
+    return { ok: true as const, value: namespace() }
   })
-  ctx.provide('connection', { api: { settings: { describe: describeRpc, mutate } }, isLoopback: true } as never)
   // The settings transport and the forwarded-event port the plugin injects.
-  new TestRemote(ctx)
+  new TestRemote(ctx, { settings: { describe: describeRpc, mutate } })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
   await ctx.plugin({ inject: [...inject], apply }).await()
   return { ctx, locale: ctx.get('locale') as LocaleRuntime }
@@ -90,5 +89,29 @@ describe('document language', () => {
     const { locale } = await bench('en')
     await vi.waitFor(() => { expect(locale.getLocale().active).toBe('en') })
     await vi.waitFor(() => { expect(langOf()).toBe('en') })
+  })
+
+  it('uses an external locale definition for the document language', async () => {
+    const { locale } = await bench()
+    locale.addLanguage({ id: 'pt-BR', label: 'Português', fallback: 'en' })
+    locale.setLocale('pt-BR')
+    expect(langOf()).toBe('pt-BR')
+  })
+
+  it('does not rewrite the document language for catalog changes with the same active locale', async () => {
+    const { locale } = await bench()
+    const observer = new MutationObserver(() => {})
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] })
+    try {
+      const remove = locale.addLanguage({ id: 'ja', label: '日本語', fallback: 'en' })
+      expect(observer.takeRecords()).toHaveLength(0)
+      remove()
+      expect(observer.takeRecords()).toHaveLength(0)
+      locale.setLocale('en')
+      expect(observer.takeRecords()).toHaveLength(1)
+      expect(langOf()).toBe('en')
+    } finally {
+      observer.disconnect()
+    }
   })
 })

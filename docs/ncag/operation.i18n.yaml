@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for operation.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/operation.md
+/:
+  en: f545b3f4f402697c
+  zh: 09e06d2e5d60e2f3
+/nc-ag-operation:
+  en: 3bdd38138ffb0466
+  zh: 29e0f98b731a018c
+/nc-ag-operation/summary:
+  en: 423f9bf52496ae1f
+  zh: 6655307206a9cd6f
+/nc-ag-operation/table-of-contents:
+  en: e7d910ae185f10fc
+  zh: ba87f19d1922adb0
+/nc-ag-operation/start-and-stop:
+  en: 97729e4a1f418232
+  zh: 90c05a079f96708d
+/nc-ag-operation/api-reference:
+  en: 5c5e79f4b8e010c7
+  zh: d49f2a407d7e6608
+/nc-ag-operation/operator-procedures:
+  en: baa049603f9da4bf
+  zh: c840aab175fe307e
+/nc-ag-operation/budget-handling:
+  en: 16ac5d6f1f540934
+  zh: 34c6090e5e0d6e90
+/nc-ag-operation/recovery-procedures:
+  en: abcf544463363f7f
+  zh: 174de0c80f7a9641
+/nc-ag-operation/health-checks:
+  en: 1d8f10bf32224e46
+  zh: ff6896f86d2b04c0

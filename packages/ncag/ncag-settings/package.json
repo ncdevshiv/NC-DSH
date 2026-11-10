@@ -1,0 +1,40 @@
+{
+  "name": "@deepseek-ai/dsh-ncag-settings",
+  "description": "Host settings namespace for NC-AG: per-tier model overrides, price overrides and optional limits edited from the Web settings tab",
+  "version": "0.2.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/ncag/ncag-settings"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-settings": "workspace:*",
+    "@deepseek-ai/dsh-ncag-core": "workspace:*",
+    "@deepseek-ai/dsh-ncag-orchestrator": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-settings": "workspace:*",
+    "@deepseek-ai/dsh-ncag-core": "workspace:*",
+    "@deepseek-ai/dsh-ncag-orchestrator": "workspace:*"
+  }
+}

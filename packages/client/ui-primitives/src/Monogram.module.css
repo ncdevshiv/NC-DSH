@@ -1,0 +1,5 @@
+/* Fixed mark geometry: the edge and the letterform arrive as custom properties
+ * from the render site, so every size shares one palette and one shape. A
+ * rounded square, not the account avatar's circle — this marks a subject the
+ * label beside it already names. */
+.monogram { display: inline-flex; align-items: center; justify-content: center; width: var(--monogram-edge); height: var(--monogram-edge); border-radius: 6px; corner-shape: round; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: var(--monogram-letter); font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; user-select: none; }

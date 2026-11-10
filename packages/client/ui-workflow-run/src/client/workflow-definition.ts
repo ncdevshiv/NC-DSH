@@ -1,7 +1,7 @@
 import type {
-  ChatConversationViewNode, ConversationLocation, ConversationNodeContext,
-  ConversationNodeDefinition,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  ConversationLocation, ConversationNodeContext, ConversationNodeDefinition,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
   ToolWorkflowAgentEndData, ToolWorkflowAgentStartData,
@@ -34,7 +34,7 @@ export interface WorkflowRunChatData {
   readonly phases: readonly WorkflowRunPhaseData[]
 }
 
-declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+declare module '@deepseek-ai/dsh-client-ui-chat/client' {
   interface ChatNodeDataMap {
     /** Durable top-level workflow run and all members that actually started. */
     'workflow-run': WorkflowRunChatData
@@ -80,11 +80,16 @@ function statusFromOutcome(outcome: WorkflowAgentOutcome): WorkflowRunStatus {
   }
 }
 
-function locationClosed(location: ConversationLocation): boolean {
-  if (location.kind === 'step') {
-    return location.step.status === 'closed' || location.turn.status === 'closed'
-  }
-  return location.kind === 'turn' && location.turn.status === 'closed'
+/**
+ * A foreground run writes its run-end before its Tool Step ends, and a
+ * background run outlives that Step, so an ordinary Step or Turn closure says
+ * nothing about liveness. Only a Turn closed after a crash or at a fork
+ * boundary proves that a run without run-end stopped.
+ */
+function turnAbandoned(location: ConversationLocation): boolean {
+  if (location.kind !== 'step' && location.kind !== 'turn') return false
+  const reason = location.turn.end?.data.reason.kind
+  return reason === 'interrupted' || reason === 'forked'
 }
 
 function projectWorkflow(
@@ -93,7 +98,7 @@ function projectWorkflow(
 ): WorkflowRunChatData {
   const state = context.state as WorkflowState
   const interrupted = state.stopReason === undefined
-    && locationClosed(location)
+    && turnAbandoned(location)
   const phases = new Map<string, { phase: string | null; members: WorkflowRunMemberData[] }>()
   for (const member of state.members) {
     const phase = member.phase === undefined ? null : member.phase

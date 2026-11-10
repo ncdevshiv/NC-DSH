@@ -1,0 +1,36 @@
+# The dsh-nc-tools bundle patch: the harness's built-in filesystem tools, backed
+# by the nc-tools MCP server.
+#
+# It replaces ONE row: the `ctx.fs` provider. Every model-facing filesystem
+# tool (`read`, `write`, `edit`, `read_image`) is written against the
+# `ctx.fs` seam, so swapping the provider swaps the implementation WITHOUT
+# changing a single tool schema, prompt, or policy. The tools become
+# nc-tools' tools: occurrence-exact edits, atomic writes, a content-hash
+# freshness guard, and byte-exact binary reads.
+#
+# The server is one `nc-tools-mcp` process per session. Point `command` at the
+# binary (or leave the default and put it on PATH), and set
+# `NCTOOLS_MCP_EXE` to override the default name.
+#
+# What this bundle does NOT replace: `glob` and `grep` still run the packaged
+# ripgrep binary. They are spawn-backed discovery that deliberately does not
+# extend the `ctx.fs` provider contract, so no filesystem backend can supply
+# them. The shell tools (`bash`, `pwsh`) also stay: nc-tools has no shell by
+# design, and its process surface is `proc.spawn` with typed argv.
+
+- id: fs-sandbox
+  name: '@deepseek-ai/dsh-fs-mcp'
+  config:
+    # The nc-tools MCP server. The default name is the binary as `install-bin`
+    # deploys it; override with NCTOOLS_MCP_EXE for a different path.
+    command: !!js process.env.NCTOOLS_MCP_EXE ?? 'nc-tools-mcp'
+    args: []
+    # The base for relative paths when a session supplies no cwd of its own.
+    # A session's own working directory always wins: the tools pass it with
+    # every resolve.
+    workspaceRoot: !!js process.cwd()
+    # One MCP tool call's budget. A large read is several calls (the server
+    # pages by window), so this is per call, not per operation.
+    toolCallTimeoutMs: 60000
+    # How often the watcher polls the server for a change.
+    watchPollMs: 500

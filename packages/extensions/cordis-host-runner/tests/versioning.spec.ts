@@ -28,7 +28,10 @@ describe('dynamic Plugin versions', () => {
       currentPackageId: first.packageId,
       nextPackageId: second.packageId,
     })
-    expect(runner.inventory()[0]?.activeRun).toBeUndefined()
+    // The broken update never reached activation, so v1 is still serving: the
+    // replacement is evaluated before the previous run is retracted, and a failed
+    // self-edit leaves the working version running instead of nothing at all.
+    expect(runner.inventory()[0]?.activeRun).toMatchObject({ packageId: first.packageId })
 
     await expect(runner.run(AGENT_A, first.pluginId, first.packageId, 'run')).resolves.toMatchObject({ ok: true })
     expect(runner.inventory()[0]).toMatchObject({

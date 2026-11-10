@@ -15,7 +15,7 @@ The hooks subsystem makes event producer/consumer topology and interception poin
 
 ## Decision
 
-Add generated relationship graph docs, indexed at [docs/graph-atlas.md](../../../../docs/graph-atlas.md), produced by focused generators and verified by `pnpm run verify-doc-graphs` / existing catalog freshness checks as part of `doc-sync`.
+Add generated relationship graph docs, indexed at [docs/graph-atlas.md](../../../../docs/graph-atlas.md), produced by focused generators and verified by `bun run verify-doc-graphs` / existing catalog freshness checks as part of `doc-sync`.
 
 The index is a relationship layer above the existing catalogs. It does not replace exact references; instead, it links to them and explains how their pieces fit together.
 

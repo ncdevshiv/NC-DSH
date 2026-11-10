@@ -2,36 +2,10 @@
  * plugin before the loader roster activates. */
 
 html,
-body {
-  height: 100%;
-  margin: 0;
-  min-height: 100%;
-}
-
+body,
 #root {
   height: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Spectrum Provider renders a wrapping div with height:auto that breaks the
-   100% chain (Provider -> AppFrame height:100%). Force it to fill #root so
-   grid/flex layouts (AppFrame, ConversationRoot) receive a definite height.
-   Electron's viewport height varies with window chrome/DPI; 100dvh keeps the
-   shell at the real window height even when 100% collapses. */
-#root > div {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-#root > div > div {
-  flex: 1 1 auto;
-  min-height: 0;
+  margin: 0;
 }
 
 body {
@@ -54,6 +28,75 @@ body {
   -moz-osx-font-smoothing: grayscale;
   color: var(--dsw-alias-label-primary, #0f1115);
   background: var(--dsw-alias-bg-base, #fff);
+  /* Supporting browsers insert CJK/Latin spacing in inherited prose. */
+  text-autospace: normal;
+}
+
+/* macOS desktop (the Electron preload sets data-platform): the window's
+   sidebar vibrancy shows only through a transparent page background. */
+html[data-platform='darwin'],
+html[data-platform='darwin'] body {
+  background: transparent;
+}
+
+/* Menu backings paint below page content but above the native vibrancy. */
+html[data-platform='darwin'] body {
+  isolation: isolate;
+}
+
+/* macOS desktop: the one drag declaration. A chrome row marks itself in markup
+   (`data-window-drag`) and its own box becomes its draggable geometry, so no fixed
+   band has to match any row's height; the ui-theme app-region gate's CHROME_ROWS
+   manifest is the list of rows that must carry the mark. Electron composes
+   app-regions from geometry, not hit testing, so a surface covering a row would
+   otherwise drag the window instead of receiving clicks; every covering overlay
+   portals to document.body beside #root, which also puts it after every drag row
+   in document order, and one rule subtracts them all. */
+html[data-platform='darwin'] [data-window-drag] {
+  -webkit-app-region: drag;
+}
+
+/* One-frame app-region pulse that forces Electron to recollect the window's drag
+   rects (electron#32341): a change to a computed app-region value is what dirties
+   them. The shell's window drag watcher (window-drag/recall.ts) sets this
+   attribute on the body for each frame in which a marked row's box moved, and
+   clears it on the frame that finds the geometry settled. The box it subtracts
+   is the body's own: the row marks inside still declare drag and win over it in
+   document order, so the pulse changes nothing about the composed surface — it
+   only makes Electron collect it again. */
+html[data-platform='darwin'] [data-window-drag-recall] {
+  -webkit-app-region: no-drag;
+}
+
+html[data-platform='darwin'] body > :not(#root) {
+  -webkit-app-region: no-drag;
+}
+
+/* Inside #root, interactive controls and raised surfaces (dialogs, menus)
+   subtract themselves from any drag row they overlap, wherever they render.
+   Electron composes app-regions from geometry in document order, so a drag rule
+   must sit on a chrome row that precedes the overlays covering it — never on a
+   content container, which would override every overlay mounted earlier in the
+   DOM. One selector on the native elements, ARIA roles, and tabindexed custom
+   widgets replaces per-component no-drag opt-outs. */
+html[data-platform='darwin'] :is(
+  button, a, input, select, textarea, summary, [contenteditable='true'], [tabindex],
+  [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox'], [role='tooltip'],
+  [role='button'], [role='link'], [role='tab'], [role='menuitem'], [role='menuitemcheckbox'],
+  [role='menuitemradio'], [role='option'], [role='checkbox'], [role='radio'], [role='switch'],
+  [role='slider'], [role='combobox'], [role='textbox']
+) {
+  -webkit-app-region: no-drag;
+}
+
+code,
+pre,
+[data-diff],
+[data-read],
+[data-search],
+[data-terminal] {
+  /* Literal payloads retain source spacing and column alignment. */
+  text-autospace: no-autospace;
 }
 
 /* Form controls don't inherit the body font (UA sheets pin their families —
@@ -64,36 +107,4 @@ input,
 select,
 textarea {
   font-family: inherit;
-}
-
-/* Desktop window chrome (Electron shell: titleBarStyle 'hidden' +
-   titleBarOverlay). The OS draws only the native caption buttons over the
-   page; the app's own top chrome — sidebar brand row, session header,
-   details header — is the draggable title bar. Surfaces opt in with
-   data-dsh-drag-region and interactive controls inside them stay clickable
-   through the descendant no-drag rule. apps/web marks the shell with
-   html[data-dsh-desktop]; browsers never set the attribute and stay
-   untouched. The caption-inset custom properties reserve the native
-   buttons' width on whichever header currently reaches the window's right
-   edge: the session header while the details column is closed, the details
-   header while it is open. env() resolves only while an overlay is active
-   and reports the full window width in fullscreen, so both insets collapse
-   to 0 there. */
-html[data-dsh-desktop] [data-dsh-drag-region] {
-  -webkit-app-region: drag;
-}
-
-html[data-dsh-desktop] [data-dsh-drag-region] :is(button, a, input, textarea, select, label, [data-dsh-no-drag]) {
-  -webkit-app-region: no-drag;
-}
-
-html[data-dsh-desktop] [data-dsh-frame] {
-  --dsh-caption-inset: calc(100vw - env(titlebar-area-width, 100vw));
-}
-
-/* With the details column open the session header no longer touches the
-   window's right edge; the reservation moves to the details header. */
-html[data-dsh-desktop] [data-dsh-frame]:not([data-details-collapsed]) {
-  --dsh-caption-inset: 0px;
-  --dsh-details-caption-inset: calc(100vw - env(titlebar-area-width, 100vw));
 }

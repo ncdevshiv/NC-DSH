@@ -1,19 +1,21 @@
 /**
  * The `read_image` tool over the REAL local filesystem and attachment store:
- * extension routing, the strict image-modality gate (every refusal arm),
- * durable commit + image-block rendering, attachment admission failures, and
- * the regression that `read` keeps its text-only contract.
+ * extension routing, extension-less content sniffing (attachment object paths
+ * included), the strict image-modality gate (every refusal arm), durable
+ * commit + image-block rendering, attachment admission failures, and the
+ * regression that `read` keeps its text-only contract.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
-import type { CodeRunRequest, CodeRunResult } from '@deepseek-ai/dsh-code-runtime'
-import { CallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
+import type { PtcRunRequest, PtcRunResult } from '@deepseek-ai/dsh-ptc-runtime'
+import { ToolCallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { RUN_CODE_NAME } from '@deepseek-ai/dsh-tools'
 import type { Config as ToolConfig } from '@deepseek-ai/dsh-tools'
@@ -28,12 +30,15 @@ import {
   formatImageReadOutput,
   imageMediaTypeForPath,
   imageRefFromValue,
+  sniffImageMediaType,
 } from '../src/read-image.ts'
 
 /** 1x1 red PNG (valid signature, IHDR, IDAT). */
 const PNG_1X1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64')
 /** 3x3 red PNG used to trip a tiny configured pixel limit. */
 const PNG_3X3 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAIAAADZSiLoAAAAEElEQVR4nGP4z8AAQQxYWACPjgj4kWPEuQAAAABJRU5ErkJggg==', 'base64')
+/** 1x1 red GIF (GIF89a). */
+const GIF_1X1 = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
 
 const testToolSignal = new AbortController().signal
 
@@ -65,13 +70,15 @@ class CatalogAdapter extends LlmAdapter {
   }
 }
 
-/** In-process Code Mode seam fake that invokes the real registry bindings. */
-class FakeRuntime extends CodeRuntime {
+/** In-process PTC mode seam fake that invokes the real registry bindings. */
+class FakeRuntime extends PtcRuntime {
+  resolve(request: import('@deepseek-ai/dsh-ptc-runtime').PtcRunRequest): import('@deepseek-ai/dsh-ptc-runtime').PtcRunSpec { return { ...request, cwd: request.cwd ?? process.cwd(), timeoutMs: request.timeoutMs ?? 120_000 } }
+
   readonly language = 'typescript'
   readonly isolation = 'fake'
-  behavior: (request: CodeRunRequest) => Promise<CodeRunResult> = () => Promise.resolve({ logs: [] })
+  behavior: (request: PtcRunRequest) => Promise<PtcRunResult> = () => Promise.resolve({ logs: [] })
 
-  run(request: CodeRunRequest): Promise<CodeRunResult> {
+  run(request: PtcRunRequest): Promise<PtcRunResult> {
     return this.behavior(request)
   }
 }
@@ -89,6 +96,7 @@ afterEach(async () => {
 })
 
 interface SetupOptions {
+  toolFs?: ToolFs.Config
   models?: LlmModelInfo[]
   resolvedModels?: LlmModelInfo[]
   attachments?: boolean
@@ -99,9 +107,11 @@ interface SetupOptions {
 
 async function setup(options: SetupOptions = {}) {
   const ctx = new Context()
+  onTestFinished(async () => { await ctx.fiber.dispose() })
+  provideWorkingDirectoryFixture(ctx)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime, { mode: options.toolMode ?? 'native' })
-  if (options.toolMode === 'code' || options.toolMode === 'both') {
+  if (options.toolMode === 'ptc') {
     await ctx.plugin(FakeRuntime)
   }
   await ctx.plugin(LocalFileSystem, { cwd: dir })
@@ -117,17 +127,18 @@ async function setup(options: SetupOptions = {}) {
       { provider: 'visual', id: 'legacy-model', name: 'Legacy' },
     ], options.resolvedModels))
   }
-  await ctx.plugin(ToolFs)
+  await ctx.plugin(ToolFs, options.toolFs ?? {})
   return ctx
 }
 
 /** A fake calling agent pinned to one routed provider/model. */
-function agentOn(model: string | undefined, provider = 'visual'): object {
+function agentOn(model: string | undefined, provider = 'visual', messages: readonly Message[] = []): object {
   return {
     options: {},
     session: {
       header: { cwd: dir },
       requestHeader: () => (model === undefined ? undefined : { config: { provider, model } }),
+      deriveMessages: () => [...messages],
       append: () => undefined,
     },
   }
@@ -137,7 +148,7 @@ let callCounter = 0
 function call(ctx: Context, name: string, args: unknown, agent?: object) {
   return ctx.tools.execute({
     signal: testToolSignal,
-    callId: CallId(`img-call-${++callCounter}`),
+    callId: ToolCallId(`img-call-${++callCounter}`),
     name,
     arguments: args,
     ...agent ? { agent: agent as never } : {},
@@ -164,11 +175,37 @@ describe('imageMediaTypeForPath', () => {
   })
 })
 
+function ascii(value: string): Uint8Array {
+  return new TextEncoder().encode(value)
+}
+
+describe('sniffImageMediaType', () => {
+  it('identifies each supported container from its complete signature', () => {
+    expect(sniffImageMediaType(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]))).toBe('image/png')
+    expect(sniffImageMediaType(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg')
+    expect(sniffImageMediaType(ascii('GIF87a...'))).toBe('image/gif')
+    expect(sniffImageMediaType(ascii('GIF89a...'))).toBe('image/gif')
+    expect(sniffImageMediaType(ascii('RIFF\0\0\0\0WEBPVP8 '))).toBe('image/webp')
+  })
+
+  it('returns undefined for other bytes, incomplete signatures, and non-WebP RIFF containers', () => {
+    expect(sniffImageMediaType(new Uint8Array())).toBeUndefined()
+    expect(sniffImageMediaType(ascii('plain text'))).toBeUndefined()
+    expect(sniffImageMediaType(Uint8Array.from([0x89, 0x50, 0x4e]))).toBeUndefined()
+    expect(sniffImageMediaType(Uint8Array.from([0xff, 0xd8]))).toBeUndefined()
+    expect(sniffImageMediaType(ascii('GIF90a'))).toBeUndefined()
+    expect(sniffImageMediaType(ascii('RIFF\0\0\0\0WAVE'))).toBeUndefined()
+    expect(sniffImageMediaType(ascii('RIFF\0\0\0'))).toBeUndefined()
+  })
+})
+
 describe('imageRefFromValue', () => {
   it('re-brands with and without the optional display name', () => {
     const base = { attachmentId: 'sha256:00', mediaType: 'image/png' as const, bytes: 1, width: 1, height: 1 }
     expect(imageRefFromValue(base)).toEqual(base)
     expect(imageRefFromValue({ ...base, name: 'a.png' })).toEqual({ ...base, name: 'a.png' })
+    expect(imageRefFromValue({ ...base, originalDimensions: { width: 4, height: 2 } }))
+      .toEqual({ ...base, originalDimensions: { width: 4, height: 2 } })
   })
 })
 
@@ -188,7 +225,7 @@ describe('read_image happy path', () => {
     expect(image.attachment.bytes).toBe(PNG_1X1.length)
     expect(image.attachment.name).toBe('red.png')
     expect(image.attachment.attachmentId).toMatch(/^sha256:[0-9a-f]{64}$/)
-    expect(text(result)).toBe(formatImageReadOutput(join(dir, 'red.png'), {
+    expect(text(result)).toBe(formatImageReadOutput(await realpath(join(dir, 'red.png')), {
       attachmentId: image.attachment.attachmentId,
       mediaType: 'image/png',
       bytes: PNG_1X1.length,
@@ -201,6 +238,37 @@ describe('read_image happy path', () => {
     if (attachments === undefined) throw new Error('expected the attachment service')
     const stored = await attachments.readImage(image.attachment)
     expect(Buffer.from(stored.data)).toEqual(PNG_1X1)
+  })
+
+  it('commits a GIF durably and renders the normalized envelope beside an image block', async () => {
+    await writeFile(join(dir, 'red.gif'), GIF_1X1)
+    const ctx = await setup()
+    const result = await readImage(ctx, { file_path: 'red.gif' }, agentOn('vision-model'))
+
+    expect(result.isError).toBe(false)
+    expect(result.content).toHaveLength(2)
+    const image = result.content[1] as { type: string; attachment: ImageAttachmentRef }
+    expect(image.type).toBe('image')
+    // Normalization re-encodes this transparent 1x1 GIF as WebP: the bytes do
+    // not pass through unchanged, only the source file name survives.
+    expect(image.attachment.mediaType).toBe('image/webp')
+    expect(image.attachment.width).toBe(1)
+    expect(image.attachment.height).toBe(1)
+    expect(image.attachment.bytes).toBe(72)
+    expect(image.attachment.name).toBe('red.gif')
+    expect(image.attachment.attachmentId).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(text(result)).toBe(formatImageReadOutput(await realpath(join(dir, 'red.gif')), {
+      attachmentId: image.attachment.attachmentId,
+      mediaType: 'image/webp',
+      bytes: 72,
+      width: 1,
+      height: 1,
+    }))
+
+    const attachments = ctx.get('attachments')
+    if (attachments === undefined) throw new Error('expected the attachment service')
+    const stored = await attachments.readImage(image.attachment)
+    expect(Buffer.from(stored.data).subarray(0, 4).toString()).toBe('RIFF')
   })
 
   it('emits fs/observed for the read image', async () => {
@@ -223,10 +291,10 @@ describe('read_image happy path', () => {
     expect(result.isError).toBe(false)
   })
 
-  it('forwards a nested Code Mode image through the outer run_code context', async () => {
+  it('forwards a nested PTC mode image through the outer run_code context', async () => {
     await writeFile(join(dir, 'red.png'), PNG_1X1)
-    const ctx = await setup({ toolMode: 'code' })
-    const runtime = ctx.codeRuntime as FakeRuntime
+    const ctx = await setup({ toolMode: 'ptc' })
+    const runtime = ctx.ptcRuntime as FakeRuntime
     runtime.behavior = async (request) => {
       const value = await request.bindings[0]!.functions.read_image!({ file_path: 'red.png' })
       return { logs: [], value }
@@ -234,8 +302,8 @@ describe('read_image happy path', () => {
 
     const result = await call(ctx, RUN_CODE_NAME, {
       code: 'return await tools.read_image({ file_path: "red.png" })',
-      description: 'Read the image through Code Mode',
-    }, agentOn('vision-model'))
+      description: 'Read the image through PTC mode',
+    }, { ...agentOn('vision-model'), ctx })
 
     expect(result.isError).toBe(false)
     expect(result.content.every(block => block.type === 'text')).toBe(true)
@@ -248,6 +316,143 @@ describe('read_image happy path', () => {
       type: 'image',
       attachment: { mediaType: 'image/png', width: 1, height: 1 },
     })
+  })
+})
+
+/** The mounted attachment service, asserted present for direct store calls. */
+function mountedStore(ctx: Context): AttachmentStore {
+  const attachments = ctx.get('attachments')
+  if (attachments === undefined) throw new Error('expected the attachment service')
+  return attachments
+}
+
+/** The host object path behind a reference, asserted present for the local store. */
+function objectPathOf(attachments: AttachmentStore, ref: ImageAttachmentRef): string {
+  const hostPath = attachments.imageHostPath(ref)
+  if (hostPath === undefined) throw new Error('expected a host-file-backed store')
+  return hostPath
+}
+
+describe('extension-less paths', () => {
+  it('reads a normalized attachment object path directly and dedups to the stored reference', async () => {
+    await writeFile(join(dir, 'red.png'), PNG_1X1)
+    const ctx = await setup()
+    const first = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
+    expect(first.isError).toBe(false)
+    const ref = (first.content[1] as { attachment: ImageAttachmentRef }).attachment
+    const attachments = mountedStore(ctx)
+    const objectPath = objectPathOf(attachments, ref)
+
+    const second = await readImage(ctx, { file_path: objectPath }, agentOn('vision-model'))
+    expect(second.isError).toBe(false)
+    const reread = (second.content[1] as { attachment: ImageAttachmentRef }).attachment
+    expect(reread.attachmentId).toBe(ref.attachmentId)
+    expect(reread.mediaType).toBe('image/png')
+    expect(text(second)).toContain(`<path>${await realpath(objectPath)}</path>`)
+  })
+
+  it('reads an ordinary extension-less image file by sniffing its content', async () => {
+    await writeFile(join(dir, 'avatar'), PNG_1X1)
+    const ctx = await setup()
+    const result = await readImage(ctx, { file_path: 'avatar' }, agentOn('vision-model'))
+    expect(result.isError).toBe(false)
+    const image = result.content[1] as { attachment: ImageAttachmentRef }
+    expect(image.attachment.mediaType).toBe('image/png')
+    expect(image.attachment.name).toBe('avatar')
+  })
+
+  it('pins the trailing-dot refusal and reads a dotfile through sniffing', async () => {
+    await writeFile(join(dir, '.hidden'), PNG_1X1)
+    const ctx = await setup()
+    const trailingDot = await readImage(ctx, { file_path: 'foo.' }, agentOn('vision-model'))
+    expect(trailingDot.isError).toBe(true)
+    expect(text(trailingDot)).toContain('cannot read "foo.": the . extension does not declare a supported image format')
+
+    const dotfile = await readImage(ctx, { file_path: '.hidden' }, agentOn('vision-model'))
+    expect(dotfile.isError).toBe(false)
+    const image = dotfile.content[1] as { attachment: ImageAttachmentRef }
+    expect(image.attachment.mediaType).toBe('image/png')
+    expect(image.attachment.name).toBe('.hidden')
+  })
+
+  it('refuses extension-less bytes that are not a supported image', async () => {
+    await writeFile(join(dir, 'notes'), 'plain text, not an image')
+    const ctx = await setup()
+    const result = await readImage(ctx, { file_path: 'notes' }, agentOn('vision-model'))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain(`cannot read "${join(dir, 'notes')}": the file content is not a supported image format`)
+  })
+
+  it('explains extension-less bytes that sniff as an image but do not decode', async () => {
+    await writeFile(join(dir, 'broken'), PNG_1X1.subarray(0, 16))
+    const ctx = await setup()
+    const result = await readImage(ctx, { file_path: 'broken' }, agentOn('vision-model'))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('do not decode as a supported PNG/JPEG/WebP/GIF image')
+  })
+
+  it('applies the deployment media-type policy to the sniffed format', async () => {
+    /** Store whose deployment accepts JPEG only; sniffed PNG bytes must refuse before any save. */
+    class JpegOnlySniffStore extends AttachmentStore {
+      readonly imageLimits: ImageAttachmentLimits = Object.freeze({
+        maxImageBytes: 1024,
+        maxImagesPerMessage: 1,
+        maxMessageImageBytes: 1024,
+        maxImagePixels: 100,
+        maxImageDimension: 2000,
+        mediaTypes: Object.freeze(['image/jpeg'] as const),
+      })
+
+      validateImage(_input: SaveImageAttachment): Promise<void> {
+        throw new Error('unreachable: the sniffed-format policy refuses before validation')
+      }
+
+      saveImage(_input: SaveImageAttachment): Promise<ImageAttachmentRef> {
+        throw new Error('unreachable: the sniffed-format policy refuses before save')
+      }
+
+      readImage(_ref: ImageAttachmentRef): Promise<StoredImageAttachment> {
+        throw new Error('unreachable in this test')
+      }
+    }
+    await writeFile(join(dir, 'avatar'), PNG_1X1)
+    const ctx = await setup({ attachments: false })
+    await ctx.plugin(JpegOnlySniffStore)
+    const result = await readImage(ctx, { file_path: 'avatar' }, agentOn('vision-model'))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('image/png images are not accepted by this deployment')
+  })
+
+  it('names a signature/decoded-format disagreement on an extension-less path', async () => {
+    /** Store whose admission reports a media-type mismatch; the tool cannot blame an extension. */
+    class MismatchStore extends AttachmentStore {
+      readonly imageLimits: ImageAttachmentLimits = Object.freeze({
+        maxImageBytes: 1024,
+        maxImagesPerMessage: 1,
+        maxMessageImageBytes: 1024,
+        maxImagePixels: 100,
+        maxImageDimension: 2000,
+        mediaTypes: Object.freeze(['image/png'] as const),
+      })
+
+      validateImage(_input: SaveImageAttachment): Promise<void> {
+        return Promise.resolve()
+      }
+
+      saveImage(_input: SaveImageAttachment): Promise<ImageAttachmentRef> {
+        throw new AttachmentError('Declared image type does not match its bytes.', 'IMAGE_TYPE_MISMATCH')
+      }
+
+      readImage(_ref: ImageAttachmentRef): Promise<StoredImageAttachment> {
+        throw new Error('unreachable in this test')
+      }
+    }
+    await writeFile(join(dir, 'sniffed'), PNG_1X1)
+    const ctx = await setup({ attachments: false })
+    await ctx.plugin(MismatchStore)
+    const result = await readImage(ctx, { file_path: 'sniffed' }, agentOn('vision-model'))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('the file signature claims image/png, but the bytes decode as a different image format')
   })
 })
 
@@ -306,12 +511,13 @@ describe('argument and service preconditions', () => {
 
     const nonImage = await readImage(ctx, { file_path: 'notes.txt' }, agentOn('vision-model'))
     expect(nonImage.isError).toBe(true)
-    expect(text(nonImage)).toContain('only accepts PNG/JPEG/WebP/GIF paths')
+    expect(text(nonImage)).toContain('the .txt extension does not declare a supported image format')
   })
 
-  it('refuses when no attachment service is mounted', async () => {
+  it.each([{}, { toolFs: { read: false, write: false, edit: false } }] satisfies SetupOptions[])
+  ('refuses when no attachment service is mounted: %j', async (config) => {
     await writeFile(join(dir, 'red.png'), PNG_1X1)
-    const ctx = await setup({ attachments: false })
+    const ctx = await setup({ ...config, attachments: false })
     expect(ctx.tools.get('read_image')).toBeUndefined()
     expect(ctx.tools.schemas().map(schema => schema.name)).not.toContain('read_image')
     const result = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
@@ -370,10 +576,10 @@ describe('image admission failures', () => {
     expect(text(result)).toContain('rename the file to match its actual format if it is PNG/JPEG/WebP/GIF, or convert it to one of those formats')
   })
 
-  it('fails with FS_TOO_LARGE before reading a file past maxImageBytes', async () => {
-    await writeFile(join(dir, 'red.png'), PNG_1X1)
+  it('caps an extension-less read at maxImageBytes before format detection', async () => {
+    await writeFile(join(dir, 'red'), PNG_1X1)
     const ctx = await setup({ storeConfig: { maxImageBytes: PNG_1X1.length - 1 } })
-    const result = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
+    const result = await readImage(ctx, { file_path: 'red' }, agentOn('vision-model'))
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('exceeds')
   })
@@ -438,6 +644,20 @@ describe('image admission failures', () => {
     expect(storageFault.isError).toBe(true)
     expect(text(storageFault)).toContain('Unable to persist image attachment.')
 
+    FailingStore.failure = new AttachmentError(
+      'The 16-bit PNG could not be converted to the normalized 8-bit sRGB form.',
+      'ATTACHMENT_WRITE_FAILED',
+    )
+    const sixteenBit = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
+    expect(text(sixteenBit)).toContain(
+      `cannot read "${join(dir, 'red.png')}": the 16-bit PNG could not be converted to the normalized 8-bit sRGB form; convert it to an 8-bit PNG/JPEG/WebP and retry`,
+    )
+
+    FailingStore.failure = new AttachmentError('Image cannot be encoded within the configured normalized-image byte cap.', 'IMAGE_TOO_LARGE')
+    const overBudget = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
+    expect(overBudget.isError).toBe(true)
+    expect(text(overBudget)).toContain('cannot be stored within the deployment\'s byte limits; downscale the image and read the smaller copy')
+
     FailingStore.failure = new Error('unrelated infrastructure failure')
     const unrelated = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
     expect(unrelated.isError).toBe(true)
@@ -491,11 +711,102 @@ describe('image admission failures', () => {
     const image = result.content[1] as { attachment: ImageAttachmentRef }
     expect(image.attachment.name).toBeUndefined()
   })
+
+  it('names the on-disk dimensions and coordinate multiplier when storage downscales', async () => {
+    /** Store whose normalized image halves the input on both sides. */
+    class DownscalingStore extends AttachmentStore {
+      readonly imageLimits: ImageAttachmentLimits = Object.freeze({
+        maxImageBytes: 1024,
+        maxImagesPerMessage: 1,
+        maxMessageImageBytes: 1024,
+        maxImagePixels: 100,
+        maxImageDimension: 2000,
+        mediaTypes: Object.freeze(['image/png'] as const),
+      })
+
+      validateImage(_input: SaveImageAttachment): Promise<void> {
+        return Promise.resolve()
+      }
+
+      async saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef> {
+        return {
+          attachmentId: AttachmentId('sha256:feed'),
+          mediaType: input.mediaType,
+          bytes: 7,
+          width: 2,
+          height: 1,
+          originalDimensions: { width: 4, height: 2 },
+        }
+      }
+
+      readImage(_ref: ImageAttachmentRef): Promise<StoredImageAttachment> {
+        throw new Error('unreachable in this test')
+      }
+    }
+    await writeFile(join(dir, 'red.png'), PNG_1X1)
+    const ctx = await setup({ attachments: false })
+    await ctx.plugin(DownscalingStore)
+    const result = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
+    expect(result.isError).toBe(false)
+    expect(text(result)).toContain('image/png image, 2x1 px, 7 bytes (downscaled from 4x2 px; multiply coordinates by 2.00 to locate features in the original file)')
+  })
+
+  it('names per-axis multipliers when integer rounding makes the ratios differ', () => {
+    const envelope = formatImageReadOutput('/img/photo.jpg', {
+      attachmentId: 'sha256:feed', mediaType: 'image/jpeg', bytes: 9, width: 2, height: 1,
+      originalDimensions: { width: 5, height: 2 },
+    })
+    expect(envelope).toContain('downscaled from 5x2 px; multiply x coordinates by 2.50 and y coordinates by 2.00 to locate features in the original file')
+  })
 })
 
 describe('registration surface', () => {
+  it('registers only read_image without text guidance', async () => {
+    const ctx = await setup({ toolFs: { read: false, write: false, edit: false } })
+    try {
+      expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['read_image'])
+      expect((await ctx.systemPrompt.assemble()).sections.some(section => section.name.startsWith('tool:'))).toBe(false)
+      await writeFile(join(dir, 'red.png'), PNG_1X1)
+      const result = await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))
+      expect(result.isError).toBe(false)
+      expect(result.content.some(block => block.type === 'image')).toBe(true)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('omits read_image while an attachment store is mounted when readImage is false', async () => {
+    const ctx = await setup({ toolFs: { readImage: false } })
+    expect(ctx.tools.schemas().map(tool => tool.name).sort()).toEqual(['edit', 'read', 'write'])
+    expect(ctx.tools.get('read_image')).toBeUndefined()
+    expect((await readImage(ctx, { file_path: 'red.png' }, agentOn('vision-model'))).isError).toBe(true)
+  })
+
+  it('withdraws and restores image-only registration with the attachment store', async () => {
+    const ctx = new Context()
+    try {
+      provideWorkingDirectoryFixture(ctx)
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(LocalFileSystem, { cwd: dir })
+      const attachment = await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+      const plugin = await ctx.plugin(ToolFs, { read: false, write: false, edit: false })
+      const names = () => ctx.tools.schemas().map(tool => tool.name).sort()
+      expect(names()).toEqual(['read_image'])
+      await attachment.dispose()
+      expect(names()).toEqual([])
+      await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+      expect(names()).toEqual(['read_image'])
+      await plugin.dispose()
+      expect(names()).toEqual([])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('withdraws read_image when the tool-fs fiber or the attachment store is disposed (HMR safety)', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime, { mode: 'native' })
     await ctx.plugin(LocalFileSystem, { cwd: dir })
@@ -523,7 +834,7 @@ describe('registration surface', () => {
   it('declares read_image parallel-safe and presents a read-family card', async () => {
     const ctx = await setup()
     expect(ctx.tools.executionMode({
-      signal: testToolSignal, callId: CallId('img-parallel'), name: 'read_image', arguments: { file_path: 'a.png' },
+      signal: testToolSignal, callId: ToolCallId('img-parallel'), name: 'read_image', arguments: { file_path: 'a.png' },
     })).toEqual({ kind: 'parallel' })
     expect(ctx.tools.get('read_image')?.presentCall?.({ file_path: 'shot.png' })).toEqual({
       card: 'generic',
@@ -548,5 +859,40 @@ describe('read keeps its text-only contract', () => {
     expect(txt.isError).toBe(false)
     expect(text(txt)).toContain('1: hello')
     expect(text(txt)).toContain('<type>file</type>')
+  })
+})
+
+describe('image result presentation', () => {
+  /** A canonical committed reference, shaped like a real saveImage outcome. */
+  const REF = {
+    attachmentId: `sha256:${'a'.repeat(64)}`,
+    mediaType: 'image/png' as const,
+    bytes: 24_588,
+    width: 1496,
+    height: 260,
+    name: 'card.png',
+  }
+  const VALUE = { path: '/w/app/shots/card.png', image: REF }
+
+  it('persists the path only, leaving the reference to the result content', async () => {
+    // The settled content already carries the image block with the complete
+    // reference, so copying it into meta would keep two records of one fact and a
+    // post-execute content replacement would strand the stale copy.
+    const ctx = await setup()
+    const meta = ctx.tools.get('read_image')?.output.presentationMeta?.({ file_path: 'shots/card.png' }, VALUE)
+    expect(meta).toEqual({ path: VALUE.path })
+  })
+
+  it('carries the committed reference in the result content, not in meta', async () => {
+    // Proves the single source of truth on the path a live call actually takes.
+    await writeFile(join(dir, 'red.png'), PNG_1X1)
+    const ctx = await setup()
+    const result = await call(ctx, 'read_image', { file_path: 'red.png' }, agentOn('vision-model'))
+    expect(result.isError).toBe(false)
+    expect(result.meta).toEqual({ path: await realpath(join(dir, 'red.png')) })
+    const image = result.content.find(block => block.type === 'image')
+    expect(image?.attachment.width).toBe(1)
+    expect(image?.attachment.height).toBe(1)
+    expect(image?.attachment.attachmentId).toMatch(/^sha256:/u)
   })
 })

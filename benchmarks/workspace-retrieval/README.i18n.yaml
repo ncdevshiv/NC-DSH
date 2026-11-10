@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write benchmarks/workspace-retrieval/README.md
+/workspace-retrieval-benchmarks:
+  en: 2b76fc37ce9b04e1
+  zh: 35964006142d87bb
+/workspace-retrieval-benchmarks/summary:
+  en: 8dcb4112226a16b7
+  zh: c7387230cf135ec6
+/workspace-retrieval-benchmarks/table-of-contents:
+  en: 66a769ce60d49ff3
+  zh: ecc24c78109a952d
+/workspace-retrieval-benchmarks/run:
+  en: b757a2b5212fd2f5
+  zh: f0bf5a93fdbeb7ba
+/workspace-retrieval-benchmarks/measurements:
+  en: 3433fa4eca592e21
+  zh: 86104277b04aba7b
+/workspace-retrieval-benchmarks/dev-note:
+  en: b75c8458928b72b9
+  zh: 02cbcc6baa338b07

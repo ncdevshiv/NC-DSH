@@ -8,15 +8,13 @@ import threading
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeAlias, TypeVar
+from typing import Callable, TypeAlias, TypeVar
 
 from pydantic import BaseModel
 
-from .errors import JsonRpcError, TransportClosedError
+from .errors import JsonRpcError, SdkProtocolError, TransportClosedError
 from .models import IncomingRequest, InitializeResponse, JsonObject, JsonValue, Notification
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -27,11 +25,13 @@ NotificationFilter: TypeAlias = Callable[[Notification], bool]
 class HarnessConfig:
     """Configuration for launching the local DeepSeek Harness SDK runtime."""
 
-    runtime_bin: str | None = None
-    bridge_bin: str | None = None
-    launch_args_override: tuple[str, ...] | None = None
+    dsh_bin: str | None = None
+    profile: str = "sdk"
+    patches: tuple[str, ...] = ()
+    dsh_home: str | None = None
     cwd: str | None = None
     env: dict[str, str] | None = None
+    initialize_timeout_seconds: float = 30.0
     request_timeout_seconds: float | None = None
     shutdown_timeout_seconds: float | None = 1.0
 
@@ -39,8 +39,14 @@ class HarnessConfig:
 class HarnessClient:
     """Synchronous JSON-RPC client for the DeepSeek Harness SDK runtime over stdio."""
 
-    def __init__(self, config: HarnessConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: HarnessConfig | None = None,
+        *,
+        _launch_args: tuple[str, ...] | None = None,
+    ) -> None:
         self.config = config or HarnessConfig()
+        self._launch_args = _launch_args
         self._proc: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
         self._write_lock = threading.Lock()
@@ -55,7 +61,7 @@ class HarnessClient:
         self._reader_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
 
-    def __enter__(self) -> HarnessClient:
+    def __enter__(self) -> "HarnessClient":
         self.start()
         return self
 
@@ -67,11 +73,10 @@ class HarnessClient:
             return
         with self._lock:
             self._session_parents.clear()
-        args = list(self.config.launch_args_override or self._default_launch_args())
         env = os.environ.copy()
         if self.config.env:
             env.update(self.config.env)
-        self._inject_bundled_default_config(env)
+        args = list(self._launch_args or self._default_launch_args(env))
         self._proc = subprocess.Popen(
             args,
             stdin=subprocess.PIPE,
@@ -87,16 +92,14 @@ class HarnessClient:
         self._start_stderr_thread()
 
     def close(self) -> None:
+        """Close the runtime after a bounded opportunity to flush durable state."""
         proc = self._proc
         if proc is None:
             return
+        shutdown_completed = False
         try:
-            self.request(
-                "shutdown",
-                None,
-                response_model=_ShutdownResponse,
-                timeout_seconds=self.config.shutdown_timeout_seconds,
-            )
+            self.request("shutdown", None, response_model=_EmptyResponse, timeout_seconds=self.config.shutdown_timeout_seconds)
+            shutdown_completed = True
         except Exception as exc:
             self._stderr_lines.append(f"shutdown request failed: {exc}")
         if proc.stdin:
@@ -104,14 +107,22 @@ class HarnessClient:
                 proc.stdin.close()
             except Exception as exc:
                 self._stderr_lines.append(f"stdin close failed: {exc}")
+        if shutdown_completed:
+            try:
+                proc.wait(timeout=self.config.shutdown_timeout_seconds)
+            except subprocess.TimeoutExpired:
+                pass
         if proc.poll() is None:
-            with suppress(ProcessLookupError):
+            try:
                 proc.terminate()
-        try:
-            proc.wait(timeout=self.config.shutdown_timeout_seconds)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
+            except ProcessLookupError:
+                pass
+        if proc.poll() is None:
+            try:
+                proc.wait(timeout=self.config.shutdown_timeout_seconds)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
         self._proc = None
         self._fail_waiters(self._runtime_closed_error("DeepSeek Harness runtime closed"))
         if self._reader_thread and self._reader_thread.is_alive():
@@ -125,6 +136,7 @@ class HarnessClient:
         cwd: str,
         provider: str,
         model: str,
+        reasoning_effort: str | None = None,
         max_tokens: int | None = None,
     ) -> InitializeResponse:
         payload: JsonObject = {
@@ -132,12 +144,29 @@ class HarnessClient:
             "provider": provider,
             "model": model,
         }
+        if reasoning_effort is not None:
+            payload["reasoningEffort"] = reasoning_effort
         if max_tokens is not None:
             payload["maxTokens"] = max_tokens
         try:
-            return self.request("initialize", payload, response_model=InitializeResponse)
-        except BaseException:
+            return self.request(
+                "initialize",
+                payload,
+                response_model=InitializeResponse,
+                timeout_seconds=self.config.initialize_timeout_seconds,
+            )
+        except TimeoutError as error:
             self.close()
+            raise TimeoutError(f"{error}\nselected dsh profile {self.config.profile!r}") from error
+        except BaseException as error:
+            self.close()
+            diagnostics = self._runtime_diagnostics()
+            if isinstance(error, JsonRpcError) and diagnostics:
+                raise JsonRpcError(
+                    error.code,
+                    f"{error.message}\n{diagnostics}",
+                    error.data,
+                ) from error
             raise
 
     def session_prompt(
@@ -146,7 +175,7 @@ class HarnessClient:
         content_blocks: list[JsonObject],
         *,
         on_notification: Callable[[Notification], None] | None = None,
-        notification_subscription: NotificationSubscription | None = None,
+        notification_subscription: "NotificationSubscription | None" = None,
     ) -> str:
         payload: JsonObject = {"sessionId": session_id, "contentBlocks": content_blocks}
         response = self.request(
@@ -159,6 +188,32 @@ class HarnessClient:
         )
         return response.messageId
 
+    def resume_session(self, session_id: str) -> None:
+        """Restore a persisted session without sending a prompt; propagate restoration failures."""
+        self.request(
+            "session/resume",
+            {"sessionId": session_id},
+            response_model=_EmptyResponse,
+        )
+
+    def get_working_directory(self, session_id: str) -> str:
+        """Read the effective directory, recovering a missing directory to the Session origin."""
+        response = self.request(
+            "session/working-directory/get",
+            {"sessionId": session_id},
+            response_model=_WorkingDirectoryResponse,
+        )
+        return response.cwd
+
+    def set_working_directory(self, session_id: str, path: str) -> str:
+        """Enter an absolute or Session-relative directory without changing origin or permissions."""
+        response = self.request(
+            "session/working-directory/set",
+            {"sessionId": session_id, "path": path},
+            response_model=_WorkingDirectoryResponse,
+        )
+        return response.cwd
+
     def request(
         self,
         method: str,
@@ -168,7 +223,7 @@ class HarnessClient:
         timeout_seconds: float | None = None,
         on_notification: Callable[[Notification], None] | None = None,
         notification_filter: NotificationFilter | None = None,
-        notification_subscription: NotificationSubscription | None = None,
+        notification_subscription: "NotificationSubscription | None" = None,
     ) -> ModelT:
         result = self._request_raw(
             method,
@@ -197,14 +252,14 @@ class HarnessClient:
     def subscribe_notifications(
         self,
         notification_filter: NotificationFilter | None = None,
-    ) -> NotificationSubscription:
+    ) -> "NotificationSubscription":
         subscription_id = str(uuid.uuid4())
         notifications: queue.Queue[Notification | BaseException] = queue.Queue()
         with self._lock:
             self._notification_subscribers[subscription_id] = (notifications, notification_filter)
         return NotificationSubscription(self, subscription_id, notifications)
 
-    def subscribe_session_notifications(self, session_id: str) -> NotificationSubscription:
+    def subscribe_session_notifications(self, session_id: str) -> "NotificationSubscription":
         """Subscribe to a session and descendants discovered from subagent lifecycle edges."""
         return self.subscribe_notifications(self._notification_belongs_to_session_tree(session_id))
 
@@ -238,7 +293,7 @@ class HarnessClient:
         timeout_seconds: float | None = None,
         on_notification: Callable[[Notification], None] | None = None,
         notification_filter: NotificationFilter | None = None,
-        notification_subscription: NotificationSubscription | None = None,
+        notification_subscription: "NotificationSubscription | None" = None,
     ) -> JsonValue:
         request_id = str(uuid.uuid4())
         waiter: queue.Queue[JsonValue | BaseException] = queue.Queue(maxsize=1)
@@ -260,9 +315,7 @@ class HarnessClient:
             if temp_subscription is not None:
                 temp_subscription.close()
             raise
-        timeout = (
-            self.config.request_timeout_seconds if timeout_seconds is None else timeout_seconds
-        )
+        timeout = self.config.request_timeout_seconds if timeout_seconds is None else timeout_seconds
         deadline = None if timeout is None else time.monotonic() + timeout
         try:
             while True:
@@ -281,9 +334,7 @@ class HarnessClient:
                         raise TimeoutError(
                             f"{method} timed out waiting for DeepSeek Harness runtime{suffix}"
                         )
-                    wait_timeout = (
-                        remaining if wait_timeout is None else min(wait_timeout, remaining)
-                    )
+                    wait_timeout = remaining if wait_timeout is None else min(wait_timeout, remaining)
                 try:
                     item = waiter.get(timeout=wait_timeout)
                     if on_notification is not None and subscription is not None:
@@ -317,15 +368,11 @@ class HarnessClient:
             raise self._runtime_closed_error("Failed to write to DeepSeek Harness runtime") from exc
 
     def _start_reader_thread(self) -> None:
-        self._reader_thread = threading.Thread(
-            target=self._reader_loop, name="dsh-runtime-reader", daemon=True
-        )
+        self._reader_thread = threading.Thread(target=self._reader_loop, name="dsh-runtime-reader", daemon=True)
         self._reader_thread.start()
 
     def _start_stderr_thread(self) -> None:
-        self._stderr_thread = threading.Thread(
-            target=self._stderr_loop, name="dsh-runtime-stderr", daemon=True
-        )
+        self._stderr_thread = threading.Thread(target=self._stderr_loop, name="dsh-runtime-stderr", daemon=True)
         self._stderr_thread.start()
 
     def _reader_loop(self) -> None:
@@ -360,11 +407,7 @@ class HarnessClient:
         method = message.get("method")
         if isinstance(msg_id, (str, int)) and isinstance(method, str):
             params = message.get("params")
-            self._requests.put(
-                IncomingRequest(
-                    id=msg_id, method=method, payload=params if isinstance(params, dict) else {}
-                )
-            )
+            self._requests.put(IncomingRequest(id=msg_id, method=method, payload=params if isinstance(params, dict) else {}))
             return
         if isinstance(msg_id, (str, int)):
             with self._lock:
@@ -373,21 +416,13 @@ class HarnessClient:
                 return
             if isinstance(message.get("error"), dict):
                 err = message["error"]
-                waiter.put(
-                    JsonRpcError(
-                        _int_or_none(err.get("code")),
-                        str(err.get("message", "JSON-RPC error")),
-                        err.get("data"),
-                    )
-                )
+                waiter.put(JsonRpcError(_int_or_none(err.get("code")), str(err.get("message", "JSON-RPC error")), err.get("data")))
             else:
                 waiter.put(message.get("result"))
             return
         if isinstance(method, str):
             params = message.get("params")
-            notification = Notification(
-                method=method, payload=params if isinstance(params, dict) else {}
-            )
+            notification = Notification(method=method, payload=params if isinstance(params, dict) else {})
             with self._lock:
                 self._record_session_relationship_locked(notification)
                 subscribers = list(self._notification_subscribers.items())
@@ -446,37 +481,35 @@ class HarnessClient:
             parts.append("stderr tail:\n" + "\n".join(self._stderr_lines))
         return "\n".join(parts)
 
-    def _default_launch_args(self) -> tuple[str, ...]:
-        if self.config.runtime_bin is not None:
-            return (self.config.runtime_bin,)
-        if self.config.bridge_bin is not None:
-            return (self.config.bridge_bin,)
-        try:
-            from deepseek_harness_runtime import resolve_bundled_launch_args
-        except ImportError as exc:
-            raise FileNotFoundError(
-                "Unable to locate the bundled DeepSeek Harness SDK runtime. "
-                "Install deepseek-harness-runtime-bin or set HarnessConfig.runtime_bin."
-            ) from exc
-        return resolve_bundled_launch_args()
+    def _default_launch_args(self, env: dict[str, str]) -> tuple[str, ...]:
+        if self.config.dsh_bin is None:
+            try:
+                from deepseek_harness_runtime import resolve_bundled_launch_args
+            except ImportError as exc:
+                raise FileNotFoundError(
+                    "Unable to locate the bundled DeepSeek Harness dsh runtime. "
+                    "Install deepseek-harness-runtime-bin."
+                ) from exc
+            base = resolve_bundled_launch_args()
+        else:
+            base = (str(Path(self.config.dsh_bin).expanduser().resolve()),)
 
-    def _inject_bundled_default_config(self, env: dict[str, str]) -> None:
-        """Inject the default config for a bundled launch with no non-empty config.
+        if self.config.dsh_home is not None:
+            if not self.config.dsh_home.strip():
+                raise ValueError("HarnessConfig requires a non-empty dsh_home")
+            env["DSH_HOME"] = str(Path(self.config.dsh_home).expanduser().resolve())
+        elif not env.get("DSH_HOME", "").strip():
+            raise ValueError(
+                "HarnessConfig requires an explicit dsh_home or non-empty DSH_HOME; "
+                "the Python SDK never uses ~/.dsh implicitly"
+            )
 
-        Both bundled carriers require an explicit config. Explicit runtime,
-        launch-argument, and config channels remain untouched.
-        """
-        uses_bundled_runtime = (
-            self.config.launch_args_override is None
-            and self.config.runtime_bin is None
-            and self.config.bridge_bin is None
+        patches = tuple(
+            argument
+            for patch in self.config.patches
+            for argument in ("--patch", str(Path(patch).expanduser().resolve()))
         )
-        if not uses_bundled_runtime or env.get("DSH_CORDIS_CONFIG"):
-            return
-        # _default_launch_args already imported the package or raised its install error.
-        from deepseek_harness_runtime import bundled_default_config_path
-
-        env["DSH_CORDIS_CONFIG"] = str(bundled_default_config_path())
+        return (*base, "--profile", self.config.profile, *patches)
 
     def _unsubscribe_notifications(self, subscription_id: str) -> None:
         with self._lock:
@@ -501,14 +534,16 @@ class HarnessClient:
             payload = notification.payload
             if notification.method in {"subagent.started", "subagent.finished"}:
                 parent_id = payload.get("parentSessionId")
-                if isinstance(parent_id, str) and self._session_is_descendant_of(
-                    parent_id, session_id
+                if (
+                    isinstance(parent_id, str)
+                    and self._session_is_descendant_of(parent_id, session_id)
                 ):
                     return True
                 return payload.get("childSessionId") == session_id
             related_id = payload.get("sessionId")
-            return isinstance(related_id, str) and self._session_is_descendant_of(
-                related_id, session_id
+            return (
+                isinstance(related_id, str)
+                and self._session_is_descendant_of(related_id, session_id)
             )
 
         return belongs
@@ -539,7 +574,7 @@ class NotificationSubscription:
         self._notifications = notifications
         self._closed = False
 
-    def __enter__(self) -> NotificationSubscription:
+    def __enter__(self) -> "NotificationSubscription":
         return self
 
     def __exit__(self, _exc_type, _exc, _tb) -> None:
@@ -572,7 +607,11 @@ class _SessionPromptResponse(BaseModel):
     messageId: str
 
 
-class _ShutdownResponse(BaseModel):
+class _WorkingDirectoryResponse(BaseModel):
+    cwd: str
+
+
+class _EmptyResponse(BaseModel):
     pass
 
 

@@ -3,12 +3,12 @@ import type { Stats } from 'node:fs'
 import { mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 
 interface FakeWatcherControl {
-  emitter: EventEmitter
+  emitter: EventEmitter & { close(): Promise<void> }
   closeCalls: number
   options: Record<string, unknown>
   path: string
@@ -91,8 +91,16 @@ vi.mock('chokidar', () => ({
 
 const SkillFileSystem = await import('../src/index.ts')
 
+/** Every temp dir created by this file, removed after each test. */
+const tempDirs: string[] = []
+afterEach(async () => {
+  for (const dir of tempDirs.splice(0)) await rm(dir, { recursive: true, force: true })
+})
+
 async function tempDir(name: string): Promise<string> {
-  return await import('node:fs/promises').then(fs => fs.mkdtemp(join(tmpdir(), `dsh-${name}-`)))
+  const dir = await import('node:fs/promises').then(fs => fs.mkdtemp(join(tmpdir(), `dsh-${name}-`)))
+  tempDirs.push(dir)
+  return dir
 }
 
 async function writeSkill(root: string, name: string): Promise<void> {
@@ -440,5 +448,42 @@ describe('skill-filesystem watcher failures', () => {
     await expect(discovery).rejects.toThrow('opening failed during disposal')
     await disposal
     disposeProvider()
+  })
+
+  it('contains a watcher error emitted after close removed its listeners', async () => {
+    const home = await tempDir('skill-watch-close-error')
+    const root = join(home, '.dsh/skills')
+    await writeSkill(root, 'closing-skill')
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    let provider!: InstanceType<typeof SkillFileSystem.FileSystemSkillProvider>
+    const disposeProvider = ctx.skills.registerProvider((control) => {
+      provider = new SkillFileSystem.FileSystemSkillProvider(ctx, control, {
+        dshHome: join(home, '.dsh'),
+        agentsHome: join(home, '.agents'),
+        watch: true,
+        watchPollIntervalMs: 10,
+        watchStabilityThresholdMs: 20,
+      })
+      return provider
+    })
+
+    await provider.list({})
+    await vi.waitFor(() => { expect(watcherHarness.watchers).toHaveLength(1) })
+    const control = watcherHarness.watchers[0]
+    if (control === undefined) throw new Error('expected an open root watcher')
+    // Mirror the real close(): it drops every listener before a pending write-settle poll fires.
+    control.emitter.close = async () => {
+      control.closeCalls += 1
+      control.emitter.removeAllListeners()
+    }
+    await provider.dispose()
+    disposeProvider()
+    expect(control.emitter.listenerCount('error')).toBe(1)
+
+    expect(() => control.emitter.emit('error', Object.assign(
+      new Error("EPERM: operation not permitted, stat 'C:\\Temp\\dsh\\.credentials.yaml'"),
+      { code: 'EPERM', syscall: 'stat' },
+    ))).not.toThrow()
   })
 })

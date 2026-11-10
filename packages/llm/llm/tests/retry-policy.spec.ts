@@ -14,10 +14,9 @@ describe('provider retry policy', () => {
       mode: 'normal',
       maxRetries: 5,
       retryableCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
-      initialDelayMs: 2_000,
+      initialDelayMs: 500,
       maxDelayMs: 10_000,
       jitterRatio: 0.1,
-      doubleEveryRetries: 10,
     })
     expect(Object.isFrozen(policy)).toBe(true)
     if (policy.mode !== 'normal') throw new Error('expected normal policy')
@@ -34,7 +33,6 @@ describe('provider retry policy', () => {
         initialDelayMs: 25,
         maxDelayMs: 100,
         jitterRatio: 0,
-        doubleEveryRetries: 2,
       },
     }
 
@@ -48,17 +46,15 @@ describe('provider retry policy', () => {
       initialDelayMs: 25,
       maxDelayMs: 100,
       jitterRatio: 0,
-      doubleEveryRetries: 2,
     })
   })
 
   it('resolves always mode with default backoff', () => {
     expect(resolveRetryPolicy({ mode: 'always' }, 'provider.retryPolicy')).toEqual({
       mode: 'always',
-      initialDelayMs: 2_000,
+      initialDelayMs: 500,
       maxDelayMs: 10_000,
       jitterRatio: 0.1,
-      doubleEveryRetries: 10,
     })
     expect(RetryPolicySchema).toBeDefined()
   })
@@ -72,10 +68,9 @@ describe('provider retry policy', () => {
 
     expect(resolveRetryPolicy(layered, 'provider.retryPolicy')).toEqual({
       mode: 'always',
-      initialDelayMs: 2_000,
+      initialDelayMs: 500,
       maxDelayMs: 10_000,
       jitterRatio: 0.1,
-      doubleEveryRetries: 10,
     })
   })
 
@@ -89,9 +84,6 @@ describe('provider retry policy', () => {
     [{ mode: 'always', backoff: { maxDelayMs: MAX_TIMER_DELAY_MS + 1 } }, /maxDelayMs/],
     [{ mode: 'normal', backoff: { initialDelayMs: 20, maxDelayMs: 10 } }, /less than or equal/],
     [{ mode: 'always', backoff: { jitterRatio: 1.1 } }, /jitterRatio/],
-    [{ mode: 'normal', backoff: { doubleEveryRetries: 0 } }, /doubleEveryRetries/],
-    [{ mode: 'always', backoff: { doubleEveryRetries: 2.5 } }, /doubleEveryRetries/],
-    [{ mode: 'normal', backoff: { doublesEveryRetries: 5 } }, /unknown key "doublesEveryRetries"/],
     [{ mode: 'normal', retryableCodes: [] }, /must not be empty/],
     [{ mode: 'normal', retryableCodes: ['SERVER', 'SERVER'] }, /duplicates/],
     [{ mode: 'normal', retryableCodes: [''] }, /non-empty strings/],

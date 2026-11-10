@@ -17,7 +17,7 @@ The TUI platform contract must follow the runtime shipped to users rather than t
 
 The real Loader smoke selects a native pseudo-terminal boundary by host. macOS and Linux retain the Python POSIX PTY driver. Windows uses `node-pty` and ConPTY. Both drivers receive the same launch command, environment, terminal dimensions, marker-gated input actions, timeout, expected exit code, and output assertions, and all three smoke scenarios run on every supported platform.
 
-`node-pty` is a test-only dependency of the examples workspace. Its reviewed native install script is explicitly enabled in `pnpm-workspace.yaml`; production TUI packages do not acquire a new dependency or subprocess layer.
+`node-pty` is a test-only dependency of the examples workspace. Its reviewed native install script is explicitly enabled in `bun-workspace.yaml`; production TUI packages do not acquire a new dependency or subprocess layer.
 
 ## Alternatives considered
 

@@ -45,10 +45,10 @@
       "path": "../../sandbox/sandbox"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../sandbox/sandbox-policy"
     },
     {
-      "path": "../../sandbox/sandbox-policy"
+      "path": "../../session/working-directory"
     }
   ]
 }

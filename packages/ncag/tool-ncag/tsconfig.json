@@ -1,0 +1,36 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../workspace/workspace"
+    },
+    {
+      "path": "../ncag-core"
+    },
+    {
+      "path": "../ncag-runtime"
+    },
+    {
+      "path": "../ncag-orchestrator"
+    },
+    {
+      "path": "../ncag-service"
+    }
+  ]
+}

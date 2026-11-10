@@ -1,31 +1,35 @@
 // @vitest-environment jsdom
 /** First-run DeepSeek prompt behavior over the shared Models join. */
+import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Schema from '@deepseek-ai/schemastery'
-import type { RpcResponse, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import type { SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { allowAllAccess, bindSnapshotSelector, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { DeepSeekOnboardingDialog } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingDialogProps } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { ModelsSettingsStore } from '../src/client/store.ts'
+import { createModelsOperations } from '../src/client/operations.ts'
 import { en } from '../src/client/locales.ts'
 import { settingsSchema } from './settings-schema.client.ts'
+
+// Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
+const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
+const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
 
 afterEach(() => {
   cleanup()
   document.getElementById('root')?.remove()
 })
 
-let nextRpc = 0
-function ok<T>(value: T): RpcResponse<T> {
-  return { rpcId: `onboarding-${nextRpc++}` as never, result: { ok: true, value } }
+/** Credentials answers over the Remote carrier, which has no envelope. */
+function remoteOk<T>(value: T) {
+  return { ok: true as const, value }
 }
-function fail<T>(message: string): RpcResponse<T> {
-  return {
-    rpcId: `onboarding-${nextRpc++}` as never,
-    result: { ok: false, error: { code: 'internal', message, details: {} } },
-  }
+function remoteFail(message: string) {
+  return { ok: false as const, error: new RemoteError('gateway/internal', message, {}) }
 }
 
 const DeepSeekConfig = Schema.object({
@@ -41,15 +45,19 @@ const DeepSeekConfig = Schema.object({
   })),
 })
 
+type AttentionSnapshot = Parameters<Parameters<DeepSeekOnboardingDialogProps['useSessionStatus']>[0]>[0]
+const noAttention: AttentionSnapshot = new Map()
+const useSessionStatus: DeepSeekOnboardingDialogProps['useSessionStatus'] = selector => selector(noAttention)
+
 function deepSeekNamespace(apiKeyEnv: string | null): SettingsNamespaceView {
   const value = apiKeyEnv === null ? {} : { apiKeyEnv }
   return {
-    ns: 'llm-ai-sdk',
-    schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as unknown,
+    ns: 'llm-deepseek',
+    schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as JsonValue,
     value,
     base: value,
     user: {},
-    applies: 'live',
+    autoGenerate: true, applies: 'live',
     secrets: [],
     revision: 0,
   }
@@ -65,9 +73,8 @@ function harness(options: {
   credential?: { source?: string; writable: boolean }
   describeFailure?: string
   settingsWritable?: boolean
-  providersReject?: boolean
+  providersFailure?: string
   setFailure?: string
-  setReject?: string
 } = {}) {
   if (document.getElementById('root') === null) {
     const appRoot = document.createElement('div')
@@ -77,32 +84,37 @@ function harness(options: {
   let fileConfigured = false
   const configured = options.configured ?? (() => fileConfigured)
   const apiKeyEnv = options.apiKeyEnv === undefined ? 'DEEPSEEK_API_KEY' : options.apiKeyEnv
-  const mutate = vi.fn(() => Promise.resolve(ok(deepSeekNamespace(apiKeyEnv))))
-  const set = vi.fn((_payload: { ref: string; value: string }) => {
-    if (options.setReject !== undefined) return Promise.reject(new Error(options.setReject))
-    if (options.setFailure !== undefined) return Promise.resolve(fail(options.setFailure))
+  const mutate = vi.fn(() => Promise.resolve(remoteOk(deepSeekNamespace(apiKeyEnv))))
+  const set = vi.fn((_ref: string, _value: string) => {
+    if (options.setFailure !== undefined) return Promise.resolve(remoteFail(options.setFailure))
     fileConfigured = true
-    return Promise.resolve(ok({}))
+    return Promise.resolve(remoteOk(undefined))
   })
   const face = {
     llm: {
-      providers: () => {
-        if (options.providersReject === true) return Promise.reject(new Error('provider transport unavailable'))
-        return Promise.resolve(ok({
-          providers: options.provider === false
+      listProviders: () => {
+        if (options.providersFailure !== undefined) return Promise.resolve(remoteFail(options.providersFailure))
+        return Promise.resolve(remoteOk(
+          options.provider === false || options.providerActive === false
             ? []
-            : [{
-              provider: 'deepseek-official',
-              displayName: 'DeepSeek',
-              settingsNs: options.providerSettingsNs ?? 'llm-ai-sdk',
-              settingsPath: [],
-              active: options.providerActive ?? true,
-            }],
-        }))
+            : [{ id: 'deepseek-official', name: 'DeepSeek' }],
+        ))
       },
+      listConfigurableProviders: () => Promise.resolve(remoteOk(
+        options.provider === false
+          ? []
+          : [{
+            provider: 'deepseek-official',
+            displayName: 'DeepSeek',
+            settingsNs: options.providerSettingsNs ?? 'llm-deepseek',
+            settingsPath: [],
+          }],
+      )),
+      discoverModels: () => Promise.resolve(remoteOk([])),
+      testModel: () => Promise.resolve(remoteOk({ ok: true, model: 'test', latencyMs: 1 })),
     },
     settings: {
-      describe: () => Promise.resolve(ok({
+      describe: () => Promise.resolve(remoteOk({
         writable: options.settingsWritable ?? true,
         hasDocument: false,
         namespaces: options.settingsNamespace === false ? [] : [deepSeekNamespace(apiKeyEnv)],
@@ -111,34 +123,40 @@ function harness(options: {
     },
     credentials: {
       describe: () => options.describeFailure === undefined
-        ? Promise.resolve(ok({
-          credentials: {
-            DEEPSEEK_API_KEY: {
-              configured: configured(),
-              ...configured() && options.credential?.source !== undefined
-                ? { source: options.credential.source }
-                : {},
-              writable: options.credential?.writable ?? true,
-            },
+        ? Promise.resolve(remoteOk({
+          DEEPSEEK_API_KEY: {
+            configured: configured(),
+            ...configured() && options.credential?.source !== undefined
+              ? { source: options.credential.source }
+              : {},
+            writable: options.credential?.writable ?? true,
           },
         }))
-        : Promise.resolve(fail(options.describeFailure)),
+        : Promise.resolve(remoteFail(options.describeFailure)),
       set,
     },
   }
-  const controller = new ModelsSettingsStore(face as never, settingsSchema, new SettingsDescribeMirror(face as never))
+  // The page plugin's context, scripted down to the namespaces it reaches.
+  const ctx = { remote: { ...face, session: { initializeDefaultModel: async () => ({ ok: true, value: undefined }) } } } as never
+  const operations = createModelsOperations(ctx)
+  const controller = new ModelsSettingsStore(ctx, settingsSchema, new SettingsDescribeMirror(ctx))
   const openSection = vi.fn()
   const complete = vi.fn()
   const unusedHook = (() => { throw new Error('unused standard hook') }) as never
   const props: DeepSeekOnboardingDialogProps = {
+    automatic: true,
     stepId: 'deepseek-official',
     complete,
     openSection,
+    renderSlot: (_name, _props, options) => options?.fallback,
     useSessions: unusedHook,
+    useSessionStatus,
+    usePanelInfo, useSessionRetainInfo: () => undefined, useResource,
     useWorkspaces: unusedHook,
+    ...allowAllAccess,
     controller,
     useModels: bindSnapshotSelector(controller.store),
-    api: face as never,
+    operations,
     schema: settingsSchema,
     t: key => en[key],
   }
@@ -195,10 +213,9 @@ describe('DeepSeekOnboardingDialog', () => {
     expect(h.set).not.toHaveBeenCalled()
   })
 
-  it('keeps the modal open and reports rejected and failed credential writes', async () => {
+  it('keeps the modal open and reports a refused credential write', async () => {
     for (const [options, message] of [
       [{ setFailure: 'credential was rejected' }, 'credential was rejected'],
-      [{ setReject: 'connection lost' }, 'connection lost'],
     ] as const) {
       const h = harness(options)
       const view = render(<DeepSeekOnboardingDialog {...h.props} />)
@@ -230,7 +247,7 @@ describe('DeepSeekOnboardingDialog', () => {
       harness({ describeFailure: 'credentials service is absent' }),
       harness({ credential: { writable: false } }),
       harness({ settingsWritable: false }),
-      harness({ providersReject: true }),
+      harness({ providersFailure: 'the provider directory is unavailable' }),
       harness({ providerActive: false }),
       harness({ settingsNamespace: false }),
       harness({ apiKeyEnv: null }),
@@ -267,4 +284,33 @@ describe('DeepSeekOnboardingDialog', () => {
     await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
     expect(h.complete).toHaveBeenCalledOnce()
   })
+})
+
+it('offers account choice before reusing the existing API key editor', async () => {
+  const h = harness()
+  h.props.renderSlot = (_name, owner: unknown) => <button onClick={(owner as { useApiKey: () => void }).useApiKey}>Choose API key</button>
+  render(<DeepSeekOnboardingDialog {...h.props} />)
+  await waitFor(() => { expect(screen.getByRole('button', { name: 'Choose API key' })).toBeTruthy() })
+  fireEvent.click(screen.getByRole('button', { name: 'Choose API key' }))
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  expect(h.complete).not.toHaveBeenCalled()
+})
+it('explicit account-menu setup reuses the editor without another login choice', async () => {
+  const h = harness({ configured: () => true })
+  h.props.explicit = true
+  const choice = vi.fn()
+  h.props.renderSlot = (_name, _owner, options) => { choice(); return options?.fallback }
+  render(<DeepSeekOnboardingDialog {...h.props} />)
+  await waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
+  expect(choice).not.toHaveBeenCalled()
+  expect(h.complete).not.toHaveBeenCalled()
+})
+
+it('keeps explicit API key setup available when automatic onboarding is disabled', async () => {
+  const h = harness()
+  h.props.automatic = false
+  h.props.explicit = true
+  render(<DeepSeekOnboardingDialog {...h.props} />)
+  await waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
+  expect(h.complete).not.toHaveBeenCalled()
 })

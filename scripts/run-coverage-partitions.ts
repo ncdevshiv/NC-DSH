@@ -2,9 +2,7 @@
 import { resolve } from 'node:path'
 import {
   COVERAGE_PARTITIONS_ENV,
-  COVERAGE_TEST_TIMEOUT_ENV,
   CoveragePartitionCoordinator,
-  coverageTestTimeoutArgs,
   forwardedCoverageArgs,
   parseCoveragePartitionCount,
 } from './coverage-partitions.ts'
@@ -13,18 +11,15 @@ const partitions = parseCoveragePartitionCount(process.env[COVERAGE_PARTITIONS_E
 if (partitions === undefined) {
   throw new Error(`${COVERAGE_PARTITIONS_ENV} is required by partitioned coverage.`)
 }
-const packageManagerEntrypoint = process.env.npm_execpath
-if (packageManagerEntrypoint === undefined || packageManagerEntrypoint === '') {
+const bunEntrypoint = process.env.npm_execpath
+if (bunEntrypoint === undefined || bunEntrypoint === '') {
   throw new Error('partitioned coverage must be invoked through a bun package script.')
 }
 
 const coordinator = new CoveragePartitionCoordinator({
   root: resolve(import.meta.dirname, '..'),
   partitions,
-  packageManagerEntrypoint,
-  vitestArgs: [
-    ...coverageTestTimeoutArgs(process.env[COVERAGE_TEST_TIMEOUT_ENV]),
-    ...forwardedCoverageArgs(process.argv.slice(2)),
-  ],
+  bunEntrypoint,
+  vitestArgs: forwardedCoverageArgs(process.argv.slice(2)),
 })
 process.exitCode = await coordinator.run()

@@ -12,11 +12,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  ApprovalRequestId, CordisDynamicPluginId, DynamicCordisInvokeResult, JsonValue,
+  ApprovalRequestId, CordisDynamicPluginId, DynamicCordisInvokeResult,
   DynamicCordisInventoryRow,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientModuleSystem } from '@deepseek-ai/dsh-client-modules/client'
-import type { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 // The Client Remote assembly is the one place the two planes meet: it mounts the
 // `dynamicCordisRunner` namespace and re-exports its payload vocabulary, so this
 // package names what it sends without importing a Host package.
@@ -188,12 +189,23 @@ export function apply(ctx: Context): void {
   provideClientTimer(ctx)
   const inspect = new ClientCordisInspectRegistry({
     sync: async (providers) => {
-      const answered = await ctx.remote.dynamicCordisRunner.syncInspectManifest(providers)
-      if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
+      // The namespace is re-mounted with the Connection: between generations the
+      // generated face is absent, and a republish must wait for the next reset
+      // instead of throwing a TypeError from a missing method.
+      const namespace = ctx.get('remote.dynamicCordisRunner') as
+        | { syncInspectManifest?: (value: typeof providers) => Promise<{ ok: boolean; error?: { code: string; message: string } }> }
+        | undefined
+      if (typeof namespace?.syncInspectManifest !== 'function') return
+      const answered = await namespace.syncInspectManifest(providers)
+      if (!answered.ok) throw new Error(`${answered.error?.code ?? 'gateway/internal'}: ${answered.error?.message ?? ''}`)
     },
     resolve: async (agentId, requestId, resolution) => {
-      const answered = await ctx.remote.dynamicCordisRunner.resolveInspectQuery(agentId, requestId, resolution)
-      if (!answered.ok) throw new Error(`${answered.error.code}: ${answered.error.message}`)
+      const namespace = ctx.get('remote.dynamicCordisRunner') as
+        | { resolveInspectQuery?: (...args: [string, string, typeof resolution]) => Promise<{ ok: boolean; error?: { code: string; message: string } }> }
+        | undefined
+      if (typeof namespace?.resolveInspectQuery !== 'function') return
+      const answered = await namespace.resolveInspectQuery(agentId, requestId, resolution)
+      if (!answered.ok) throw new Error(`${answered.error?.code ?? 'gateway/internal'}: ${answered.error?.message ?? ''}`)
     },
   })
   provideClientCordisInspect(ctx, inspect)
@@ -288,7 +300,7 @@ export function apply(ctx: Context): void {
     isLoaded: id => runner.isLoaded(id),
   }
   ctx.provide('dynamicCordisRunner', face)
-  ctx.effect(() => () => { void runner.dispose() }, 'cordis-client-runner: dynamic package runner')
+  ctx.effect(() => () => runner.dispose(), 'cordis-client-runner: dynamic package runner')
 
   // Forwarded Host events: `$on` hands the listener the Host's own argument list,
   // so these read the request itself rather than a transport envelope.

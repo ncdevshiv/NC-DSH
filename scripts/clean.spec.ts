@@ -39,6 +39,9 @@ describe('RepositoryCleaner', () => {
     write(join(root, 'products/shell/lib/index.js'))
     write(join(root, '.typecheck/legacy.tsbuildinfo'))
     write(join(root, '.dsh-build/client-build-environment.json'))
+    write(join(root, 'apps/desktop/renderer/assets/welcome-brand.svg'))
+    write(join(root, 'apps/desktop/renderer/assets/welcome-loading.svg'))
+    write(join(root, 'apps/desktop/renderer/welcome.css'))
     write(join(root, 'root.tsbuildinfo'))
     write(join(root, 'packages/removed/ghost/node_modules/.bin/tool'))
 
@@ -48,8 +51,67 @@ describe('RepositoryCleaner', () => {
     expect(existsSync(join(root, 'products/shell/src/index.ts'))).toBe(true)
     expect(existsSync(join(root, '.typecheck'))).toBe(false)
     expect(existsSync(join(root, '.dsh-build'))).toBe(false)
+    expect(existsSync(join(root, 'apps/desktop/renderer/assets/welcome-brand.svg'))).toBe(true)
+    expect(existsSync(join(root, 'apps/desktop/renderer/assets/welcome-loading.svg'))).toBe(true)
+    expect(existsSync(join(root, 'apps/desktop/renderer/welcome.css'))).toBe(true)
     expect(existsSync(join(root, 'root.tsbuildinfo'))).toBe(false)
     expect(existsSync(join(root, 'packages/removed/ghost'))).toBe(false)
+  })
+
+  it('removes compiler output that landed in a source tree and keeps the TypeScript source', async () => {
+    const root = fixture()
+    addProject(root, 'products/shell')
+    const source = join(root, 'products/shell/src/index.ts')
+    write(source, 'export {}\n')
+    write(join(root, 'products/shell/src/index.js'), 'export {};\n')
+    write(join(root, 'products/shell/src/index.js.map'), JSON.stringify({
+      version: 3,
+      file: 'index.js',
+      sourceRoot: '',
+      sources: ['index.ts'],
+      names: [],
+      mappings: '',
+    }))
+    write(join(root, 'products/shell/src/index.d.ts'), 'export {};\n')
+    write(join(root, 'products/shell/src/index.d.ts.map'), JSON.stringify({
+      version: 3,
+      file: 'index.d.ts',
+      sourceRoot: '',
+      sources: ['index.ts'],
+      names: [],
+      mappings: '',
+    }))
+
+    await new RepositoryCleaner(root).clean()
+
+    expect(existsSync(source)).toBe(true)
+    expect(existsSync(join(root, 'products/shell/src/index.js'))).toBe(false)
+    expect(existsSync(join(root, 'products/shell/src/index.js.map'))).toBe(false)
+    expect(existsSync(join(root, 'products/shell/src/index.d.ts'))).toBe(false)
+    expect(existsSync(join(root, 'products/shell/src/index.d.ts.map'))).toBe(false)
+  })
+
+  it('keeps a hand-written JavaScript file and output whose map names another input', async () => {
+    const root = fixture()
+    addProject(root, 'products/shell')
+    write(join(root, 'products/shell/src/index.ts'), 'export {}\n')
+    write(join(root, 'products/shell/src/helper.js'), 'export const helper = () => 1\n')
+    write(join(root, 'products/shell/src/index.js'), 'export {};\n')
+    write(join(root, 'products/shell/src/index.js.map'), JSON.stringify({
+      version: 3,
+      file: 'index.js',
+      sourceRoot: '',
+      sources: ['other.ts'],
+      names: [],
+      mappings: '',
+    }))
+
+    await new RepositoryCleaner(root).clean()
+
+    expect(existsSync(join(root, 'products/shell/src/index.ts'))).toBe(true)
+    expect(existsSync(join(root, 'products/shell/src/helper.js'))).toBe(true)
+    expect(existsSync(join(root, 'products/shell/src/index.js'))).toBe(true)
+    expect(existsSync(join(root, 'products/shell/src/index.js.map'))).toBe(true)
   })
 
   it('does not delete any target when a manifest-less package contains an unknown file', async () => {
@@ -64,16 +126,16 @@ describe('RepositoryCleaner', () => {
 
   it('removes the native Landlock entry output and solution build info', async () => {
     const root = fixture()
-    const entry = 'native/landlock-run/packages/entry'
+    const entry = 'native/system/packages/entry'
     addProject(root, entry, 'lib')
     write(join(root, entry, 'lib/index.js'))
-    write(join(root, 'native/landlock-run/tsconfig.tsbuildinfo'))
+    write(join(root, 'native/system/tsconfig.tsbuildinfo'))
 
     await new RepositoryCleaner(root).clean()
 
     expect(existsSync(join(root, entry, 'lib'))).toBe(false)
     expect(existsSync(join(root, entry, 'src/index.ts'))).toBe(true)
-    expect(existsSync(join(root, 'native/landlock-run/tsconfig.tsbuildinfo'))).toBe(false)
+    expect(existsSync(join(root, 'native/system/tsconfig.tsbuildinfo'))).toBe(false)
   })
 
   it('refuses project outputs reached through a symlink outside the repository', async () => {

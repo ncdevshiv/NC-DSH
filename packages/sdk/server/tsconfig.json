@@ -18,10 +18,13 @@
       "path": "../../llm/llm"
     },
     {
-      "path": "../../llm/llm-ai-sdk"
+      "path": "../../llm/llm-deepseek-api-key"
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../../attachment/attachment"
     },
     {
       "path": "../../core/session"
@@ -33,7 +36,7 @@
       "path": "../../subagent/subagent"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../session/working-directory"
     }
   ]
 }

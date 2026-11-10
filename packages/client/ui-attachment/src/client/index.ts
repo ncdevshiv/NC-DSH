@@ -1,20 +1,38 @@
-/** Browser attachment plugin: fills conversation's composer and message-image slots. */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+/** Browser attachment plugin: composer entries and independently replaceable image galleries. */
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
+import type {} from '@deepseek-ai/dsh-client-ui-trajectory/client'
 import { ComposerAttachments } from './ComposerAttachments.tsx'
-import { MessageImages } from './MessageImages.tsx'
+import { MessageImages, MessageImagesContent } from './MessageImages.tsx'
 
-/** Slot registry required by this presentation plugin. */
+/** Slot registry required by the attachment presentation plugin. */
 export const inject = ['slots']
 
-/** Register attachment presentation without exporting React components as package values. */
+/**
+ * Register composer attachments and the shared gallery with its domain adapters.
+ * @param ctx - client plugin context with the Slot registry.
+ */
 export function apply(ctx: ClientContext): void {
+  ctx.slots.registerFactory({
+    name: 'conversation.images.content', scope: 'root', locale: 'conversation',
+  }, MessageImagesContent)
   ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
     name: 'conversation.input.attachments',
     locale: 'conversation',
   }, ComposerAttachments))
-  ctx.slots.inject('conversation.message.images', () => ctx.slots.register({
-    name: 'conversation.message.images',
-    locale: 'conversation',
+  ctx.slots.inject('conversation.chat.message.images', () => ctx.slots.register({
+    name: 'conversation.chat.message.images', priority: 100,
+  }, MessageImages))
+  ctx.slots.inject('conversation.chat.user.images', () => ctx.slots.register({
+    name: 'conversation.chat.user.images', priority: 100,
+  }, MessageImages))
+  ctx.slots.inject('conversation.trajectory.images', () => ctx.slots.register({
+    name: 'conversation.trajectory.images', priority: 100,
+  }, MessageImages))
+  ctx.slots.inject('tool.call.images', () => ctx.slots.register({
+    name: 'tool.call.images', priority: 100,
   }, MessageImages))
 }

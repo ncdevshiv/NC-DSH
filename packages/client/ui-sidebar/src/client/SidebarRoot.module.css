@@ -22,20 +22,106 @@
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
+/* macOS desktop: the AppFrame column owns the translucent sidebar tint; an
+   opaque fill here would sit on top of it and block the window vibrancy. */
+:global([data-platform='darwin']) .root {
+  background: transparent;
+}
+
 /* Rail geometry (figma rail spec): 36x36 control boxes centered in the 56px
-   rail (10px side padding), 12px vertical rhythm. The top offset defers to the
-   title-bar row: both states center the row's control at the window caption
-   line (20px — half the shell's 40px title-bar height, apps/desktop), so the
-   rail drops its former 18px top inset. */
+   rail (10px side padding), 12px vertical rhythm, 18px from the rail top to
+   the whale's box (24px to the 24-wide whale glyph itself). */
 .root.collapsed {
-  padding: 0 10px 6px;
+  padding: 18px 10px 6px;
+}
+
+/* The brand stays in the sidebar; fixed caption controls survive zero-width collapse. */
+:global([data-windows-titlebar]) .root .logoRow {
+  height: 40px;
+  margin: 0;
+  padding: 0;
+}
+
+:global([data-windows-titlebar]) .toggle {
+  position: fixed;
+  top: calc((var(--dsh-windows-titlebar-height) - 28px) / 2);
+  left: 12px;
+  z-index: 30;
+  -webkit-app-region: no-drag;
+}
+
+:global([data-windows-titlebar]) .root.collapsed .logoRow {
+  height: 0;
+}
+
+:global([data-windows-titlebar]) .root:not(.collapsed) .brand {
+  padding-left: 4px;
+}
+
+:global([data-windows-titlebar]) .brandIdentity {
+  transform: translateY(1px);
+}
+
+:global([data-windows-titlebar]) .brandMark {
+  transform: translateX(1px);
+}
+
+:global([data-windows-titlebar]) .brandName {
+  font-weight: 400;
+}
+
+:global([data-windows-titlebar]) .root.collapsed {
+  padding: 0;
+}
+
+:global([data-windows-titlebar]) .root:not(.collapsed) .newSession {
+  margin-top: 8px;
+  margin-left: 0;
+}
+
+:global([data-windows-titlebar]) .collapsed .panelList,
+:global([data-windows-titlebar]) .collapsed .regionArea,
+:global([data-windows-titlebar]) .collapsed .footArea {
+  display: none;
+}
+
+:global(html[data-windows-titlebar]:has([data-sidebar-collapsed='true'])) {
+  --dsh-windows-menu-start: 84px;
+}
+
+:global([data-windows-titlebar]) .collapsed .newSession {
+  position: fixed;
+  top: calc((var(--dsh-windows-titlebar-height) - 28px) / 2);
+  left: 48px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  z-index: 30;
+  -webkit-app-region: no-drag;
+}
+
+:global([data-windows-titlebar]) .railIn .iconButton,
+:global([data-windows-titlebar]) .railIn .newSession {
+  animation: none;
+}
+
+:global([data-windows-titlebar]) .collapsed .toggle,
+:global([data-windows-titlebar]) .collapsed .newSession {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-secondary);
+}
+
+:global([data-windows-titlebar]) .collapsed .toggle .panelIcon {
+  display: inline;
 }
 
 /* Scrollbars in the column are a pointer affordance: the shell adds this
    class whenever the pointer is not inside (SidebarRoot.tsx owns the linger),
    and rebinding ui-theme's indirection pair to `transparent` takes the thumb
    out of every scroll region nested under it — the workspace browser's
-   session list today. `transparent` rather than `display: none` on the bar:
+   session list. `transparent` rather than `display: none` on the bar:
    the reservation (`scrollbar-gutter: stable` on the list) stays in force, so
    revealing the thumb never reflows a row. Rebinding contract and the two
    rendering paths it reaches: ui-theme's README. */
@@ -60,14 +146,15 @@
   from { opacity: 0; }
 }
 
-/* At the 150ms rail settle, the upper controls enter from the former rail
-   right edge over the remaining 150ms of the AppFrame track transition. The
-   bottom-pinned settings seat shares their opacity timeline but stays
+/* At the 150ms rail settle, the upper controls enter from the former
+   rail right edge over the remaining 150ms of the AppFrame track transition.
+   The bottom-pinned settings seat shares their opacity timeline but stays
    horizontally fixed. Only a live collapse gets .railIn; a cold collapsed
    render stays static. */
 .railIn .iconButton,
 .railIn .newSession,
-.railIn .sectionRail {
+.railIn .panelList,
+.railIn .regionArea {
   animation: rail-in 150ms var(--ds-ease-in-out) backwards;
 }
 
@@ -86,147 +173,70 @@
   from { opacity: 0; }
 }
 
-/* ── Section switcher ───────────────────────────────────────────────────────
-   Wide: a pill tab strip (figma sidebar pattern) between the brand row and
-   New Session. Rail: the same four sections as 36px icon controls riding the
-   shared rail entry path; the active section's icon carries the pill fill. */
-
-.sectionTabs {
+/* macOS hiddenInset titlebar: the strip spans the column's top edge (negative
+   margins cancel the root padding) so it clears the traffic lights at
+   (16, 18). The strip marks itself `data-window-drag` in markup (SidebarRoot), so
+   its own run is the column's draggable geometry and no frame band has to match
+   the strip's height; the toggle inside subtracts via the base.css rule. */
+.topStrip {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
-  margin: 0 2px 8px;
-  border-radius: 10px;
-  background: var(--dsw-alias-bg-layer-2);
+  justify-content: flex-end;
+  height: 52px;
+  box-sizing: border-box;
+  margin: -6px calc(-1 * var(--dsh-sidebar-inline-padding)) 0;
+  /* The 2px foot centres the 28px toggle at y 25, level with the collapsed
+     seat (ui-layout .leadingSeat, top 11) and the conversation title row, so
+     collapse/expand never shifts it vertically. */
+  padding: 0 12px 2px;
 }
 
-.sectionTab {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  cursor: pointer;
-  overflow: hidden;
-  white-space: nowrap;
+/* Window fullscreen hides the traffic lights (html[data-fullscreen], desktop
+   preload): the toggle takes their spot at the strip's left edge. */
+:global([data-fullscreen]) .topStrip {
+  justify-content: flex-start;
 }
 
-.sectionTab:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+/* The strip's full 52px foot leaves the wordmark too low; the content column
+   tucks 12px back under it, still clear of the toggle (28px control centered
+   in the strip ends at y 40). */
+.topStrip + .logoRow {
+  margin-top: -12px;
 }
 
-.sectionTabActive,
-.sectionTabActive:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-button-ghost-active-fill);
-}
-
-.sectionTabLabel {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.sectionRail {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  margin: 0 0 12px;
-}
-
-.sectionRailTab {
-  border-radius: 8px;
-}
-
-.sectionRailTab.sectionRailActive {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-button-ghost-active-fill);
-}
-
-/* ── Section panes ──────────────────────────────────────────────────────────
-   All four panes stay mounted (state preservation across visits and across a
-   collapse, the layout columns' display-toggle pattern); exactly one is
-   active. A switch animates the incoming pane only: a directional slide +
-   fade whose retrigger alternates two identical keyframe names (restarting a
-   same-name animation is a no-op) and whose direction rides the
-   --section-slide-from custom property set by the component. */
-
-.sectionPane {
-  display: none;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.sectionPaneActive {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-
-.sectionPaneHidden {
-  /* Keep hidden panes out of the tab order as well as off the layout. */
-  visibility: hidden;
-}
-
-.sectionPaneEnterA {
-  animation: section-in-a 200ms var(--ds-ease-in-out);
-}
-
-.sectionPaneEnterB {
-  animation: section-in-b 200ms var(--ds-ease-in-out);
-}
-
-@keyframes section-in-a {
-  from {
-    opacity: 0;
-    transform: translateX(var(--section-slide-from, 16px));
-  }
-}
-
-@keyframes section-in-b {
-  from {
-    opacity: 0;
-    transform: translateX(var(--section-slide-from, 16px));
-  }
-}
-
-/* Logo row: the sidebar's segment of the window title bar (figma pad
-   (4,8,4,8), revised to a 40px row so the brand center sits on the caption
-   line). Expanded keeps the panel toggle at the right edge; the rail gives
-   every control the same base left anchor before the shared entry
-   translation is applied. */
+/* Logo row (figma pad (4,8,4,8)): expanded keeps the panel toggle at the
+   right edge; the rail gives every control the same base left anchor before
+   the shared entry translation is applied. macOS hiddenInset titlebar: the row
+   is marked `data-window-drag` in markup (SidebarRoot), so ui-web base.css's
+   single darwin rule carries the drag over its own box — below the top strip
+   (40–100px: the strip's 52px foot with the row's -12px tuck). The brand rides
+   that box (SidebarRoot renders the wordmark as a plain span there, so the
+   global interactive no-drag rule never subtracts it); the dedicated New
+   Session button below keeps the pointer and keyboard paths. Safe as a drag
+   source: it precedes the sidebar's overlay slots in document order, so their
+   no-drag still wins. */
 .logoRow {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  height: 40px;
-  padding: 0 0 0 4px;
-  margin-bottom: 8px;
+  height: 60px;
+  padding: 8px 0 8px 4px;
+  margin-bottom: 4px;
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .collapsed .logoRow {
-  height: 40px;
+  height: 36px;
   padding: 0;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   justify-content: flex-start;
+  /* The settled rail's 36px toggle is wider than this 35px row; the base row's clip would cut
+     the control's right edge, so the rail stops clipping once the slide has settled. */
+  overflow: visible;
 }
 
 /* Brand group (figma I133:7632): the full wordmark rides the text ink
@@ -244,6 +254,12 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+/* On macOS the brand is a window-drag surface, not a New Session button;
+   a pointer cursor would promise a click that drags the window instead. */
+:global([data-platform='darwin']) .brand {
+  cursor: default;
 }
 
 /* Mark and name are independent slots; the shell owns their shared baseline,
@@ -281,7 +297,25 @@
   white-space: nowrap;
 }
 
+.localBuildBrand {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  height: 24px;
+  white-space: nowrap;
+}
+
+.localBuildTitle {
+  font-size: 12px;
+  line-height: 13px;
+  letter-spacing: 0;
+}
+
 .iconButton {
+  position: relative;
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -289,7 +323,7 @@
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 50%;
+  border-radius: var(--dsw-radius-sm);
   padding: 0;
   background: transparent;
   cursor: pointer;
@@ -300,9 +334,18 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* The toggle is flush with .logoRow, which clips its own overflow, so an outward ring loses
+   the pixels that leave the row. Draw this control's ring inside its own box instead. */
+.iconButton.toggle:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
 .collapsed .iconButton {
   width: 36px;
   height: 36px;
+  /* Rail hovers share the panel rows' and New Session's 12px rounding. */
+  border-radius: var(--dsw-radius-md);
 }
 
 /* Rail logo swap: collapsed, the toggle rests as the whale mark (brand ink,
@@ -332,34 +375,38 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.buildRevision {
+.buildVersion {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 3px;
+  height: 10px;
+  padding: 0 3px;
+  border-radius: 2px;
   color: var(--dsw-alias-label-primary-inverted);
   background: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 8px;
+  font-size: 6px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 10px;
+  white-space: nowrap;
 }
 
 /* New Session: 38px bar, 12px radius (figma 133:7634 geometry, squared-off
    corners); collapsed it renders as the rail's plain icon control. */
 .newSession {
+  container-type: inline-size;
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 0;
   height: 38px;
-  padding: 8px 16px;
-  margin: 0 2px 8px;
+  padding: 8px 12px;
+  margin: 0 2px 12px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   font-size: 14px;
@@ -371,6 +418,25 @@
 
 .newSession:hover {
   background: var(--dsw-alias-button-floating-hover);
+}
+
+/* macOS: the themed elevated fill reads as a foreign slab on the vibrancy
+   sidebar; a white wash sits in the glass like native macOS sidebar
+   controls. Dark keeps the same white ink at lower alpha. */
+:global([data-platform='darwin']) .newSession {
+  background: rgb(255 255 255 / 0.55);
+}
+
+:global([data-platform='darwin']) .newSession:hover {
+  background: rgb(255 255 255 / 0.3);
+}
+
+:global([data-platform='darwin']) :global([data-ds-dark-theme]) .newSession {
+  background: rgb(255 255 255 / 0.15);
+}
+
+:global([data-platform='darwin']) :global([data-ds-dark-theme]) .newSession:hover {
+  background: rgb(255 255 255 / 0.2);
 }
 
 .collapsed .newSession {
@@ -398,11 +464,94 @@
   max-width: 0;
 }
 
-/* Region seat: always mounted so the foot never moves (and the section panes
-   keep their state through a collapse). Its trailing margin cancels the wide
-   shell inset so the nested scrollbar can sit at the sidebar edge; sections
-   restore that inset inside their own rows. Collapsed, the seat leaves the
-   layout entirely — the rail shows the switcher icons instead. */
+.newSessionLabelMask { flex: 1; min-width: 0; }
+.newSession:is(:hover, :focus-visible) .newSessionLabelMask:has(+ .newSessionShortcut) { overflow: hidden; mask-image: linear-gradient(to right, black calc(100% - 16px), transparent); }
+.newSessionContent { display: flex; width: 100cqw; align-items: center; justify-content: center; gap: 6px; }
+.newSessionContent > svg { flex: none; }
+
+.newSessionShortcut {
+  opacity: 0;
+  display: inline-flex;
+  flex: none;
+  pointer-events: none;
+  font-weight: 400;
+}
+
+.newSession:is(:hover, :focus-visible) .newSessionShortcut { opacity: 1; }
+
+.panelList {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+/* Panel entries share the New Session bar's 12px radius and 2px inset, the
+   session rows' hover/selected surface, and the primary ink. */
+.panelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px;
+  min-height: 36px;
+  padding: 7px 8px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  line-height: 22px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panelRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.panelRow.panelActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.panelRow:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.panelGlyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panelTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collapsed .panelList {
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.collapsed .panelRow {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Region seat: always mounted so the foot never moves. Its trailing margin
+   cancels the wide shell inset so the nested scrollbar can sit at the sidebar
+   edge; the browser restores that inset inside its own rows. */
 .regionArea {
   flex: 1;
   min-height: 0;
@@ -415,7 +564,9 @@
 }
 
 .collapsed .regionArea {
-  display: none;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
 }
 
 /* Footer seats: additive actions stack above Settings. Each occupant owns its
@@ -453,26 +604,10 @@
   .fading > *,
   .railIn .iconButton,
   .railIn .newSession,
+  .railIn .panelList,
   .railIn .footArea,
-  .railIn .sectionRail,
-  .sectionPaneEnterA,
-  .sectionPaneEnterB {
+  .railIn .regionArea {
     transition: none;
     animation: none;
   }
-}
-
-/* New Session connect failure, rendered under the trigger in both widths.
-   Two clamped lines keep the collapsed rail geometry intact while the full
-   reason stays available to assistive tech via the role="alert" text. */
-.connectError {
-  margin: 4px 10px 0;
-  color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }

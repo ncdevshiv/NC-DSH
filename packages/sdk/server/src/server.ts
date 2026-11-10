@@ -7,13 +7,16 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { resolve } from 'node:path'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { admitEncodedImages, type EncodedImageAttachment, type ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import { createUserMessage, ReasoningEffortId, type ContentBlock, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { carrierKeyOf, type Scoped } from '@deepseek-ai/dsh-scope'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-working-directory'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
-import * as LlmAiSdk from '@deepseek-ai/dsh-llm-ai-sdk'
+import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import type {
   InitializeParams,
   InitializeResult,
@@ -21,12 +24,39 @@ import type {
   SessionEventNotification,
   SessionPromptParams,
   SessionPromptResult,
+  SessionResumeParams,
+  SessionWaitParams,
+  SessionWorkingDirectoryParams,
+  SessionWorkingDirectorySetParams,
+  SessionWorkingDirectoryResult,
+  SdkEncodedImageBlock,
   SubagentFinishedNotification,
   SubagentStartedNotification,
 } from '@deepseek-ai/dsh-sdk-protocol'
 
 interface SessionRecord {
   handle: AgentHandle
+  /** Latest live failure not superseded by a subsequently committed terminal. */
+  failure: { readonly error: unknown; readonly atOffset: SessionLogOffset } | undefined
+}
+
+function encodedImage(block: SessionPromptParams['contentBlocks'][number]): block is SdkEncodedImageBlock {
+  return block.type === 'image' && 'data' in block
+}
+
+async function durablePromptContent(ctx: Context, blocks: SessionPromptParams['contentBlocks']): Promise<ContentBlock[]> {
+  const images = blocks.filter(encodedImage)
+  if (images.length === 0) return blocks as ContentBlock[]
+  const attachments = ctx.get('attachments')
+  if (attachments === undefined) throw new Error('SDK image prompt requires an attachment store')
+  const refs = await admitEncodedImages(attachments, images.map((image): EncodedImageAttachment => ({
+    data: image.data,
+    mediaType: image.mimeType,
+  })))
+  let next = 0
+  return blocks.map(block => encodedImage(block)
+    ? { type: 'image', attachment: refs[next++] as ImageAttachmentRef }
+    : block)
 }
 
 /** Recover the delegating parent from the service-owned scoped carrier. */
@@ -54,6 +84,7 @@ export class HarnessSdkJsonRpcServer {
   private cwd = process.cwd()
   private provider = 'deepseek-official'
   private model = 'deepseek-official'
+  private reasoningEffort: ReturnType<typeof ReasoningEffortId> | undefined
   private maxTokens: number | undefined
   private llmFiber: { dispose(): Promise<void> } | undefined
   private readonly sessions = new Map<string, SessionRecord>()
@@ -61,6 +92,7 @@ export class HarnessSdkJsonRpcServer {
   private readonly disposers: (() => void)[] = []
   private shutdownTask: Promise<Record<string, never>> | undefined
   private shuttingDown = false
+  private initialized = false
 
   constructor(
     private readonly ctx: Context,
@@ -69,8 +101,18 @@ export class HarnessSdkJsonRpcServer {
   ) {
     const serverOptions = this.options
     this.disposers.push(ctx.on('session/event', (session, event) => {
+      const record = this.sessions.get(session.id)
+      if (event.type === 'turn/end' && record?.handle.agent.session === session
+        && record.failure !== undefined && event.seq >= record.failure.atOffset) {
+        record.failure = undefined
+      }
       const payload: SessionEventNotification = { sessionId: String(session.id), event }
       this.transport.notify('session.event', payload)
+    }))
+    this.disposers.push(ctx.on('agent/error', ({ agent, error }) => {
+      const record = this.sessions.get(agent.session.id)
+      if (record?.handle.agent !== agent) return
+      record.failure = { error, atOffset: agent.session.seq }
     }))
     this.disposers.push(ctx.on('agent/status', ({ agent, status }) => {
       this.transport.notify('session.status', { sessionId: String(agent.session.id), status })
@@ -97,30 +139,52 @@ export class HarnessSdkJsonRpcServer {
         childSessionId: String(info.id),
         status: successStatus(info.stopReason, serverOptions),
         stopReason: info.stopReason,
-        ...(info.lastAssistantMessage === undefined ? {} : { lastAssistantMessage: info.lastAssistantMessage }),
+        ...(info.lastAssistantMessage === undefined
+          ? {}
+          : { lastAssistantMessage: [...info.lastAssistantMessage] }),
       }
       transport.notify('subagent.finished', payload)
     }))
   }
 
   /**
-   * Configure the SDK route, mounting the DeepSeek fallback only when unowned.
+   * Validate and configure the SDK route, mounting the DeepSeek fallback only when unowned.
    * @param params - SDK handshake parameters.
    * @returns server identity for the handshake.
    */
   async initialize(params: InitializeParams): Promise<InitializeResult> {
+    if (params.reasoningEffort !== undefined
+      && (typeof params.reasoningEffort !== 'string' || params.reasoningEffort.length === 0)) {
+      throw new TypeError('initialize reasoningEffort must be a non-empty string')
+    }
     if (params.maxTokens !== undefined
       && (!Number.isSafeInteger(params.maxTokens) || params.maxTokens <= 0)) {
       throw new TypeError('initialize maxTokens must be a positive safe integer')
     }
-    this.cwd = resolve(params.cwd)
-    this.provider = params.provider
-    this.model = params.model
-    this.maxTokens = params.maxTokens
-    if (!this.hasAdapterFor(this.provider)) {
-      if (this.provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${this.provider}"`)
-      this.llmFiber = await this.ctx.plugin(LlmAiSdk, {})
+    const cwd = resolve(params.cwd)
+    const provider = params.provider
+    const model = params.model
+    const reasoningEffort = params.reasoningEffort === undefined
+      ? undefined
+      : ReasoningEffortId(params.reasoningEffort)
+    if (!this.hasAdapterFor(provider)) {
+      if (provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${provider}"`)
+      this.llmFiber = await this.ctx.plugin(LlmDeepSeek)
     }
+    // Adapter presence was read from this service above; a successful fallback mount also requires it.
+    const llm = this.ctx.get('llm') as LlmRuntime
+    await llm.resolveCallConfig({
+      provider,
+      model,
+      ...reasoningEffort === undefined ? {} : { reasoningEffort },
+      ...params.maxTokens === undefined ? {} : { maxTokens: params.maxTokens },
+    })
+    this.cwd = cwd
+    this.provider = provider
+    this.model = model
+    this.reasoningEffort = reasoningEffort
+    this.maxTokens = params.maxTokens
+    this.initialized = true
     return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } }
   }
 
@@ -130,20 +194,104 @@ export class HarnessSdkJsonRpcServer {
    * @returns the durable message identity.
    */
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
+    if (!this.initialized) throw new Error('SDK server is not initialized')
     const rec = await this.getOrCreateSession(params.sessionId)
     // An agent-loop-only reload disposes the loop's agents while this record
     // survives; a retained agent accepts followup() silently, so validate the
-    // record against the live registry before delivery (as the ACP bridge does).
-    if (this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
-      throw new Error(`session agent was disposed outside the server: ${params.sessionId}`)
-    }
-    const message = createUserMessage({ content: params.contentBlocks, source: { kind: 'user' } })
+    // record against the live registry before delivery.
+    this.assertLiveAgent(rec, params.sessionId)
+    const content = await durablePromptContent(this.ctx, params.contentBlocks)
+    // Attachment admission crosses an async boundary where shutdown or an
+    // agent-loop reload may detach the retained handle.
+    this.assertLiveAgent(rec, params.sessionId)
+    const message = createUserMessage({
+      content,
+      source: { kind: 'user' },
+    })
     rec.handle.agent.followup(message)
     return { messageId: message.id }
   }
 
   /**
+   * Restore a persisted session and repair its interrupted final turn without sending input.
+   * Uses the initialized model route while preserving the stored session identity and directory.
+   * Rejects missing, unreadable, or already owned sessions; never creates a replacement.
+   * @param params - persisted session identity in the configured persistence store.
+   * @returns an empty result after the Agent is ready for prompts.
+   */
+  async resume(params: SessionResumeParams): Promise<Record<string, never>> {
+    if (!this.initialized) throw new Error('SDK server is not initialized')
+    if (this.shuttingDown) throw new Error('SDK server is shutting down')
+    const sessionId = params.sessionId
+    if (this.sessions.has(sessionId) || this.sessionCreations.has(sessionId)) {
+      throw new Error(`SDK session is already open or opening: ${sessionId}`)
+    }
+    await this.openSession(sessionId, true)
+    return {}
+  }
+
+  /**
+   * Wait for an existing owned Agent and its managed descendants to finish.
+   * The response follows all Session notifications emitted during the wait.
+   * Rejects a live Agent failure that has no subsequent durable terminal.
+   * @param params - the SDK-owned session to observe without creating one.
+   * @returns an empty result after the root stays idle across the descendant check.
+   */
+  async wait(params: SessionWaitParams): Promise<Record<string, never>> {
+    if (!this.initialized) throw new Error('SDK server is not initialized')
+    const rec = this.sessions.get(params.sessionId)
+    if (rec === undefined) throw new Error(`unknown SDK session: ${params.sessionId}`)
+    const agent = rec.handle.agent
+    const subagents = this.ctx.get('subagents')
+    while (true) {
+      this.assertLiveAgent(rec, params.sessionId)
+      await agent.whenIdle()
+      const idleSeq = agent.session.seq
+      const children = await subagents?.waitForChildren(agent)
+      this.assertLiveAgent(rec, params.sessionId)
+      if (!children && agent.status === 'idle' && agent.session.seq === idleSeq) {
+        if (rec.failure !== undefined) throw rec.failure.error
+        return {}
+      }
+    }
+  }
+
+  private assertLiveAgent(rec: SessionRecord, sessionId: string): void {
+    if (this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
+      throw new Error(`session agent was disposed outside the server: ${sessionId}`)
+    }
+  }
+
+  /**
+   * Read a Session's effective directory, recovering a missing directory to its origin.
+   * @param params - target Session; an unknown id creates it.
+   * @returns the absolute effective directory.
+   */
+  async getWorkingDirectory(params: SessionWorkingDirectoryParams): Promise<SessionWorkingDirectoryResult> {
+    const agent = await this.workingDirectoryAgent(params.sessionId)
+    return { cwd: await this.ctx.workingDirectory.ensure(agent) }
+  }
+
+  /**
+   * Change a Session's directory and queue its model-visible transition.
+   * @param params - target Session and absolute or current-directory-relative path.
+   * @returns the validated absolute directory; origin and permissions are unchanged.
+   */
+  async setWorkingDirectory(params: SessionWorkingDirectorySetParams): Promise<SessionWorkingDirectoryResult> {
+    const agent = await this.workingDirectoryAgent(params.sessionId)
+    return { cwd: await this.ctx.workingDirectory.set(agent, params.path) }
+  }
+
+  private async workingDirectoryAgent(sessionId: string): Promise<Agent> {
+    if (!this.initialized) throw new Error('SDK server is not initialized')
+    const rec = await this.getOrCreateSession(sessionId)
+    this.assertLiveAgent(rec, sessionId)
+    return rec.handle.agent
+  }
+
+  /**
    * Dispose server-owned agents, adapter, and subscriptions to quiescence.
+   * Managed descendants drain before the root Agent handles and adapter are released.
    * The surrounding context remains running.
    * @returns empty JSON-RPC result.
    */
@@ -166,6 +314,11 @@ export class HarnessSdkJsonRpcServer {
       } catch (error) {
         failures.push(error)
       }
+    }
+    try {
+      await this.ctx.get('subagents')?.drainDescendants(records.map(rec => rec.handle.agent))
+    } catch (error: unknown) {
+      failures.push(error)
     }
     const teardownResults = await Promise.allSettled([
       ...records.map(rec => Promise.resolve().then(() => rec.handle.dispose())),
@@ -193,6 +346,29 @@ export class HarnessSdkJsonRpcServer {
         return this.initialize(params as unknown as InitializeParams)
       case 'session/prompt':
         return this.prompt(params as unknown as SessionPromptParams)
+      case 'session/resume': {
+        const sessionId = params?.sessionId
+        if (typeof sessionId !== 'string' || sessionId.length === 0) {
+          throw new TypeError('session/resume requires a non-empty sessionId string')
+        }
+        return this.resume({ sessionId })
+      }
+      case 'session/wait': {
+        const sessionId = params?.sessionId
+        if (typeof sessionId !== 'string') throw new TypeError('session/wait requires a sessionId string')
+        return this.wait({ sessionId })
+      }
+      case 'session/working-directory/get':
+      case 'session/working-directory/set': {
+        if (typeof params?.sessionId !== 'string' || params.sessionId.length === 0) {
+          throw new TypeError('working-directory requests require a non-empty sessionId')
+        }
+        if (method === 'session/working-directory/get') {
+          return this.getWorkingDirectory({ sessionId: params.sessionId })
+        }
+        if (typeof params.path !== 'string') throw new TypeError('working-directory set requires a path string')
+        return this.setWorkingDirectory({ sessionId: params.sessionId, path: params.path })
+      }
       case 'shutdown':
         return this.shutdown()
       default:
@@ -206,7 +382,11 @@ export class HarnessSdkJsonRpcServer {
     if (existing) return existing
     const pending = this.sessionCreations.get(sessionId)
     if (pending) return pending
-    const creation = this.createSession(sessionId)
+    return this.openSession(sessionId, false)
+  }
+
+  private openSession(sessionId: string, resume: boolean): Promise<SessionRecord> {
+    const creation = this.createSession(sessionId, resume)
     this.sessionCreations.set(sessionId, creation)
     void creation.then(
       () => { this.sessionCreations.delete(sessionId) },
@@ -215,21 +395,26 @@ export class HarnessSdkJsonRpcServer {
     return creation
   }
 
-  private async createSession(sessionId: string): Promise<SessionRecord> {
+  private async createSession(sessionId: string, resume: boolean): Promise<SessionRecord> {
     // No preset composition: this server's compositions keep the model-facing
     // rows in the host plane, so this agent reads them from the global layer. A
     // deployment that configures a roster has to join one here first
-    // (@deepseek-ai/dsh-agent-presets README, "Composing a child agent").
-    const handle = await this.ctx.agents.create({
-      sessionId: SessionId(sessionId),
+    // (@deepseek-ai/dsh-agent-preset-registry README, "Composing a child agent").
+    const agentOptions = {
+      provider: this.provider,
+      model: this.model,
+      ...this.reasoningEffort === undefined ? {} : { reasoningEffort: this.reasoningEffort },
+      ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
+    }
+    const handle = await (resume ? this.ctx.agents.resume({
+      resumeSessionId: brandString<SessionId>(sessionId),
+      agentOptions,
+    }) : this.ctx.agents.create({
+      sessionId: brandString<SessionId>(sessionId),
       meta: { cwd: this.cwd },
-      agentOptions: {
-        provider: this.provider,
-        model: this.model,
-        ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
-      },
-    })
-    const rec: SessionRecord = { handle }
+      agentOptions,
+    }))
+    const rec: SessionRecord = { handle, failure: undefined }
     this.sessions.set(sessionId, rec)
     return rec
   }

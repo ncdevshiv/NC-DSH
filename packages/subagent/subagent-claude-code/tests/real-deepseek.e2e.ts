@@ -1,3 +1,5 @@
+import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-directory-fixture.ts'
+import { startExternalActivation } from '../../subagent/tests/external-activation-helpers.ts'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import {
@@ -12,14 +14,16 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as claudeCode from '../src/index.ts'
 
 const execFileAsync = promisify(execFile)
-const OFFICIAL_DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
+const OFFICIAL_DEEPSEEK_MESSAGES_BASE_URL = 'https://api.deepseek.com/anthropic'
+const DEEPSEEK_MODEL = 'deepseek-v4-flash'
 const sdkRoot = dirname(fileURLToPath(
   import.meta.resolve('@anthropic-ai/claude-agent-sdk'),
 ))
@@ -45,15 +49,6 @@ afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
-
-function deepSeekBaseUrl(): string {
-  const configured = (process.env.DEEPSEEK_BASE_URL ?? OFFICIAL_DEEPSEEK_BASE_URL)
-    .replace(/\/+$/, '')
-  if (configured !== OFFICIAL_DEEPSEEK_BASE_URL) {
-    throw new Error('Claude Code DeepSeek e2e requires the official DeepSeek base URL')
-  }
-  return configured
-}
 
 async function expectQuiescent(handles: readonly SubprocessHandle[]): Promise<void> {
   expect(handles.length).toBeGreaterThan(0)
@@ -88,12 +83,12 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)(
 
       const env = {
         ANTHROPIC_AUTH_TOKEN: apiKey,
-        ANTHROPIC_BASE_URL: `${deepSeekBaseUrl()}/anthropic`,
-        ANTHROPIC_MODEL: 'deepseek-v4-pro[1m]',
-        ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-v4-pro[1m]',
-        ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-v4-pro[1m]',
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-v4-flash',
-        CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-v4-flash',
+        ANTHROPIC_BASE_URL: OFFICIAL_DEEPSEEK_MESSAGES_BASE_URL,
+        ANTHROPIC_MODEL: DEEPSEEK_MODEL,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: DEEPSEEK_MODEL,
+        ANTHROPIC_DEFAULT_SONNET_MODEL: DEEPSEEK_MODEL,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: DEEPSEEK_MODEL,
+        CLAUDE_CODE_SUBAGENT_MODEL: DEEPSEEK_MODEL,
         CLAUDE_CODE_EFFORT_LEVEL: 'max',
         CLAUDE_CONFIG_DIR: claudeConfig,
         HOME: root,
@@ -112,6 +107,9 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)(
       }
       const ctx = new Context()
       contexts.push(ctx)
+      await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+      const harness = await mountAgentLoopTestHarness(ctx)
+      await mountWorkingDirectoryFixture(ctx)
       await ctx.plugin(SubagentRuntime)
       await ctx.plugin(LocalSubprocessRuntime)
       const handles: SubprocessHandle[] = []
@@ -123,20 +121,17 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)(
       })
       await ctx.plugin(claudeCode, { env, disposeGraceMs: 3_000 })
 
-      expect(sdkPackage.version).toBe('0.3.220')
-      expect(sdkPackage.claudeCodeVersion).toBe('2.1.220')
-      expect(sdkPackage.optionalDependencies[platformPackage]).toBe('0.3.220')
+      expect(sdkPackage.version).toBe('0.3.263')
+      expect(sdkPackage.claudeCodeVersion).toBe('2.1.263')
+      expect(sdkPackage.optionalDependencies[platformPackage]).toBe('0.3.263')
       const version = await execFileAsync(claudeBin, ['--version'], {
         env: { ...process.env, ...env },
       })
-      expect(version.stdout.trim()).toBe('2.1.220 (Claude Code)')
+      expect(version.stdout.trim()).toBe('2.1.263 (Claude Code)')
 
       const nonce = `DSH_CLAUDE_DEEPSEEK_${randomUUID()}`
-      const parent = {
-        id: 'deepseek-e2e-parent',
-        session: { header: { cwd: workspace } },
-      } as unknown as Agent
-      const run = await ctx.subagents.start('claude-code', {
+      const parent = await harness.create(SessionId('deepseek-e2e-parent'), {}, { cwd: workspace })
+      const run = await startExternalActivation(ctx, 'claude-code', {
         prompt: [{
           type: 'text',
           text: `Reply with exactly ${nonce} and nothing else. Do not use tools.`,

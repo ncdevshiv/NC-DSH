@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for troubleshooting.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/troubleshooting.md
+/:
+  en: a595c10ceb1526cd
+  zh: dd3a78efb916f607
+/nc-ag-troubleshooting:
+  en: a4afae0e0c950137
+  zh: 154a961906f4c552
+/nc-ag-troubleshooting/summary:
+  en: 536f714eed4cc374
+  zh: c06f04b757c6a766
+/nc-ag-troubleshooting/table-of-contents:
+  en: 87d75c6e14949055
+  zh: 36419bbed6999d20
+/nc-ag-troubleshooting/boot-failures:
+  en: 7eae327d27f5ea6c
+  zh: 1958ed89fb9b2cd6
+/nc-ag-troubleshooting/task-execution-failures:
+  en: f34dab553344bd31
+  zh: bf2cf0039f9b74f5
+/nc-ag-troubleshooting/verification-failures:
+  en: f6b7209b371fbd01
+  zh: b6a2b1c35300b941
+/nc-ag-troubleshooting/integration-failures:
+  en: d83fd08e67fe141a
+  zh: d32952ca9e73effc
+/nc-ag-troubleshooting/cost-and-budget:
+  en: ef7b2c7413d4f72e
+  zh: 27b3dc683c326093
+/nc-ag-troubleshooting/control-plane:
+  en: dbdb8734ce802830
+  zh: f3451d372f503d32

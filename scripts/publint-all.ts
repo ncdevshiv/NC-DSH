@@ -6,12 +6,13 @@ import {
   readFileSync,
   statSync,
 } from 'node:fs'
-import { availableParallelism } from 'node:os'
 import { dirname, posix, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { publint, type Message, type PackFile } from 'publint'
 import { formatMessage } from 'publint/utils'
 import ts from 'typescript'
+import { defaultParallelism } from './parallelism.ts'
+import { isBrowserBundleFormatFalsePositive } from './publint-browser-format.ts'
 
 const CONCURRENCY_ENV = 'DSH_PUBLINT_CONCURRENCY'
 const repositoryRoot = resolve(import.meta.dirname, '..')
@@ -71,7 +72,7 @@ function publintConcurrency(total: number): number {
     return Math.min(total, parsed)
   }
 
-  return Math.min(total, availableParallelism())
+  return Math.min(total, defaultParallelism())
 }
 
 function publicationFiles(target: PackageTarget): PackFile[] {
@@ -186,9 +187,10 @@ async function runPublint(target: PackageTarget): Promise<PublintResult> {
       pack: { files },
     })
     const manifest = result.pkg as Record<string, unknown>
-    return result.messages.some(message => message.type === 'error') || closureViolations.length > 0
-      ? { path: target.path, status: 'failed', messages: result.messages, closureViolations, manifest }
-      : { path: target.path, status: 'passed', messages: result.messages, closureViolations, manifest }
+    const messages = result.messages.filter(message => !isBrowserBundleFormatFalsePositive(message))
+    return messages.some(message => message.type === 'error') || closureViolations.length > 0
+      ? { path: target.path, status: 'failed', messages, closureViolations, manifest }
+      : { path: target.path, status: 'passed', messages, closureViolations, manifest }
   } catch (error: unknown) {
     return {
       path: target.path,

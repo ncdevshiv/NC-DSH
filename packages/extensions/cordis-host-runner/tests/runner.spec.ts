@@ -506,6 +506,33 @@ describe('dynamic runner teardown', () => {
 
     expect(ctx.get('dynDoubler')).toBeUndefined()
   })
+
+  it('retracts a host half that finishes coming up after its plugin was removed', async () => {
+    const { ctx, runner } = await setup()
+    // apply stays pending for 300ms, which is the window a removal arriving
+    // mid-activation has to wait out instead of overlooking the run it produces.
+    const { pluginId, packageId } = define(runner, {
+      sessionId: AGENT_A.id,
+      name: 'slow',
+      purpose: 'p',
+      host: `return {
+        name: 'slow',
+        inject: ['timer'],
+        async apply(ctx) {
+          ctx.provide('dynLate', { stage: 'up' })
+          await ctx.timeout(300)
+        },
+      }`,
+    })
+
+    const starting = runner.runHostHalf(AGENT_A, pluginId, packageId, 'run', null, false)
+    const receipt = await runner.undefine(AGENT_A, pluginId)
+
+    expect(receipt).toEqual({ ok: true, wasRunning: true })
+    await expect(starting).resolves.toMatchObject({ ok: true, pluginId, startedHere: true })
+    expect(ctx.get('dynLate')).toBeUndefined()
+    expect(runner.inventory()).toEqual([])
+  })
 })
 
 describe('render failure reports', () => {

@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+  },
+  "files": [
+    "src/index.ts",
+    "src/codes.ts",
+    "src/types.ts"
+  ],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/schemastery" },
+    { "path": "../../ncag/ncag-core" },
+    { "path": "../../ncag/ncag-orchestrator" },
+    { "path": "../../ncag/ncag-service" },
+    { "path": "../../typert/protocol" }
+  ]
+}

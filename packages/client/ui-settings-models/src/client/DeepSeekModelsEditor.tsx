@@ -3,15 +3,24 @@
  * The settings layer replaces `models` as one array, so the parent supplies
  * the effective inherited rows until the first edit materializes a user
  * override; reset removes that override instead of copying defaults into it.
+ *
+ * A search field narrows the rows as the user types, matching a model's id or
+ * its display name. Filtering only hides rows: a hidden row keeps its place in
+ * the catalog, so its number, its edits, and its removal still address the row
+ * it names.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import {
-  IconChevronDownOutline14, IconChevronRightOutline14, IconPlusOutline16, IconTrashOutline16,
-} from '@deepseek-ai/dsh-client-ui-primitives'
-import { inferModelModalities } from '@deepseek-ai/dsh-llm/capabilities'
+import { IconPlusOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { en } from './locales.ts'
+import type { ModelTestFeedback } from './operations.ts'
+import { ModelCatalogSearch } from './ModelCatalogSearch.tsx'
+import { ModelListActions } from './ModelListActions.tsx'
+import { modelMatches } from './model-search.ts'
+import { ModelRow, modelProbeProps } from './ModelRow.tsx'
+import type { ModelCapabilities } from './ModelRow.tsx'
+import { MODEL_SOURCE_FIELD } from './mutations.ts'
 import styles from './ModelsSection.module.css'
 
 /** One catalog entry kept structurally open so hidden or future fields survive an edit. */
@@ -19,23 +28,6 @@ export type DeepSeekModelDraft = Record<string, unknown>
 
 /** The catalog fields this editor writes. */
 type CatalogField = 'id' | 'name' | 'contextWindow' | 'maxTokens'
-
-/**
- * Whether one row declares image input. An explicit `inputModalities` field
- * is authoritative (the user set the checkbox or the row was adopted from a
- * source that carried modalities); when absent, infer from the model's id and
- * name so well-known multimodal models default to checked, matching what the
- * adapter resolves to.
- */
-function declaresVision(model: DeepSeekModelDraft): boolean {
-  const value = model['inputModalities']
-  if (Array.isArray(value)) {
-    return value.includes('image')
-  }
-  const id = typeof model['id'] === 'string' ? model['id'] : ''
-  const name = typeof model['name'] === 'string' ? model['name'] : undefined
-  return (inferModelModalities(id, name) ?? []).includes('image')
-}
 
 /** The two token counts edited as K/M-suffixed text behind a row's disclosure. */
 type CapacityField = 'contextWindow' | 'maxTokens'
@@ -150,6 +142,12 @@ export interface DeepSeekModelsEditorProps {
   defaultContextWindow: number | undefined
   /** Fallback output cap used when a row omits its exact value. */
   defaultMaxTokens: number | undefined
+  /**
+   * Capability facts the route supplies for every row it serves, such as
+   * whether its thinking policy is enabled. A row's own declarations still
+   * supply the rest.
+   */
+  modelCapabilities?: ModelCapabilities | undefined
   /** Section copy. */
   t: (key: keyof typeof en) => string
   /** Disable every mutation. */
@@ -158,11 +156,19 @@ export interface DeepSeekModelsEditorProps {
   onChange: (models: DeepSeekModelDraft[]) => void
   /** Remove the user-owned array and return to inheritance. */
   onReset: () => void
+  /** Probe one model; absent when the card has no test surface. */
+  onTestModel?: ((modelId: string) => void) | undefined
+  /** Probe several models at once; absent when the card has no test surface. */
+  onTestAll?: ((modelIds: readonly string[]) => void) | undefined
+  /** Model ids whose probes are in flight. */
+  testing?: ReadonlySet<string> | undefined
+  /** Each row's settled probe, by model id. */
+  testFeedback?: ReadonlyMap<string, ModelTestFeedback> | undefined
 }
 
 /**
  * Render the direct DeepSeek adapter's model catalog: id and display name on
- * each row, capacities behind the row's own disclosure.
+ * each row, capacities and input types behind the row's own disclosure.
  * @param props - effective rows plus the array-level override actions.
  * @returns the catalog editor.
  */
@@ -180,6 +186,22 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
   // because the rows they annotated are gone.
   const [editing, setEditing] = useState<ReadonlyMap<string, string>>(() => new Map())
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
+  /** The search text over the catalog rows. */
+  const [query, setQuery] = useState('')
+  /** The rows a test-all action can probe: only those that name a model. */
+  const probeIds = props.models.flatMap(model =>
+    typeof model.id === 'string' && model.id.length > 0 ? [model.id] : [])
+
+  // The rows the search term leaves visible. Each keeps its place in the
+  // catalog, so a filtered row is still the row its number, its edits, and its
+  // removal action name.
+  const visibleModels = useMemo(
+    () => props.models.flatMap((model, index) => modelMatches({
+      id: typeof model.id === 'string' ? model.id : '',
+      name: typeof model.name === 'string' ? model.name : '',
+    }, query) ? [{ model, index }] : []),
+    [props.models, query],
+  )
 
   const update = (index: number, key: CatalogField, value: unknown): void => {
     const next = props.models.map((model, at) => {
@@ -190,18 +212,6 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
       return copy
     })
     props.onChange(next)
-  }
-
-  /**
-   * Pin one row's image capability. Both states write the explicit
-   * `inputModalities` declaration — checked pins `['text', 'image']`,
-   * unchecked pins `['text']` — because the field is what the adapter reads
-   * and an absent field would fall back to its text-only default anyway.
-   */
-  const setVision = (index: number, vision: boolean): void => {
-    props.onChange(props.models.map((model, at) => at === index
-      ? { ...model, inputModalities: vision ? ['text', 'image'] : ['text'] }
-      : { ...model }))
   }
 
   const remove = (index: number): void => {
@@ -263,34 +273,17 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
     })
   }
 
-  /** One capacity field of one row, rendered inside the row's disclosure. */
-  const capacityField = (
-    model: DeepSeekModelDraft,
-    index: number,
-    field: CapacityField,
-    fallback: number | undefined,
-  ): ReactNode => (
-    <label className={styles['modelField']}>
-      <span className={styles['modelFieldLabel']}>{props.t(field === 'contextWindow' ? 'contextWindow' : 'maxTokens')}</span>
-      <input
-        className={styles['input']}
-        type="text"
-        inputMode="numeric"
-        value={capacityText(model, index, field)}
-        placeholder={fallback === undefined
-          ? props.t(field === 'contextWindow' ? 'contextWindowPlaceholder' : 'maxTokensPlaceholder')
-          : formatCapacity(fallback)}
-        aria-label={`${props.t(field === 'contextWindow' ? 'contextWindow' : 'maxTokens')} ${String(index + 1)}`}
-        disabled={props.disabled}
-        onChange={(event) => {
-          const text = event.target.value
-          setEditing(current => new Map(current).set(`${String(index)}:${field}`, text))
-          update(index, field, parseCapacity(text))
-        }}
-        onBlur={() => { settleCapacity(index, field) }}
-      />
-    </label>
-  )
+  const capacityInput = (model: DeepSeekModelDraft, index: number, field: CapacityField, fallback: number | undefined) => ({
+    value: capacityText(model, index, field),
+    placeholder: fallback === undefined
+      ? props.t(field === 'contextWindow' ? 'contextWindowPlaceholder' : 'maxTokensPlaceholder')
+      : formatCapacity(fallback),
+    onChange: (text: string) => {
+      setEditing(current => new Map(current).set(`${String(index)}:${field}`, text))
+      update(index, field, parseCapacity(text))
+    },
+    onBlur: () => { settleCapacity(index, field) },
+  })
 
   return (
     <section className={styles['modelCatalog']} aria-label={props.t('models')}>
@@ -301,102 +294,59 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
             {props.overridden ? props.t('modelsCustomized') : props.t('modelsInherited')}
           </span>
         </div>
-        {props.overridden
-          ? (
-            <button
-              type="button"
-              className={styles['linkButton']}
-              disabled={props.disabled}
-              onClick={reset}
-            >
-              {props.t('resetModels')}
-            </button>
-          )
-          : null}
+        <ModelListActions
+          t={props.t}
+          disabled={props.disabled}
+          testing={(props.testing?.size ?? 0) > 0}
+          testIds={probeIds}
+          onTestAll={props.onTestAll}
+          onReset={props.overridden ? reset : undefined}
+        />
       </div>
       {props.models.length === 0
         ? <p className={styles['modelEmpty']}>{props.t('modelsEmpty')}</p>
-        : (
-          <div className={styles['modelList']}>
-            {props.models.map((model, index) => (
-              <div className={styles['modelEntry']} key={index}>
-                <div className={styles['modelRow']}>
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    value={typeof model['id'] === 'string' ? model['id'] : ''}
-                    placeholder={props.t('modelId')}
-                    aria-label={`${props.t('modelId')} ${String(index + 1)}`}
-                    disabled={props.disabled}
-                    onChange={(event) => { update(index, 'id', event.target.value) }}
-                    onBlur={(event) => {
-                      // Settle a pasted id rather than trimming per keystroke,
-                      // which would stop the user typing an interior space.
-                      const trimmed = event.target.value.trim()
-                      if (trimmed !== event.target.value) update(index, 'id', trimmed)
-                    }}
-                  />
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    value={typeof model['name'] === 'string' ? model['name'] : ''}
-                    placeholder={props.t('modelName')}
-                    aria-label={`${props.t('modelName')} ${String(index + 1)}`}
-                    disabled={props.disabled}
-                    onChange={(event) => {
-                      update(index, 'name', event.target.value === '' ? undefined : event.target.value)
-                    }}
-                  />
-                  <label className={styles['modelVision']} title={props.t('modelVisionHint')}>
-                    <input
-                      type="checkbox"
-                      checked={declaresVision(model)}
-                      disabled={props.disabled}
-                      aria-label={`${props.t('modelVision')} ${String(index + 1)}`}
-                      onChange={(event) => { setVision(index, event.target.checked) }}
-                    />
-                    <span>{props.t('modelVision')}</span>
-                  </label>
-                  <button
-                    type="button"
-                    className={styles['iconButton']}
-                    aria-label={`${props.t('modelAdvanced')} ${String(index + 1)}`}
-                    aria-expanded={expanded.has(index)}
-                    title={props.t('modelAdvanced')}
-                    onClick={() => { toggle(index) }}
-                  >
-                    {expanded.has(index) ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles['iconButton']} ${styles['iconButtonDanger']}`}
-                    aria-label={`${props.t('removeModel')} ${String(index + 1)}`}
-                    title={props.t('removeModel')}
-                    disabled={props.disabled}
-                    onClick={() => { remove(index) }}
-                  >
-                    <IconTrashOutline16 size={14} />
-                  </button>
-                </div>
-                {expanded.has(index)
-                  ? (
-                    <div className={styles['modelAdvanced']}>
-                      {capacityField(model, index, 'contextWindow', props.defaultContextWindow)}
-                      {capacityField(model, index, 'maxTokens', props.defaultMaxTokens)}
-                    </div>
-                  )
-                  : null}
-              </div>
-            ))}
-          </div>
-        )}
+        : <ModelCatalogSearch value={query} t={props.t} onChange={setQuery} />}
+      {props.models.length > 0 && visibleModels.length === 0
+        ? <p className={styles['modelEmpty']}>{props.t('noMatchingModels')}</p>
+        : null}
+      <div className={styles['modelList']}>
+        {visibleModels.map(({ model, index }) => {
+          const modelId = typeof model.id === 'string' ? model.id : ''
+          return (
+            <ModelRow
+              key={index}
+              model={model}
+              position={index + 1}
+              inputField="inputModalities"
+              capabilities={props.modelCapabilities}
+              expanded={expanded.has(index)}
+              disabled={props.disabled}
+              t={props.t}
+              contextWindow={capacityInput(model, index, 'contextWindow', props.defaultContextWindow)}
+              maxTokens={capacityInput(model, index, 'maxTokens', props.defaultMaxTokens)}
+              onFieldChange={(field, value) => { update(index, field, value) }}
+              onIdBlur={(value) => {
+                const trimmed = value.trim()
+                if (trimmed !== value) update(index, 'id', trimmed)
+              }}
+              onChange={(next) => { props.onChange(props.models.map((row, at) => at === index ? next : row)) }}
+              onToggle={() => { toggle(index) }}
+              onRemove={() => { remove(index) }}
+              {...modelProbeProps(props.onTestModel, props.testing, props.testFeedback, modelId)}
+            />
+          )
+        })}
+      </div>
       <button
         type="button"
         className={styles['addModelButton']}
         disabled={props.disabled}
-        onClick={() => { props.onChange([...props.models.map(model => ({ ...model })), { id: '' }]) }}
+        onClick={() => {
+          // A row added by hand is marked custom so a later fetch never prunes it.
+          props.onChange([...props.models.map(model => ({ ...model })), { id: '', [MODEL_SOURCE_FIELD]: 'custom' as const }])
+        }}
       >
-        <IconPlusOutline16 size={14} />
+        <IconPlusOutlineRegular size={14} />
         {props.t('addModel')}
       </button>
     </section>

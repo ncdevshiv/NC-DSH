@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-27-durable-workspace-change-summaries.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-27-durable-workspace-change-summaries.md
+/agent-note-durable-workspace-change-summaries:
+  en: dde6bff644de51e8
+  zh: f0303198040990c7
+/agent-note-durable-workspace-change-summaries/problem:
+  en: 51ff6ea1228fdd53
+  zh: 71e948fd79620d3c
+/agent-note-durable-workspace-change-summaries/decision:
+  en: daef77b0e35193cc
+  zh: b5a61f81a0497021
+/agent-note-durable-workspace-change-summaries/alternatives-considered:
+  en: f206681763a074bf
+  zh: 0bea108984bc05b4
+/agent-note-durable-workspace-change-summaries/consequences:
+  en: 8eb2a9cba4be13c0
+  zh: d9f6da521d729e0f

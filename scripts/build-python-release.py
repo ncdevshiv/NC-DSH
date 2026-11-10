@@ -8,6 +8,7 @@ import email
 import json
 import os
 import re
+import runpy
 import shutil
 import stat
 import subprocess
@@ -47,9 +48,12 @@ def load_platforms(path: Path = PLATFORM_MANIFEST) -> dict[str, tuple[str, str]]
 PLATFORMS = load_platforms()
 
 
-def runtime_suffixes(executable_name: str) -> tuple[str, ...]:
-    suffixes = ("", "-rg")
-    return (*suffixes, "-spawn-helper") if "-macos-" in executable_name else suffixes
+def runtime_filenames(executable_name: str) -> tuple[str, ...]:
+    """Return the exact platform payload names for one runtime executable."""
+    if executable_name.endswith(".exe"):
+        return (executable_name, f"{executable_name.removesuffix('.exe')}-rg.exe")
+    names = (executable_name, f"{executable_name}-rg")
+    return (*names, f"{executable_name}-spawn-helper") if "-macos-" in executable_name else names
 
 
 def main() -> None:
@@ -140,18 +144,21 @@ def validate_release_tag(tag: str | None, version: str) -> None:
 
 
 def copy_package(source: Path, destination: Path) -> None:
+    generated_parent = source / "src" / "deepseek_harness_runtime"
+    ignore_files = shutil.ignore_patterns(
+        ".venv", ".pytest_cache", "__pycache__", "*.pyc", "dist", "node_modules",
+    )
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = ignore_files(directory, names)
+        if Path(directory) == generated_parent:
+            ignored.add("runtime")
+        return ignored
+
     shutil.copytree(
         source,
         destination,
-        ignore=shutil.ignore_patterns(
-            ".venv",
-            ".pytest_cache",
-            "__pycache__",
-            "*.pyc",
-            "dist",
-            "node_modules",
-            "dsh-jsonrpc-agent-pkg-*",
-        ),
+        ignore=ignore,
     )
 
 
@@ -205,13 +212,21 @@ def stage_sdk(destination: Path, version: str) -> None:
 
 
 def stage_runtime(destination: Path, version: str, executable: Path, executable_name: str) -> None:
+    if executable.name != executable_name:
+        raise ValueError(
+            f"runtime executable must be named {executable_name}, got {executable.name}"
+        )
     copy_package(ROOT / "python" / "sdk-runtime", destination)
     stage_license_files(destination, include_notices=True)
     rewrite_version(destination / "pyproject.toml", version)
     runtime_dir = destination / "src" / "deepseek_harness_runtime" / "runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    for suffix in runtime_suffixes(executable_name):
-        shutil.copy2(Path(f"{executable}{suffix}"), runtime_dir / f"{executable_name}{suffix}")
+    source_directory = executable.parent
+    for filename in runtime_filenames(executable_name):
+        shutil.copy2(source_directory / filename, runtime_dir / filename)
+    resources = executable_name.removeprefix("deepseek-harness-sdk-runtime-").removesuffix(".exe")
+    # Wheels materialize interpreter aliases because pip does not restore symlinks.
+    shutil.copytree(source_directory / resources, runtime_dir / resources)
 
 
 def verify_wheel(
@@ -220,17 +235,20 @@ def verify_wheel(
     version: str,
     platform: tuple[str, str] | None,
 ) -> None:
+    if wheel.stat().st_size > 100_000_000:
+        raise RuntimeError(f"{wheel} is {wheel.stat().st_size} bytes and exceeds the PyPI single-file limit of 100000000 bytes")
     expected_tag = "py3-none-any" if platform is None else f"py3-none-{platform[0]}"
+    expected_distribution = SDK_DISTRIBUTION if package == "sdk" else RUNTIME_DISTRIBUTION
+    dist_info = f"{expected_distribution.replace('-', '_')}-{version}.dist-info"
     with zipfile.ZipFile(wheel) as archive:
-        wheel_metadata_path = next(name for name in archive.namelist() if name.endswith(".dist-info/WHEEL"))
-        metadata_path = next(name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
+        wheel_metadata_path = f"{dist_info}/WHEEL"
+        metadata_path = f"{dist_info}/METADATA"
         wheel_metadata = email.message_from_bytes(archive.read(wheel_metadata_path))
         metadata = email.message_from_bytes(archive.read(metadata_path))
         if wheel_metadata.get_all("Tag") != [expected_tag]:
             raise RuntimeError(f"{wheel} has wrong WHEEL tags: {wheel_metadata.get_all('Tag')}")
         if metadata.get("Version") != version:
             raise RuntimeError(f"{wheel} has version {metadata.get('Version')}, expected {version}")
-        expected_distribution = SDK_DISTRIBUTION if package == "sdk" else RUNTIME_DISTRIBUTION
         if metadata.get("Name") != expected_distribution:
             raise RuntimeError(
                 f"{wheel} has distribution name {metadata.get('Name')}, expected {expected_distribution}"
@@ -245,21 +263,27 @@ def verify_wheel(
             raise RuntimeError(
                 f"{wheel} has license files {license_files}, expected {expected_license_files}"
             )
-        runtime_files = [
-            name for name in archive.namelist() if "/runtime/dsh-jsonrpc-agent-pkg-" in name
+        runtime_payload = [
+            name for name in archive.namelist() if name.startswith("deepseek_harness_runtime/runtime/")
         ]
         if package == "runtime":
             assert platform is not None
-            expected_files = [f"{platform[1]}{suffix}" for suffix in runtime_suffixes(platform[1])]
-            found_files = sorted(Path(name).name for name in runtime_files)
+            resources = platform[1].removeprefix("deepseek-harness-sdk-runtime-").removesuffix(".exe")
+            expected_files = sorted((*runtime_filenames(platform[1]), resources))
+            found_files = sorted({name.split("/runtime/", 1)[1].split("/", 1)[0] for name in runtime_payload})
             if found_files != expected_files:
                 raise RuntimeError(f"{wheel} runtime payload must be {expected_files}, found {found_files}")
-            for runtime_file in runtime_files:
+            validate = runpy.run_path(str(ROOT / "python/sdk-runtime/src/deepseek_harness_runtime/_resources.py"))["validate_downloads"]
+            target = next(name for name, value in PLATFORMS.items() if value == platform)
+            validate(zipfile.Path(archive, f"deepseek_harness_runtime/runtime/{resources}/"), target)
+            for runtime_file in runtime_payload:
+                if "/" in runtime_file.split("/runtime/", 1)[1]:
+                    continue
                 mode = archive.getinfo(runtime_file).external_attr >> 16
-                if mode & stat.S_IXUSR == 0:
+                if platform[0] != "win_amd64" and mode & stat.S_IXUSR == 0:
                     raise RuntimeError(f"{wheel} runtime executable lost its executable bit: {runtime_file}")
-        elif runtime_files:
-            raise RuntimeError(f"SDK wheel unexpectedly contains runtime executables: {runtime_files}")
+        elif runtime_payload:
+            raise RuntimeError(f"SDK wheel unexpectedly contains runtime files: {runtime_payload}")
         if package == "sdk":
             requirements = metadata.get_all("Requires-Dist") or []
             expected_requirement = f"{RUNTIME_DISTRIBUTION}=={version}"

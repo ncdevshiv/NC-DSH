@@ -46,7 +46,7 @@ Archived: 2026-07-26
 ## 后果
 
 - 现在，两种 dialect 中每个具有可观察 transcript 的 bridge seam 映射，都在真实应用的完整 transcript 层受到守护——包括此前完全没有端到端覆盖的 Codex bridge。记录的预期输出捕获模型对遭拒绝/遭阻止/强制继续轮次的真实反应，而手工编写的 transcript 只能猜测这种反应。
-- `UserPromptSubmit` 阻止场景无需密钥即可编写（没有模型轮次）；其余场景从已记录 fixture（测试前置数据）无需密钥重放。`pnpm run test:snapshot:record` 从实时 API 重新生成记录式 fixture，并像所有记录场景一样在缺少密钥时自行跳过。
+- `UserPromptSubmit` 阻止场景无需密钥即可编写（没有模型轮次）；其余场景从已记录 fixture（测试前置数据）无需密钥重放。`bun run test:snapshot:record` 从实时 API 重新生成记录式 fixture，并像所有记录场景一样在缺少密钥时自行跳过。
 - 证明会变红的准则仍成立：篡改钩子配置输出（例如改变拒绝理由）会让相应场景在重放时变红——钩子进程在重放期间真实运行（只有模型被重放），因此预期输出守护的是实际钩子→seam→循环路径，而非其 mock。
 - `acp-agent` 演示现在加载了一个通常会无操作的 Codex bridge（典型项目中没有 `codex-hooks.json`），这正是预期的柔性失败行为，而非代价。
 

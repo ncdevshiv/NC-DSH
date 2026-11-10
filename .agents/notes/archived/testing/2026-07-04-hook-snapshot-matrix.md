@@ -46,7 +46,7 @@ The matrix therefore covers every hook point that has a DETERMINISTIC, OBSERVABL
 ## Consequences
 
 - Every bridge seam mapping with an observable transcript is now guarded at the full-transcript tier, in the real app, for both dialects — including the Codex bridge, which had no end-to-end coverage at all. Recorded expected outputs capture the model's real reaction to a denied/blocked/force-continued turn, which a hand-authored transcript could only guess at.
-- The `UserPromptSubmit` block scenarios are authored keylessly (no model turn); the rest replay keylessly from recorded fixtures. `pnpm run test:snapshot:record` regenerates the recorded fixtures from the live API and self-skips without a key like every recorded scenario.
+- The `UserPromptSubmit` block scenarios are authored keylessly (no model turn); the rest replay keylessly from recorded fixtures. `bun run test:snapshot:record` regenerates the recorded fixtures from the live API and self-skips without a key like every recorded scenario.
 - The prove-red discipline holds: tampering a hook config's output (e.g. changing a deny reason) turns its scenario red on replay — the hook process runs FOR REAL during replay (only the model is replayed), so the expected output guards the actual hook→seam→loop path, not a mock of it.
 - The `acp-agent` demo now loads a Codex bridge it will usually no-op (no `codex-hooks.json` in a typical project), which is the intended fail-soft behavior, not a cost.
 

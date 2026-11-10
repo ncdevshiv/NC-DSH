@@ -1,19 +1,15 @@
 /**
- * Sidebar shell: column geometry plus the section switcher. Collapse is a
- * slide plus crossfade: content freezes at its expanded width (inline style)
- * and fades out in place while the sliding column (AppFrame grid tracks)
- * clips it — nothing reflows mid-slide. At settle the wide-only content
- * unmounts and the upper controls enter the 56px rail from the same
- * horizontal offset (one icon each, same top-down order) on one fade that
- * ends with the slide. The bottom-pinned settings control only fades. The
- * section switcher owns the region between itself and the foot: wide it is a
- * pill tab strip above New Session, rail it is the icon column; the four
- * section panes stay mounted beneath it (display toggles, like the layout
- * columns) so a section keeps its local state across visits and across
- * collapse. Switching sections animates the incoming pane only — a
- * directional slide + fade retriggered by alternating identical keyframes.
- * The foot holds `sidebar.settings` plus `sidebar.footer.action`; the shell
- * hands them the wide flag.
+ * Sidebar shell: column geometry and global panel navigation.
+ * Collapse is a slide plus crossfade:
+ * content freezes at its expanded width (inline style) and fades out in place
+ * while the sliding column (AppFrame grid tracks) clips it — nothing reflows
+ * mid-slide. At settle the wide-only content unmounts and the upper
+ * controls enter the 56px rail from the same horizontal offset (one icon each,
+ * same top-down order) on one fade that ends with the slide. The bottom-pinned
+ * settings control only fades. The workspace/session browsing region between
+ * global panel rows and the foot is the `sidebar.workspaces` registrant's,
+ * and the foot holds `sidebar.settings` plus `sidebar.footer.action`; the shell
+ * hands them the wide flag (plus an expand request callback for the browser).
  *
  * The column also owns whether the scroll regions nested in it draw a
  * scrollbar at all: the shell tracks the pointer and rebinds ui-theme's
@@ -21,13 +17,14 @@
  * pointing at carries no bar.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
 import clsx from 'clsx'
 import {
-  FishLogo, IconCodeOutline16, IconHomeOutline16, IconNewChatOutline16,
-  IconPanelLeftOutline16, IconTeamOutline16, IconWorkOutline16, Tooltip,
+  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, isDarwinDesktop, ShortcutKeys, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SidebarRootComponentProps, SidebarSectionKey } from './contract/slots.ts'
+import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type {
+  SidebarPanelMetadata, SidebarRootComponentProps, SidebarRootInjected, SidebarSectionOwnerProps,
+} from './contract/slots.ts'
 import css from './SidebarRoot.module.css'
 
 /** Wide-content unmount delay; matches the 150ms wide-content fade-out. */
@@ -41,14 +38,47 @@ const COLLAPSE_SETTLE_MS = 150
  */
 const SCROLLBAR_LINGER_MS = 2000
 
-/** The switcher's fixed tab set, in display order; the index distance of a
- *  switch decides its slide direction. */
-const SECTIONS: readonly { key: SidebarSectionKey; Icon: (props: { size: number }) => React.ReactNode }[] = [
-  { key: 'home', Icon: IconHomeOutline16 },
-  { key: 'code', Icon: IconCodeOutline16 },
-  { key: 'work', Icon: IconWorkOutline16 },
-  { key: 'team', Icon: IconTeamOutline16 },
-]
+/** Format complete-build metadata for the local brand badge. */
+function localBuildVersion(): string | undefined {
+  const version = process.env.DSH_CLIENT_VERSION
+  if (version === undefined) return undefined
+  const commit = process.env.DSH_CLIENT_COMMIT_HASH
+  return version
+    + (commit === undefined ? '' : `-${commit}`)
+    + (process.env.DSH_CLIENT_GIT_DIRTY === 'true' ? '-dirty' : '')
+}
+
+type PanelRowProps =
+  Pick<SidebarPanelMetadata, 'id' | 'label'>
+  & Pick<SidebarSectionOwnerProps, 'wide'>
+  & Pick<PropsRuntime<'sidebar'>, 'usePanelInfo'>
+  & Pick<InjectFace<SidebarRootInjected>, 'selectPanel'>
+  & PropsRenderSlots<'sidebar.panellist'>
+
+/** Each panel row subscribes only to its own selection state. */
+function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: PanelRowProps) {
+  const active = usePanelInfo(info => info.activePanelId === id)
+  return (
+    <Tooltip label={label} delayMs={500} disabled={wide}>
+      <button
+        type="button"
+        className={clsx(css.panelRow, active && css.panelActive)}
+        aria-label={label}
+        aria-current={active ? 'page' : undefined}
+        onClick={() => { selectPanel(id) }}
+      >
+        <span className={css.panelGlyph} aria-hidden="true">
+          {renderSlot('sidebar.panellist', { size: wide ? 16 : 18, active }, { only: id })}
+        </span>
+        {wide && (
+          <span className={clsx(css.panelTitle, css.wide)}>
+            {label}
+          </span>
+        )}
+      </button>
+    </Tooltip>
+  )
+}
 
 /**
  * Render the sidebar column shell.
@@ -60,9 +90,17 @@ export function SidebarRoot({
   width,
   startSession,
   toggleSidebar,
+  selectPanel,
+  usePanels,
+  useShortcuts,
+  usePanelInfo,
   t,
   renderSlot,
 }: SidebarRootComponentProps) {
+  const panels = usePanels(snapshot => snapshot)
+  const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
+  const newShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.new'))
+  const toggleLabel = collapsed ? t('toggle.open') : t('toggle.collapse')
   // Wide content stays mounted while the collapse animates (fading via
   // .collapsed .wide), unmounts at settle, and remounts right away on expand.
   const [settled, setSettled] = useState(collapsed)
@@ -71,42 +109,12 @@ export function SidebarRoot({
     const timer = window.setTimeout(() => { setSettled(true) }, COLLAPSE_SETTLE_MS)
     return () => { window.clearTimeout(timer) }
   }, [collapsed])
-  const wide = !collapsed || !settled
-
-  // New Session outcome feedback: the action can legitimately take a while
-  // (Host busy with other agents) or fail outright — without this state both
-  // looked like a dead button, because the click had no pending/error surface.
-  const [startBusy, setStartBusy] = useState(false)
-  const [startError, setStartError] = useState<string | null>(null)
-  const handleStartSession = (): void => {
-    if (startBusy) return
-    setStartBusy(true)
-    setStartError(null)
-    // Promise.resolve keeps sync test doubles (`vi.fn()`) usable.
-    void Promise.resolve(startSession()).then(
-      () => { setStartBusy(false) },
-      (reason: unknown) => {
-        setStartBusy(false)
-        setStartError(reason instanceof Error ? reason.message : String(reason))
-      },
-    )
-  }
-
-  // Active section: 'code' boots (the workspace browser is the historical
-  // region), and every switch bumps seq so the enter animation can retrigger
-  // by alternating keyframe names (a same-name animation does not restart).
-  const [section, setSection] = useState<{ key: SidebarSectionKey; seq: number; fwd: boolean }>({
-    key: 'code', seq: 0, fwd: true,
-  })
-  const selectSection = (next: SidebarSectionKey): void => {
-    setSection((prev) => {
-      if (prev.key === next) return prev
-      const from = SECTIONS.findIndex(s => s.key === prev.key)
-      const to = SECTIONS.findIndex(s => s.key === next)
-      return { key: next, seq: prev.seq + 1, fwd: to > from }
-    })
-  }
-
+  const windowsTitlebar = document.documentElement.hasAttribute('data-windows-titlebar')
+  const wide = windowsTitlebar ? !collapsed : !collapsed || !settled
+  // The Windows caption menus occupy the strip to the right of these controls
+  // (that is what --dsh-windows-menu-start reserves), so a right-side bubble
+  // lands under their text. Below the caption is the only clear side.
+  const captionTooltipSide = windowsTitlebar ? 'bottom' : 'right'
   // Freeze the content at its expanded width while it fades out (collapsed
   // && wide): the sliding column then clips it instead of reflowing it. The
   // rail layout (.collapsed styles) only applies once the fade settles.
@@ -161,6 +169,33 @@ export function SidebarRoot({
     }
   }, [pointerInside])
 
+  const buildVersion = localBuildVersion()
+
+  const darwinDesktop = isDarwinDesktop()
+  // Rail resting state is the whale mark; hovering swaps in the panel icon
+  // (the expand affordance, figma sidebar-hover flow). Expanded it is a plain
+  // panel icon.
+  const toggle = (
+    <Tooltip label={toggleLabel} shortcutKeys={shortcut?.keys} delayMs={500} side={captionTooltipSide}>
+      <button
+        type="button"
+        className={clsx(css.iconButton, css.toggle)}
+        aria-label={toggleLabel}
+        aria-keyshortcuts={shortcut?.aria}
+        onClick={() => { toggleSidebar() }}
+      >
+        {!wide && !windowsTitlebar && (
+          <span className={css.railMark} aria-hidden="true">
+            {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
+          </span>
+        )}
+        {/* Rail icons render at 18 (figma rail spec); expanded keeps the glyph-native sizes. */}
+        <IconPanelLeftOutlineRegular className={css.panelIcon} size={wide || windowsTitlebar ? 16 : 18} />
+        {!wide && renderSlot('sidebar.toggle.badge', {})}
+      </button>
+    </Tooltip>
+  )
+
   return (
     <div
       ref={column}
@@ -175,142 +210,95 @@ export function SidebarRoot({
       }}
       onPointerLeave={() => { armLinger() }}
     >
-      {/* Title-bar row: on the desktop shell it is the window's draggable
-          left segment (base.css keys the drag region on the attribute), so
-          only its two controls opt out. */}
-      <div className={css.logoRow} data-dsh-drag-region="">
-        {/* Expanded, the brand doubles as a New Session shortcut; the
-            collapsed rail's logo is the expand toggle below instead. */}
-        {wide && (
-          <button
-            type="button"
-            className={clsx(css.brand, css.wide)}
-            aria-label={t('session.new.label')}
-            aria-busy={startBusy || undefined}
-            onClick={handleStartSession}
-          >
+      {/* macOS hiddenInset titlebar: the strip shares the row with the
+          traffic lights and keeps the toggle at the sidebar's top-right. */}
+      {darwinDesktop && <div className={css.topStrip} data-window-drag>{toggle}</div>}
+      <div className={css.logoRow} data-window-drag>
+        {/* Expanded, the brand doubles as a New Session shortcut — except on
+            macOS, where it stays part of the logo row's window-drag surface
+            (a button would subtract itself through the global no-drag rule);
+            the collapsed rail's logo is the expand toggle below instead. */}
+        {wide && (() => {
+          const identity = (
             <span className={css.brandIdentity} aria-hidden="true">
               <span className={css.brandMark}>
                 {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
               </span>
               <span className={css.brandName}>
                 {renderSlot('sidebar.brand.name', {}, {
-                  fallback: (
-                    <>
-                      <span className={css.fallbackBrandName}>DSH Local Build</span>
-                      {process.env.DSH_CLIENT_COMMIT_HASH
-                        ? <span className={css.buildRevision}>{process.env.DSH_CLIENT_COMMIT_HASH}</span>
-                        : null}
-                    </>
-                  ),
+                  fallback: buildVersion === undefined
+                    ? <span className={css.fallbackBrandName}>{t('brand.localBuild')}</span>
+                    : (
+                      <span className={css.localBuildBrand}>
+                        <span className={css.localBuildTitle}>{t('brand.localBuild')}</span>
+                        <span className={css.buildVersion}>{buildVersion}</span>
+                      </span>
+                    ),
                 })}
               </span>
             </span>
-          </button>
-        )}
-        {/* Rail resting state is the whale mark; hovering swaps in the panel
-            icon (the expand affordance, figma sidebar-hover flow). */}
-        <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} delayMs={500}>
-          <button
-            type="button"
-            className={clsx(css.iconButton, css.toggle)}
-            aria-label={collapsed ? t('toggle.open') : t('toggle.collapse')}
-            onClick={() => { toggleSidebar() }}
-          >
-            {!wide && (
-              <span className={css.railMark} aria-hidden="true">
-                {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
-              </span>
-            )}
-            {/* Rail icons render at 18 (figma rail spec); expanded keeps the glyph-native sizes. */}
-            <IconPanelLeftOutline16 className={css.panelIcon} size={wide ? 16 : 18} />
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* Section switcher: pill tabs wide, the icon rail collapsed. A rail
-          click also expands the column — the section panes are hidden while
-          collapsed, so selecting without expanding would show nothing. */}
-      {wide ? (
-        <div className={css.sectionTabs} role="tablist">
-          {SECTIONS.map(({ key, Icon }) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={section.key === key}
-              className={clsx(css.sectionTab, section.key === key && css.sectionTabActive)}
-              onClick={() => { selectSection(key) }}
-            >
-              <Icon size={14} />
-              <span className={css.sectionTabLabel}>{t(`section.${key}`)}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className={css.sectionRail}>
-          {SECTIONS.map(({ key, Icon }) => (
-            <Tooltip key={key} label={t(`section.${key}`)} delayMs={500}>
+          )
+          return darwinDesktop
+            ? <span className={clsx(css.brand, css.wide)}>{identity}</span>
+            : (
               <button
                 type="button"
-                className={clsx(css.iconButton, css.sectionRailTab, section.key === key && css.sectionRailActive)}
-                aria-label={t(`section.${key}`)}
-                onClick={() => {
-                  selectSection(key)
-                  if (collapsed) toggleSidebar()
-                }}
+                className={clsx(css.brand, css.wide)}
+                aria-label={t('session.new.label')}
+                aria-keyshortcuts={newShortcut?.aria}
+                onClick={() => { startSession() }}
               >
-                <Icon size={18} />
+                {identity}
               </button>
-            </Tooltip>
-          ))}
-        </div>
-      )}
+            )
+        })()}
+        {!darwinDesktop && toggle}
+      </div>
 
-      {/* Expanded, the button carries its own label — tooltip only on the rail. */}
-      <Tooltip label={t('session.new.label')} delayMs={500} disabled={wide}>
+      {/* The label fades before the hover/focus shortcut, including on translucent backgrounds. */}
+      <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500} side={captionTooltipSide} disabled={wide}>
         <button
           type="button"
           className={css.newSession}
           aria-label={t('session.new.label')}
-          aria-busy={startBusy || undefined}
-          onClick={handleStartSession}
+          aria-keyshortcuts={newShortcut?.aria}
+          onClick={() => { startSession() }}
         >
-          <IconNewChatOutline16 size={wide ? 14 : 18} />
-          {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{startBusy ? t('session.new.connecting') : t('session.new')}</span>}
+          <span className={css.newSessionLabelMask}><span className={css.newSessionContent}>
+            {wide
+              ? <IconNewChatOutlineMedium size={14} />
+              : <IconNewChatOutlineRegular size={windowsTitlebar ? 16 : 18} />}
+            {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
+          </span></span>
+          {wide && newShortcut !== undefined && newShortcut.keys.length > 0 && <span className={css.newSessionShortcut} aria-hidden="true">
+            <ShortcutKeys keys={newShortcut.keys} />
+          </span>}
         </button>
       </Tooltip>
-      {/* Connect failures reject after the runtime logged them; without this
-          line the failure was indistinguishable from a dead button. */}
-      {startError !== null && (
-        <p className={css.connectError} role="alert">{t('session.new.failed', { message: startError })}</p>
+
+      {panels.length > 0 && (
+        <nav className={css.panelList} aria-label={t('panels.label')}>
+          {panels.map(({ id, label }) => (
+            <PanelRow
+              key={id}
+              id={id}
+              label={label}
+              wide={wide}
+              usePanelInfo={usePanelInfo}
+              selectPanel={selectPanel}
+              renderSlot={renderSlot}
+            />
+          ))}
+        </nav>
       )}
 
-      {/* The section panes fill the column between the switcher controls and
-          the foot in both states. They stay mounted (display-toggled) so a
-          section keeps its local state across visits and across a collapse;
-          the active pane carries the one-shot enter animation, retriggered
-          per switch by alternating identical keyframe names and aimed by the
-          --section-slide-from custom property. */}
+      {/* The browsing region fills the column between the controls and the
+          foot in both states; its rail icon column rides the same slot. */}
       <div className={css.regionArea}>
-        {SECTIONS.map(({ key }) => (
-          <div
-            key={key}
-            className={clsx(
-              css.sectionPane,
-              key === section.key ? css.sectionPaneActive : css.sectionPaneHidden,
-              key === section.key && section.seq > 0
-                ? (section.seq % 2 === 1 ? css.sectionPaneEnterA : css.sectionPaneEnterB)
-                : undefined,
-            )}
-            style={key === section.key && section.seq > 0
-              ? ({ '--section-slide-from': section.fwd ? '16px' : '-16px' }) as CSSProperties
-              : undefined}
-            aria-hidden={key !== section.key || undefined}
-          >
-            {renderSlot('sidebar.section', {}, { entryKey: key })}
-          </div>
-        ))}
+        {renderSlot('sidebar.workspaces', {
+          wide,
+          expandSidebar: () => { if (collapsed) toggleSidebar() },
+        })}
       </div>
 
       {/* Footer actions stack above Settings in both sidebar widths. */}

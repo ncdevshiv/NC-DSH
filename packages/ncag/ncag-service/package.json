@@ -1,0 +1,48 @@
+{
+  "name": "@deepseek-ai/dsh-ncag-service",
+  "description": "The NC-AG platform service plugin: one orchestrator, its durable store and its model port over the harness LLM service",
+  "version": "0.2.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/ncag/ncag-service"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-settings": "workspace:*",
+    "@deepseek-ai/dsh-workspace": "workspace:*",
+    "@deepseek-ai/dsh-ncag-core": "workspace:*",
+    "@deepseek-ai/dsh-ncag-orchestrator": "workspace:*",
+    "@deepseek-ai/dsh-ncag-runtime": "workspace:*",
+    "@deepseek-ai/dsh-ncag-settings": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-settings": "workspace:*",
+    "@deepseek-ai/dsh-workspace": "workspace:*",
+    "@deepseek-ai/dsh-ncag-core": "workspace:*",
+    "@deepseek-ai/dsh-ncag-orchestrator": "workspace:*",
+    "@deepseek-ai/dsh-ncag-runtime": "workspace:*",
+    "@deepseek-ai/dsh-ncag-settings": "workspace:*"
+  }
+}

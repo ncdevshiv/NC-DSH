@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for deployment.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/deployment.md
+/:
+  en: f0d02e91c6258e64
+  zh: 9d01593f13e591a3
+/nc-ag-deployment:
+  en: b15bf5cdfc4b7cf0
+  zh: bd75318a4d8de13d
+/nc-ag-deployment/summary:
+  en: 1f0348ce795f9971
+  zh: 649c4bfeb7950db9
+/nc-ag-deployment/table-of-contents:
+  en: b2b0fc82b5dc3641
+  zh: 64e45be8e55a222f
+/nc-ag-deployment/requirements:
+  en: 23200f96049a3fe3
+  zh: d54ab0601f1447f2
+/nc-ag-deployment/required-configuration:
+  en: d1e84130cba1dce0
+  zh: 342bc1f5c33a1e96
+/nc-ag-deployment/model-routes-and-prices:
+  en: 1659f446f4732414
+  zh: 20f410336bf9b9e0
+/nc-ag-deployment/credentials:
+  en: 650b096ee2eab935
+  zh: e7f977d28ad70f77
+/nc-ag-deployment/mount-the-platform:
+  en: 691844dde7e68f38
+  zh: 3671d3b9317f96eb
+/nc-ag-deployment/verify-the-boot:
+  en: 49576ba63d8ab870
+  zh: e284b9a433f9732c
+/nc-ag-deployment/first-project:
+  en: 9622c58bff6d0ea9
+  zh: d588c4623b2dde3d
+/nc-ag-deployment/upgrades-and-schema-migrations:
+  en: e0a819c08b4fff64
+  zh: 8ba040468c751b8f

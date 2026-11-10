@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for testing.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/testing.md
+/:
+  en: 106e6ce5b027a8fd
+  zh: 7ff530ae323d8474
+/nc-ag-testing:
+  en: 45d47636d71fd0e7
+  zh: 6f0b82ca7cb8691a
+/nc-ag-testing/summary:
+  en: 2eeffb1ab6de9251
+  zh: 0e8e64ab115b965d
+/nc-ag-testing/table-of-contents:
+  en: bd63e549f726bc5c
+  zh: cf87e91b856d82b3
+/nc-ag-testing/run-the-suite:
+  en: b023196886f254aa
+  zh: e5bb367feb1067a3
+/nc-ag-testing/the-scripted-model:
+  en: f66de458c77640eb
+  zh: 5cd99d2e4125ff3c
+/nc-ag-testing/scenario-coverage:
+  en: 468c390c16a8cc3c
+  zh: b4aa6b17e896cabe
+/nc-ag-testing/what-the-suite-does-not-cover:
+  en: edfd6dad717ca22b
+  zh: 554293da81e7a081

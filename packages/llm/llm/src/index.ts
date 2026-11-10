@@ -6,43 +6,56 @@
  * @module @deepseek-ai/dsh-llm
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
+import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type {
   GenerateOptions,
+  RequestMessage,
   LlmConfigurableProvider,
   LlmDiscoveredModel,
   LlmFailure,
+  LlmImageRequestPricing,
   LlmModelContext,
   LlmModelDiscoveryRequest,
   LlmModelInfo,
+  LlmModelTestRequest,
+  LlmModelTestResult,
   LlmResolvedModelInfo,
   LlmProviderInfo,
   ModelModality,
   StreamChunk,
+  SystemPromptUpdate,
+  ToolSchema,
+  ToolUpdate,
 } from './types.ts'
-import { freezeMessage, type Message } from './message.ts'
+import { freezeMessage } from './message.ts'
 import { resolveRetryPolicy } from './retry-policy.ts'
 import type { ResolvedRetryPolicy } from './retry-policy.ts'
 import type { ProviderRequestId } from './brand.ts'
-import { callConfigEquals, deepFreeze } from './call-config.ts'
-import type { LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.ts'
+import { callConfigEquals } from './call-config.ts'
+import type { ConfigureCall, LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.ts'
 import { HarnessError, INVALID_CREDENTIAL_CODE } from './error.ts'
 import { normalizeLlmFailure } from './adapter-failure.ts'
 import { normalizeApiKey } from './api-key.ts'
+import {
+  contentHasFile, contentHasImage, fileHandleText, projectFilesToText, projectImagesForTextModel, projectToolUpdates,
+} from './content.ts'
+import type { FileAttachmentRef, ImageAttachmentRef, ImageRequestTarget } from '@deepseek-ai/dsh-attachment'
 
 export * from './attribution.ts'
 export * from './brand.ts'
-export * from './never.ts'
 export * from './error.ts'
 export * from './api-key.ts'
 export * from './types.ts'
-export * from './capabilities.ts'
 export * from './content.ts'
+export { probeMessages, settleModelProbe } from './model-probe.ts'
+export * from './assistant-stream.ts'
 export * from './message.ts'
 export * from './retry-policy.ts'
 export { BlockAssembler } from './assembler.ts'
-export { callConfigEquals, deepFreeze, isAgentLoopRequest, markAgentLoopRequest } from './call-config.ts'
-export type { LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.ts'
+export { callConfigEquals, isAgentLoopRequest, markAgentLoopRequest } from './call-config.ts'
+export type { ConfigureCall, LlmCallConfig, LlmCallConfigAdapterDefaults, LlmCallControls } from './call-config.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -58,8 +71,8 @@ declare module '@deepseek-ai/cordis' {
      *   process-local {@link markAgentLoopRequest} identity and arrives deep-frozen
      *   (mutation throws): its content is a pure function of the session log (the
      *   reconstructability Agent Note), so listeners read it, never rewrite it.
-     *   Hand-built calls do not carry that marker; their messages already obey
-     *   the immutable creation contract.
+     *   Hand-built calls do not carry that marker; callers own their request
+     *   inputs and must keep them unchanged until the stream settles.
      * @mode waterfall
      */
     'llm/stream'(this: LlmRuntime, options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk>
@@ -71,17 +84,12 @@ declare module '@deepseek-ai/cordis' {
 export interface LlmErrorOptions extends ErrorOptions {
   /** Valid HTTP status observed at the provider boundary. */
   status?: number
-  /**
-   * Provider's structural error type (`api_error`, `overloaded_error`,
-   * `rate_limit_error`, `invalid_request_error`, ...). Carried verbatim
-   * from the wire so downstream consumers can branch on the actual cause
-   * without re-parsing the message.
-   */
-  providerType?: string
   /** Positive finite provider-requested delay in milliseconds. */
   providerRetryAfterMs?: number
   /** Non-empty opaque provider request id. */
   requestId?: ProviderRequestId
+  /** Positive count of additional oldest retained image occurrences to offload; only with `IMAGE_OFFLOAD_REQUIRED`. */
+  offloadImages?: number
 }
 
 /**
@@ -104,11 +112,6 @@ export class LlmError extends HarnessError {
       && (!Number.isInteger(options.status) || options.status < 100 || options.status > 599)) {
       throw new Error('LlmError status must be an integer from 100 through 599')
     }
-    if (options?.providerType !== undefined
-      && (typeof options.providerType !== 'string' || options.providerType.length === 0
-        || options.providerType.length > 128)) {
-      throw new Error('LlmError providerType must be a non-empty string of at most 128 characters')
-    }
     if (options?.providerRetryAfterMs !== undefined
       && (!Number.isFinite(options.providerRetryAfterMs) || options.providerRetryAfterMs <= 0)) {
       throw new Error('LlmError providerRetryAfterMs must be a positive finite number')
@@ -123,9 +126,9 @@ export class LlmError extends HarnessError {
       message,
       code,
       ...options?.status === undefined ? {} : { status: options.status },
-      ...options?.providerType === undefined ? {} : { providerType: options.providerType },
       ...options?.providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs: options.providerRetryAfterMs },
       ...options?.requestId === undefined ? {} : { requestId: options.requestId },
+      ...options?.offloadImages === undefined ? {} : { offloadImages: options.offloadImages },
     })
   }
 }
@@ -173,6 +176,12 @@ export interface PreparedLlmCall {
   readonly retryPolicy: ResolvedRetryPolicy
   /** Detached context metadata resolved with the registration-bound call. */
   readonly context?: LlmModelContext
+  /** Exact model modalities captured with the adapter dispatch generation. */
+  readonly inputModalities?: readonly ModelModality[]
+  /** Exact model system prompt update mode captured with the adapter dispatch generation. */
+  readonly systemPromptUpdate?: SystemPromptUpdate
+  /** Exact model tool update mode captured with the adapter dispatch generation. */
+  readonly toolUpdate?: ToolUpdate
   /** Config fields materialized by the captured adapter rather than proposed by the caller. */
   readonly adapterDefaults: LlmCallConfigAdapterDefaults
   /**
@@ -185,11 +194,19 @@ export interface PreparedLlmCall {
   stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 }
 
+/** One adapter-owned model-resolution generation bound to its eventual stream call. */
+export interface PreparedAdapterCall {
+  /** Exact model metadata from the same adapter generation as {@link stream}. */
+  readonly model: LlmResolvedModelInfo
+  /** Dispatch through that generation without re-reading dynamic connection facts. */
+  stream(options: GenerateOptions): AsyncIterable<StreamChunk>
+}
+
 /**
  * Provider-wire adapter for the harness message and stream vocabulary. Register implementations
- * with `ctx.llm.registerAdapter(providers, adapter)`. An adapter that owns its provider HTTP
- * headers includes `attributionHeaders()` on every request; a transport driven by a separate
- * process carries that process's identity instead.
+ * with `ctx.llm.registerAdapter(providers, adapter)`. Every provider HTTP request must include
+ * `attributionHeaders()`; prove the headers are added in the wire request or library header hook. The direct-fetch
+ * DeepSeek and library-backed pi-ai adapters meet this contract through different internals.
  */
 export abstract class LlmAdapter {
   /**
@@ -211,9 +228,35 @@ export abstract class LlmAdapter {
   }
 
   /**
+   * Resolve provider-side request-image pricing for one exact model route.
+   * The default declares none, so consumers fall back to their own neutral
+   * estimate. Implementations must answer synchronously without I/O; the
+   * token meter resolves this per measurement.
+   * @param _provider - a route passed to `registerAdapter()` for this instance.
+   * @param _model - exact model id passed to {@link GenerateOptions.model}.
+   * @returns route-owned image pricing, or `undefined` when the route declares none.
+   */
+  imageRequestPricing(_provider: string, _model: string): LlmImageRequestPricing | undefined {
+    return undefined
+  }
+
+  /**
+   * Resolve the image dimensions and byte target this adapter sends to the model.
+   * The default preserves normalized images; adapters that resize must override it.
+   * @param _provider - registered provider route.
+   * @param _model - exact model id.
+   * @param image - normalized image whose request projection is being resolved.
+   * @returns the same target used by request serialization, before provider-internal processing.
+   */
+  imageRequestTarget(_provider: string, _model: string, image: ImageAttachmentRef): ImageRequestTarget {
+    return { width: image.width, height: image.height, maxBytes: image.bytes }
+  }
+
+  /**
    * List models this adapter can currently advertise for one owned provider.
-   * The result is advisory: an adapter may accept unlisted model ids, and
-   * consumers must not turn absence into request rejection.
+   * Core routing accepts unlisted model ids; catalog-driven entry points such
+   * as the GUI may require membership. Adapters used there must advertise
+   * their available models; the base empty catalog offers no GUI selection.
    * @param _provider - one provider route owned by this adapter.
    * @returns discoverable models in adapter-preferred order.
    */
@@ -236,6 +279,22 @@ export abstract class LlmAdapter {
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({ provider, id: model, name: model })
+  }
+
+  /**
+   * Bind exact model metadata and the eventual request dispatch to one adapter generation.
+   * Dynamic adapters override this so settings changes between preparation and
+   * dispatch cannot combine one generation's capabilities with another's endpoint.
+   * @param provider - registered provider route.
+   * @param model - exact model id.
+   * @param signal - cancellation for model resolution.
+   * @returns model metadata and a one-generation stream entry point.
+   */
+  async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
+    return {
+      model: await this.resolveModel(provider, model, signal),
+      stream: options => this.stream(options),
+    }
   }
 
   /**
@@ -295,12 +354,16 @@ export interface DirectoryRegistrationHandle {
  * The abstract `llm` service: an adapter registry plus a streaming model-call
  * API, interceptable via the `llm/stream` waterfall.
  */
-export class LlmRuntime extends Service {
+export class LlmRuntime extends TypertRemoteService {
   private adapters = new Map<string, AdapterRegistration>()
   private directory = new Map<string, LlmConfigurableProvider>()
   private discoveries = new Map<
     string,
-    (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>
+    (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>
+  >()
+  private tests = new Map<
+    string,
+    (request: LlmModelTestRequest, signal?: AbortSignal) => Promise<LlmModelTestResult>
   >()
 
   constructor(ctx: Context) {
@@ -311,28 +374,21 @@ export class LlmRuntime extends Service {
   private emitAdaptersUpdated(): void {
     // Cordis emit uses Array.map: one synchronous throw starves later
     // listeners. Registry notifications are non-vetoing, so contain each
-    // callback independently; INVARIANT-coded failures still surface.
-    let invariantFailure: unknown
+    // callback independently.
     for (const listener of this.ctx.events.dispatch('emit', ['llm/adapters-updated']) as Array<() => unknown>) {
       try {
         const returned = listener()
         if (returned != null && typeof (returned as PromiseLike<unknown>).then === 'function') {
           // An emit listener may still be an async function; its rejection
-          // cannot reach the synchronous INVARIANT rethrow below, so it is
-          // contained here instead of becoming an unhandled rejection.
+          // is contained here instead of becoming an unhandled rejection.
           void Promise.resolve(returned as PromiseLike<unknown>).then(undefined, (error: unknown) => {
             this.warnAdaptersListenerFailure(error)
           })
         }
       } catch (error) {
-        if ((error as { code?: unknown } | null)?.code === 'INVARIANT') {
-          invariantFailure ??= error
-          continue
-        }
         this.warnAdaptersListenerFailure(error)
       }
     }
-    if (invariantFailure !== undefined) throw invariantFailure as Error
   }
 
   /** Contained-listener diagnostic shared by the sync and async failure paths. */
@@ -430,6 +486,7 @@ export class LlmRuntime extends Service {
    * Describe provider routes with a registered adapter.
    * @returns detached provider metadata in registration order.
    */
+  @Remote
   listProviders(): LlmProviderInfo[] {
     return [...this.adapters.values()].map(({ provider }) => ({ ...provider }))
   }
@@ -466,7 +523,7 @@ export class LlmRuntime extends Service {
           || detached.some(seen => seen.provider === entry.provider)) {
           throw new LlmError(`configurable provider "${entry.provider}" is already declared`, 'DUPLICATE_DIRECTORY')
         }
-        detached.push({ ...entry, settingsPath: [...entry.settingsPath] })
+        detached.push(detachDirectoryEntry(entry))
       }
       for (const entry of held) this.directory.delete(entry.provider)
       for (const entry of detached) this.directory.set(entry.provider, entry)
@@ -501,8 +558,9 @@ export class LlmRuntime extends Service {
    * List every declared configurable provider, registered or dormant.
    * @returns detached directory entries in declaration order.
    */
+  @Remote
   listConfigurableProviders(): LlmConfigurableProvider[] {
-    return [...this.directory.values()].map(entry => ({ ...entry, settingsPath: [...entry.settingsPath] }))
+    return [...this.directory.values()].map(detachDirectoryEntry)
   }
 
   /**
@@ -512,12 +570,15 @@ export class LlmRuntime extends Service {
    * directory, and because a provider being *added* has no route to name yet.
    * Disposed with the fiber.
    * @param settingsNs - the namespace whose profiles this discovery serves.
-   * @param discover - interrogates one endpoint; must honor `request.signal`.
+   * @param discover - interrogates one endpoint and must honor the supplied signal.
    * @returns the disposer that withdraws the offer.
    */
   registerModelDiscovery(
     settingsNs: string,
-    discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>,
+    discover: (
+      request: LlmModelDiscoveryRequest,
+      signal?: AbortSignal,
+    ) => Promise<readonly LlmDiscoveredModel[]>,
   ): () => void {
     const dispose = this.ctx.effect(function* (this: LlmRuntime) {
       if (settingsNs.length === 0) {
@@ -541,11 +602,13 @@ export class LlmRuntime extends Service {
    * candidate metadata a surface may offer for adoption.
    * @param settingsNs - namespace whose registered discovery serves this draft.
    * @param request - the endpoint, protocol, and one-shot credential to use.
+   * @param signal - caller cancellation.
    * @returns the advertised models, deduplicated in endpoint order.
    */
   async discoverModels(
     settingsNs: string,
     request: LlmModelDiscoveryRequest,
+    signal?: AbortSignal,
   ): Promise<LlmDiscoveredModel[]> {
     const discover = this.discoveries.get(settingsNs)
     if (discover === undefined) {
@@ -556,22 +619,53 @@ export class LlmRuntime extends Service {
     if ((request.provider ?? '').length === 0 && (request.baseURL ?? '').length === 0) {
       throw new LlmError('model discovery needs a provider route or a baseURL', 'INVALID_DISCOVERY')
     }
-    const discovered = await discover(request)
+    const discovered = signal === undefined
+      ? await discover(request)
+      : await discover(request, signal)
     const seen = new Set<string>()
     const models: LlmDiscoveredModel[] = []
     for (const model of discovered) {
       if (typeof model.id !== 'string' || model.id.length === 0 || seen.has(model.id)) continue
       seen.add(model.id)
-      const inputModalities = this.detachedModalities(model.inputModalities)
       models.push({
         id: model.id,
         ...model.name === undefined ? {} : { name: model.name },
         ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
         ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
-        ...inputModalities === undefined ? {} : { inputModalities },
+        ...model.inputModalities === undefined ? {} : { inputModalities: [...model.inputModalities] },
+        ...model.reasoning === undefined ? {} : { reasoning: model.reasoning },
       })
     }
     return models
+  }
+
+  /**
+   * Remote adapter for one draft provider interrogation.
+   * @param settingsNs - namespace whose registered discovery serves this draft.
+   * @param request - endpoint, protocol, and one-shot credential to use.
+   * @param signal - caller cancellation supplied by the Remote carrier.
+   * @returns advertised models in endpoint order.
+   * @throws RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.
+   */
+  @Remote('discoverModels')
+  async remoteDiscoverModels(
+    settingsNs: string,
+    request: LlmModelDiscoveryRequest,
+    signal: AbortSignal,
+  ): Promise<LlmDiscoveredModel[]> {
+    try {
+      return await this.discoverModels(settingsNs, request, signal)
+    } catch (error: unknown) {
+      throw new RemoteError(
+        'llm/model-discovery-rejected',
+        error instanceof Error ? error.message : String(error),
+        {
+          settingsNs,
+          ...request.baseURL === undefined ? {} : { baseURL: request.baseURL },
+        },
+        { cause: error },
+      )
+    }
   }
 
   /**
@@ -583,6 +677,141 @@ export class LlmRuntime extends Service {
     return this.registration(provider).retryPolicy
   }
 
+  /**
+   * Offer to send one real request to a model on behalf of the settings
+   * namespace this plugin owns, the connectivity counterpart of
+   * {@link registerModelDiscovery}. A route being added has no name to register
+   * under, so the offer is per namespace rather than per route. Disposed with
+   * the fiber.
+   * @param settingsNs - the namespace whose profiles this test serves.
+   * @param test - dispatches one probe and must honor the supplied signal.
+   * @returns the disposer that withdraws the offer.
+   */
+  registerModelTest(
+    settingsNs: string,
+    test: (
+      request: LlmModelTestRequest,
+      signal?: AbortSignal,
+    ) => Promise<LlmModelTestResult>,
+  ): () => void {
+    const dispose = this.ctx.effect(function* (this: LlmRuntime) {
+      if (settingsNs.length === 0) {
+        throw new LlmError('a model test needs a non-empty settings namespace', 'INVALID_TEST')
+      }
+      if (this.tests.has(settingsNs)) {
+        throw new LlmError(`a model test for "${settingsNs}" is already registered`, 'DUPLICATE_TEST')
+      }
+      this.tests.set(settingsNs, test)
+      yield () => {
+        this.tests.delete(settingsNs)
+      }
+    }.bind(this), 'llm.registerModelTest()')
+    return () => void dispose()
+  }
+
+  /**
+   * Send one real request to one model and report what the provider did. The
+   * request describes a draft, so nothing here reads or writes settings or
+   * credentials beyond what the offering adapter resolves for a stored route.
+   * A refusal is the answer rather than a failure of this call: an endpoint that
+   * rejects the credential, the model id, or the request returns
+   * `ok: false` with the provider's own message and status.
+   * @param settingsNs - namespace whose registered test serves this request.
+   * @param request - the endpoint, protocol, one-shot credential, and model to probe.
+   * @param signal - caller cancellation.
+   * @returns the measured outcome, with `model` pinned to the requested id.
+   */
+  async testModel(
+    settingsNs: string,
+    request: LlmModelTestRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmModelTestResult> {
+    const test = this.tests.get(settingsNs)
+    if (test === undefined) {
+      throw new LlmError(`no model test is registered for "${settingsNs}"`, 'NO_TEST')
+    }
+    if (request.model.length === 0) {
+      throw new LlmError('a model test names the model to send the request to', 'INVALID_TEST')
+    }
+    // As with discovery, one of the two identifies what to address: a route the
+    // registry serves, or an endpoint to send the draft's request to.
+    if ((request.provider ?? '').length === 0 && (request.baseURL ?? '').length === 0) {
+      throw new LlmError('a model test needs a provider route or a baseURL', 'INVALID_TEST')
+    }
+    const result = signal === undefined
+      ? await test(request)
+      : await test(request, signal)
+    return { ...result, model: request.model }
+  }
+
+  /**
+   * Remote adapter for one connectivity probe.
+   * @param settingsNs - namespace whose registered test serves this request.
+   * @param request - endpoint, protocol, one-shot credential, and model to probe.
+   * @param signal - caller cancellation supplied by the Remote carrier.
+   * @returns the measured outcome; a provider refusal is a successful call that
+   *   carries `ok: false` and that provider's failure, because rejecting the
+   *   key or the model is exactly what the surface asked whether it would do.
+   * @throws RemoteError with `llm/model-test-rejected` only when no adapter
+   *   could dispatch the probe at all: an unserved namespace, an unnamed model,
+   *   or a request addressing neither route nor endpoint.
+   */
+  @Remote('testModel')
+  async remoteTestModel(
+    settingsNs: string,
+    request: LlmModelTestRequest,
+    signal: AbortSignal,
+  ): Promise<LlmModelTestResult> {
+    try {
+      return await this.testModel(settingsNs, request, signal)
+    } catch (error: unknown) {
+      throw new RemoteError(
+        'llm/model-test-rejected',
+        error instanceof Error ? error.message : String(error),
+        {
+          settingsNs,
+          model: request.model,
+          ...request.baseURL === undefined ? {} : { baseURL: request.baseURL },
+        },
+        { cause: error },
+      )
+    }
+  }
+
+  /**
+   * Resolve provider-side request-image pricing for one exact route, or
+   * `undefined` when the provider is unregistered or declares none. Unknown
+   * providers degrade to `undefined` rather than throwing because callers
+   * price durable history whose route may no longer be mounted.
+   * @param provider - provider route named by a request header.
+   * @param model - exact model id named by the same header.
+   * @returns the owning adapter's image pricing for the route, when declared.
+   */
+  imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined {
+    return this.adapters.get(provider)?.adapter.imageRequestPricing(provider, model)
+  }
+
+  /**
+   * Resolve the image projection for an exact registered model route.
+   * @param provider - registered provider route.
+   * @param model - exact model id.
+   * @param image - normalized image reference.
+   * @returns dimensions and byte target used by the adapter's request serializer.
+   */
+  imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageRequestTarget {
+    return this.registration(provider).adapter.imageRequestTarget(provider, model, image)
+  }
+
+  /**
+   * Resolve the exact text one durable file occurrence contributes to every
+   * provider request in the current execution environment.
+   * @param ref - durable verbatim file reference from model history.
+   * @returns the same deterministic handle text used at adapter dispatch.
+   */
+  fileRequestText(ref: FileAttachmentRef): string {
+    return fileHandleText(ref, this.fileReadPath(ref))
+  }
+
   /** Detach typed adapter-owned modality metadata. */
   private detachedModalities(modalities: readonly ModelModality[] | undefined): ModelModality[] | undefined {
     return modalities === undefined ? undefined : [...modalities]
@@ -590,7 +819,8 @@ export class LlmRuntime extends Service {
 
   /**
    * Discover models advertised by one registered provider. Catalog membership
-   * is advisory and never changes routing or request validation.
+   * does not constrain core routing. Catalog-driven entry points may restrict
+   * selection and submission to the advertised models.
    * @param provider - registered provider route to inspect.
    * @returns detached model metadata in adapter-preferred order.
    */
@@ -645,8 +875,17 @@ export class LlmRuntime extends Service {
     model: string,
     signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
+    const resolved = await registration.adapter.resolveModel(registration.provider.id, model, signal)
+    return this.normalizeModelInfo(registration, model, resolved)
+  }
+
+  /** Validate and detach one adapter-returned exact model result. */
+  private normalizeModelInfo(
+    registration: AdapterRegistration,
+    model: string,
+    resolved: LlmResolvedModelInfo,
+  ): LlmResolvedModelInfo {
     const provider = registration.provider.id
-    const resolved = await registration.adapter.resolveModel(provider, model, signal)
     if (
       typeof resolved.provider !== 'string'
       || resolved.provider !== provider
@@ -671,6 +910,22 @@ export class LlmRuntime extends Service {
     // Capability metadata rides through: an explicit modality omission is
     // negative capability downstream preflights act on (image admission).
     const inputModalities = this.detachedModalities(resolved.inputModalities)
+    // Widened: adapters derive this mode from catalog config, so the value is checked as a string.
+    const systemPromptUpdate: string | undefined = resolved.systemPromptUpdate
+    if (systemPromptUpdate !== undefined && systemPromptUpdate !== 'in-history') {
+      throw new LlmError(
+        `adapter returned invalid system prompt update mode for provider "${provider}" model "${model}"`,
+        'INVALID_MODEL_INFO',
+      )
+    }
+    // Widened for the same reason: catalog config supplies the tool update mode as text.
+    const toolUpdate: string | undefined = resolved.toolUpdate
+    if (toolUpdate !== undefined && toolUpdate !== 'in-history' && toolUpdate !== 'addition-only') {
+      throw new LlmError(
+        `adapter returned invalid tool update mode for provider "${provider}" model "${model}"`,
+        'INVALID_MODEL_INFO',
+      )
+    }
     const defaultMaxTokens = resolved.defaultMaxTokens
     if (defaultMaxTokens !== undefined
       && (!Number.isSafeInteger(defaultMaxTokens) || defaultMaxTokens <= 0)) {
@@ -687,6 +942,8 @@ export class LlmRuntime extends Service {
       ...inputModalities === undefined ? {} : { inputModalities },
       ...context === undefined ? {} : { context: { contextWindow: context.contextWindow } },
       ...defaultMaxTokens === undefined ? {} : { defaultMaxTokens },
+      ...resolved.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: resolved.systemPromptUpdate },
+      ...resolved.toolUpdate === undefined ? {} : { toolUpdate: resolved.toolUpdate },
     }
     const reasoning = resolved.reasoning
     if (reasoning === undefined) return info
@@ -751,8 +1008,16 @@ export class LlmRuntime extends Service {
     registration: AdapterRegistration,
     config: LlmCallConfig,
     signal?: AbortSignal,
-  ): Promise<{ config: LlmCallConfig; context?: LlmModelContext }> {
+  ): Promise<{ config: LlmCallConfig; context?: LlmModelContext; modelInfo: LlmResolvedModelInfo }> {
     const info = await this.resolveModelInfoFor(registration, config.model, signal)
+    return this.resolveCallWithInfo(config, info)
+  }
+
+  /** Validate request controls against one already-bound exact model result. */
+  private resolveCallWithInfo(
+    config: LlmCallConfig,
+    info: LlmResolvedModelInfo,
+  ): { config: LlmCallConfig; context?: LlmModelContext; modelInfo: LlmResolvedModelInfo } {
     const defaulted = config.maxTokens === undefined && info.defaultMaxTokens !== undefined
       ? { ...config, maxTokens: info.defaultMaxTokens }
       : config
@@ -781,6 +1046,7 @@ export class LlmRuntime extends Service {
     return {
       config: resolvedConfig,
       ...info.context === undefined ? {} : { context: info.context },
+      modelInfo: info,
     }
   }
 
@@ -788,22 +1054,39 @@ export class LlmRuntime extends Service {
    * Resolve one call under its current adapter registration. The returned
    * one-shot handle keeps that registration across header logging and dispatch,
    * so HMR cannot combine one adapter's capability result with another adapter.
-   * @param config - provider/model route and optional request controls.
+   * An optional synchronous callback selects concrete controls using captured
+   * model metadata. Defaults and validation apply to its result. Callback
+   * failures and cancellation reject preparation before dispatch.
+   * @param config - provider/model route and optional concrete request controls.
    * @param signal - optional cancellation for adapter-owned capability lookup.
+   * @param configure - pure control selection, called once before defaults and validation.
    * @returns a prepared config and its registration-bound stream entry point.
    */
-  async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall> {
-    const registration = this.registration(config.provider)
-    const resolved = await this.resolveCallFor(registration, config, signal)
+  async prepareCall(
+    config: LlmCallConfig,
+    signal?: AbortSignal,
+    configure?: ConfigureCall,
+  ): Promise<PreparedLlmCall> {
+    signal?.throwIfAborted()
+    const { provider, model, ...controls } = config
+    const registration = this.registration(provider)
+    const adapterCall = await registration.adapter.prepareCall(provider, model, signal)
+    signal?.throwIfAborted()
+    const modelInfo = this.normalizeModelInfo(registration, model, adapterCall.model)
+    const proposed = configure === undefined
+      ? config
+      : { ...configure(deepFreeze(structuredClone(controls)), deepFreeze(modelInfo)), provider, model }
+    signal?.throwIfAborted()
+    const resolved = this.resolveCallWithInfo(proposed, modelInfo)
     const resolvedConfig = deepFreeze(structuredClone(resolved.config))
     const context = resolved.context === undefined
       ? undefined
       : deepFreeze(structuredClone(resolved.context))
     const adapterDefaults = deepFreeze<LlmCallConfigAdapterDefaults>({
-      ...config.reasoningEffort === undefined && resolvedConfig.reasoningEffort !== undefined
+      ...proposed.reasoningEffort === undefined && resolvedConfig.reasoningEffort !== undefined
         ? { reasoningEffort: true }
         : {},
-      ...config.maxTokens === undefined && resolvedConfig.maxTokens !== undefined
+      ...proposed.maxTokens === undefined && resolvedConfig.maxTokens !== undefined
         ? { maxTokens: true }
         : {},
     })
@@ -813,6 +1096,11 @@ export class LlmRuntime extends Service {
       retryPolicy: registration.retryPolicy,
       adapterDefaults,
       ...context === undefined ? {} : { context },
+      ...modelInfo.inputModalities === undefined
+        ? {}
+        : { inputModalities: Object.freeze([...modelInfo.inputModalities]) },
+      ...modelInfo.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: modelInfo.systemPromptUpdate },
+      ...modelInfo.toolUpdate === undefined ? {} : { toolUpdate: modelInfo.toolUpdate },
       stream: (options: GenerateOptions): AsyncIterable<StreamChunk> => {
         if (dispatched) {
           throw new LlmError('a prepared LLM call can only be dispatched once', 'INVALID_PREPARED_CALL')
@@ -824,7 +1112,12 @@ export class LlmRuntime extends Service {
           )
         }
         dispatched = true
-        return this.streamWithRegistration(options, { registration, config: resolvedConfig })
+        return this.streamWithRegistration(options, {
+          registration,
+          config: resolvedConfig,
+          modelInfo,
+          dispatch: options => adapterCall.stream(options),
+        })
       },
     })
   }
@@ -837,9 +1130,10 @@ export class LlmRuntime extends Service {
 
   /** Remove replay state whose historical route is owned by another adapter. */
   private forAdapter(options: GenerateOptions, adapter: LlmAdapter): GenerateOptions {
-    const messages: Message[] = options.messages.map((message) => {
+    const messages: RequestMessage[] = options.messages.map((message) => {
+      if (message.role !== 'assistant') return message
       const source = message.source
-      if (message.role !== 'assistant' || source.kind !== 'model' || source.replayState === undefined) return message
+      if (source.replayState === undefined) return message
       if (this.adapters.get(source.provider)?.adapter === adapter) return message
       return freezeMessage({
         ...message,
@@ -852,20 +1146,51 @@ export class LlmRuntime extends Service {
   }
 
   /**
+   * Resolve the current execution-world read path of one durable file
+   * reference through the mounted attachment and filesystem providers.
+   */
+  private fileReadPath(ref: FileAttachmentRef): string | undefined {
+    let hostPath: string | undefined
+    try {
+      hostPath = this.ctx.get('attachments')?.fileHostPath(ref)
+    } catch {
+      // A malformed durable reference degrades this occurrence to the no-path
+      // handle instead of failing every later request over the same log.
+      return undefined
+    }
+    if (hostPath === undefined) return undefined
+    // Structural face: dsh-llm cannot depend on the filesystem package, and
+    // only this one mapping method is consumed.
+    const fs = this.ctx.get('fs') as { processPathFromHostPath(hostPath: string): string | undefined } | undefined
+    return fs?.processPathFromHostPath(hostPath)
+  }
+
+  /**
    * Final adapter boundary. Adapter selection, dispatch, iterator construction,
    * and iteration failures become one terminal failure chunk. Middleware and
    * downstream consumer failures remain thrown plugin or consumer errors.
    */
   private async * adapterStream(
     options: GenerateOptions,
-    prepared?: { registration: AdapterRegistration; config: LlmCallConfig },
+    prepared?: PreparedDispatch,
   ): AsyncGenerator<StreamChunk> {
     let iterator: AsyncIterator<StreamChunk>
     try {
       const registration = prepared?.registration ?? this.registration(options.provider)
-      const resolvedConfig = prepared === undefined
-        ? (await this.resolveCallFor(registration, options, options.signal)).config
-        : prepared.config
+      const adapter = registration.adapter
+      let modelInfo: LlmResolvedModelInfo
+      let resolvedConfig: LlmCallConfig
+      let dispatch: (options: GenerateOptions) => AsyncIterable<StreamChunk>
+      if (prepared === undefined) {
+        const adapterCall = await adapter.prepareCall(options.provider, options.model, options.signal)
+        modelInfo = this.normalizeModelInfo(registration, options.model, adapterCall.model)
+        resolvedConfig = this.resolveCallWithInfo(options, modelInfo).config
+        dispatch = options => adapterCall.stream(options)
+      } else {
+        modelInfo = prepared.modelInfo
+        resolvedConfig = prepared.config
+        dispatch = prepared.dispatch
+      }
       if (prepared !== undefined && !callConfigEquals(options, resolvedConfig)) {
         throw new LlmError(
           'prepared LLM call config changed before adapter dispatch',
@@ -877,8 +1202,29 @@ export class LlmRuntime extends Service {
         : Object.isFrozen(options)
           ? deepFreeze({ ...options, ...resolvedConfig })
           : { ...options, ...resolvedConfig }
-      const adapter = registration.adapter
-      const stream = adapter.stream(this.forAdapter(resolvedOptions, adapter))
+      // Files are never dispatched natively: every route receives handle text.
+      let projectedMessages: readonly RequestMessage[] = resolvedOptions.messages
+      if (projectedMessages.some(message => contentHasFile(message.content))) {
+        projectedMessages = projectFilesToText(projectedMessages, ref => this.fileReadPath(ref))
+      }
+      if (modelInfo.inputModalities !== undefined
+        && !modelInfo.inputModalities.includes('image')
+        && projectedMessages.some(message => contentHasImage(message.content))) {
+        projectedMessages = projectImagesForTextModel(projectedMessages)
+      }
+      // Tool changes are logged on every route; the route's declared mode selects what it receives.
+      const projectedTools = projectToolUpdates(projectedMessages, resolvedOptions.tools, modelInfo.toolUpdate, resolvedOptions.toolHistory)
+      projectedMessages = projectedTools.messages
+      let projectedOptions = resolvedOptions
+      if (projectedMessages !== resolvedOptions.messages || projectedTools.tools !== resolvedOptions.tools) {
+        projectedOptions = {
+          ...resolvedOptions,
+          messages: projectedMessages as RequestMessage[],
+          ...projectedTools.tools === undefined ? {} : { tools: projectedTools.tools as ToolSchema[] },
+        }
+        if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
+      }
+      const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()
     } catch (error: unknown) {
       yield adapterFailureChunk(error, options.signal)
@@ -932,7 +1278,7 @@ export class LlmRuntime extends Service {
 
   private streamWithRegistration(
     options: GenerateOptions,
-    prepared?: { registration: AdapterRegistration; config: LlmCallConfig },
+    prepared?: PreparedDispatch,
   ): AsyncIterable<StreamChunk> {
     return this.ctx.waterfall(
       this,
@@ -954,10 +1300,28 @@ function adapterFailureChunk(error: unknown, signal?: AbortSignal): StreamChunk 
   }
 }
 
+/** Copy a directory entry, including its arrays, so neither side can mutate the other's copy. */
+function detachDirectoryEntry(entry: LlmConfigurableProvider): LlmConfigurableProvider {
+  const { nativeAuth } = entry
+  return {
+    ...entry,
+    settingsPath: [...entry.settingsPath],
+    ...entry.baseURLEnv === undefined ? {} : { baseURLEnv: [...entry.baseURLEnv] },
+    ...(nativeAuth === undefined ? {} : { nativeAuth: { ...nativeAuth, env: [...nativeAuth.env] } }),
+  }
+}
+
 interface AdapterRegistration {
   readonly adapter: LlmAdapter
   readonly provider: LlmProviderInfo
   readonly retryPolicy: ResolvedRetryPolicy
+}
+
+interface PreparedDispatch {
+  readonly registration: AdapterRegistration
+  readonly config: LlmCallConfig
+  readonly modelInfo: LlmResolvedModelInfo
+  readonly dispatch: (options: GenerateOptions) => AsyncIterable<StreamChunk>
 }
 
 export default LlmRuntime

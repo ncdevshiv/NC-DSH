@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
 import {
   SlotCore, StaleAuthorizationError, type PropsRenderSlots, type SlotRendererHost,
+  type SlotScopeAdapter, type StandardSourceBinding,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { createSlotRenderer } from '../src/client/scoped-slots.tsx'
 
@@ -28,23 +29,39 @@ type FrameSlots = PropsRenderSlots<'spec.single' | 'spec.list'>
 
 /** Passthrough host over the real core (store/session seats unused here). */
 function hostOver(core: SlotCore): SlotRendererHost {
-  const absentInfo = { sessionId: undefined, hooks: {}, props: {} }
+  const absentBinding: StandardSourceBinding = {
+    key: undefined,
+    hooks: {},
+    keyedHooks: {},
+    props: {},
+  }
+  const bindingSource = {
+    getSnapshot: () => absentBinding,
+    subscribe: () => () => {},
+  }
+  const sessionAdapter: SlotScopeAdapter = {
+    current: bindingSource,
+    bindingSource: () => bindingSource,
+  }
   return {
     subscribe: (key, fn) => core.subscribe(key, fn),
     getVersion: key => core.getVersion(key),
     entriesOf: key => core.entries(key),
     entriesOfSlot: key => core.entriesOfSlot(key),
     reportEntryError: (key, entry, error, info) => { core.reportEntryError(key, entry, error, info) },
+    reportFactoryError: (name, definition, error) => { core.reportFactoryError(name, definition, error) },
     specOf: key => core.specDynamic(key),
     isLive: entry => core.isLive(entry),
     storeOf: () => undefined,
-    sessions: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-      provideInfo: { getSnapshot: () => absentInfo, subscribe: () => () => {} },
-    },
-    workspaces: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-    },
+    factoryStoreOf: () => undefined,
+    retainFactoryOccurrence: () => () => {},
+    subscribeFactory: (name, fn) => core.subscribeFactory(name, fn),
+    getFactoryVersion: name => core.factoryVersion(name),
+    factoryOf: name => core.factory(name),
+    isFactoryLive: definition => core.isFactoryLive(definition),
+    root: bindingSource,
+    scopeRevision: { getSnapshot: () => 0, subscribe: () => () => {} },
+    scope: () => sessionAdapter,
   }
 }
 

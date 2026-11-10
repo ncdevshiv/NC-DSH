@@ -7,7 +7,7 @@ English | [中文](2026-07-06-parallel-github-ci-gates.zh.md)
 
 ## Problem
 
-The keyless GitHub CI gates are mostly orthogonal: typecheck, lint, documentation freshness, coverage, snapshot replay, build, package-publication hygiene, demo smoke, and built-bin smoke fail for different reasons and do not need each other's runtime state. Running them as one ordered command chain makes the workflow wall clock equal the sum of those gates, while splitting every short leaf into its own GitHub job repeats checkout, Node setup, pnpm restore, and install work until orchestration overhead becomes the bottleneck.
+The keyless GitHub CI gates are mostly orthogonal: typecheck, lint, documentation freshness, coverage, snapshot replay, build, package-publication hygiene, demo smoke, and built-bin smoke fail for different reasons and do not need each other's runtime state. Running them as one ordered command chain makes the workflow wall clock equal the sum of those gates, while splitting every short leaf into its own GitHub job repeats checkout, Node setup, bun restore, and install work until orchestration overhead becomes the bottleneck.
 
 The original broad-lane split stopped meeting that balance as the workspace grew. On the merge of PR #404, Linux static, coverage, snapshot, and artifact jobs took 148, 195, 94, and 230 seconds; Windows static and artifacts took 251 and 482 seconds. Package-manager packing once per package dominated both artifact validators, coverage needlessly rebuilt output before a source-only suite, and CPU-heavy gates contended inside the static and coverage lanes.
 
@@ -31,14 +31,14 @@ Artifacts use two lanes: one metadata lane for `publint`, NodeNext declarations,
 
 Compatibility lanes run the source worker and Zstandard runtime smokes on every advertised Node line. TypeScript checks the source graph once in a dedicated primary Node 24 lane; repeating the same compiler analysis in runtime compatibility jobs added time without runtime-specific signal.
 
-The workflow caches the pnpm store, keys each immutable ESLint cache to its owning lint shard, preserves native PowerShell for Windows measurements, and retains one aggregate `all checks passed` status for branch protection. Windows reuses the three exhaustive lint partitions and groups foundation/catalog/prose plus documentation-type/API-contract gates behind shared runner setups; only scheduling differs from the Linux partitions. Windows build and production-site validation remain blocking, while the wider Windows static, lint, and artifact matrix remains observational.
+The workflow caches the bun store, keys each immutable ESLint cache to its owning lint shard, preserves native PowerShell for Windows measurements, and retains one aggregate `all checks passed` status for branch protection. Windows reuses the three exhaustive lint partitions and groups foundation/catalog/prose plus documentation-type/API-contract gates behind shared runner setups; only scheduling differs from the Linux partitions. Windows build and production-site validation remain blocking, while the wider Windows static, lint, and artifact matrix remains observational.
 
 ## Alternatives considered
 
 - **Keep the broad lanes** - minimizes workflow YAML, but it preserves the measured multi-minute feedback loop.
 - **Run every leaf gate as a separate GitHub job** - maximizes fan-out, but short generators and prose checks would spend more time preparing a runner than checking the repository.
 - **Upload one build to artifact consumers** - avoids repeated compilation, but upload/download and dependency scheduling lengthen wall time; the clean build is short enough to repeat inside bounded lanes.
-- **Keep package-manager packing in both publication gates** - delegates inventory selection to pnpm, but repeats more than 200 package-manager processes. The manifest structural gate plus publication-view fixtures make the optimized inventory contract explicit and fail on an on-disk but unpublished dependency.
+- **Keep package-manager packing in both publication gates** - delegates inventory selection to bun, but repeats more than 200 package-manager processes. The manifest structural gate plus publication-view fixtures make the optimized inventory contract explicit and fail on an on-disk but unpublished dependency.
 - **Keep build before coverage** - provides emitted output the source suite no longer consumes; a clean-tree coverage proof showed it was pure latency.
 - **Typecheck on every Node version** - repeats compiler work while the compatibility smokes already exercise actual Node-specific loading and compression behavior.
 

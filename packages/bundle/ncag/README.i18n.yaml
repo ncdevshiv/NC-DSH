@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/bundle/ncag/README.md
+/:
+  en: 9cb953d36e4f9261
+  zh: fa68ab9376c7d386
+/deepseek-ai-dsh-bundle-ncag:
+  en: f674120dab1d1048
+  zh: e27e77d44d18bb60
+/deepseek-ai-dsh-bundle-ncag/summary:
+  en: 35b0f4733f4ad666
+  zh: d623286f906a9b62
+/deepseek-ai-dsh-bundle-ncag/table-of-contents:
+  en: 2ce24878800b4d31
+  zh: 588679efe2fa33e3
+/deepseek-ai-dsh-bundle-ncag/use-this-bundle:
+  en: 88d0c995131d4397
+  zh: eb524385b1ca1a3a
+/deepseek-ai-dsh-bundle-ncag/configuration:
+  en: ffafb017bb201fcd
+  zh: 1b5919e67171678d
+/deepseek-ai-dsh-bundle-ncag/what-it-does-not-replace:
+  en: dac69fec564310e7
+  zh: 61a4ff5bc353de86
+/deepseek-ai-dsh-bundle-ncag/known-limitations-and-deferred-work:
+  en: ad46a777e3534a0d
+  zh: bd259d15e5da0f36
+/deepseek-ai-dsh-bundle-ncag/dev-note:
+  en: d3fd9ed3d3aacb62
+  zh: 5e6bbfd735b635ad

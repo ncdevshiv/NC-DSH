@@ -15,28 +15,43 @@
       "path": "../../api/remotes/tsconfig.client.json"
     },
     {
+      "path": "../../api/session-controller/tsconfig.client.json"
+    },
+    {
       "path": "../../context/file-reference"
     },
     {
       "path": "../../context/session-reference"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
-    },
-    {
       "path": "../../typert/protocol"
     },
     {
-      "path": "../locale"
+      "path": "../../util/workspace-path"
     },
     {
-      "path": "../runtime"
+      "path": "../connection/tsconfig.client.json"
+    },
+    {
+      "path": "../locale/tsconfig.client.json"
     },
     {
       "path": "../ui-input-trigger"
     },
     {
+      "path": "../ui-primitives"
+    },
+    {
+      "path": "../ui-conversation/tsconfig.client.json"
+    },
+    {
+      "path": "../ui-renderer"
+    },
+    {
       "path": "../ui-slots"
+    },
+    {
+      "path": "../ui-sidebar-right"
     }
   ]
 }

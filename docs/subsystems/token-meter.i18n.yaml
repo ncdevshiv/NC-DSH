@@ -1,6 +1,13 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for token-meter.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/subsystems/token-meter.md
-token-meter.md: dbe2485755bcf63aa3a7dd7764de9c27f9987211
-token-meter.zh.md: b3bee7c2cc70b20514ffdb4882d0911fe837b31d
+/token-meter:
+  en: 7b81394f8688ad71
+  zh: e38852d59e9793fd
+/token-meter/tokenmeasurement:
+  en: 34853869e90adf31
+  zh: 285010a2f695ca01
+/token-meter/tokensurfacenode:
+  en: e445d12b10f651d0
+  zh: e93be5fb9da1da15

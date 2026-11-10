@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for protocols.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/protocols.md
+/:
+  en: d8a80f3fa5ccf599
+  zh: cd8ca887ba7c78e7
+/nc-ag-protocols:
+  en: 766bbc4c8f566810
+  zh: b017991cce5bced1
+/nc-ag-protocols/summary:
+  en: 5db7d726bc7de6d0
+  zh: e318dec126660ed5
+/nc-ag-protocols/table-of-contents:
+  en: 216e1118c716a24e
+  zh: 162c85f6e0c9808f
+/nc-ag-protocols/agent-lifecycle:
+  en: 94da2a2b3567dbbb
+  zh: 84f037f23c12ccb0
+/nc-ag-protocols/task-lifecycle:
+  en: 776b30c4562844c3
+  zh: ca64a932f8969a59
+/nc-ag-protocols/communication:
+  en: 1039e9b152ae8eb0
+  zh: d3e76a842a62feb1
+/nc-ag-protocols/resource-leases:
+  en: 4302801ae4f6f03c
+  zh: 1b9cfc83739b63a8
+/nc-ag-protocols/git-workspaces-and-integration:
+  en: acec5c7e1723bf83
+  zh: 7378d844adc01d21
+/nc-ag-protocols/decisions-and-debate:
+  en: 59056fc1247ec091
+  zh: 74e31278a506e59b
+/nc-ag-protocols/review-and-verification:
+  en: 38ddef9e8ce10582
+  zh: 345e50b7a8a6c73b

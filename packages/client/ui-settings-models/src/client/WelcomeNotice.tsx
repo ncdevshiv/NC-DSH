@@ -1,8 +1,8 @@
-/** Product-wide, versioned internal-testing notice. */
+/** Product-wide, versioned preview notice. */
 
 import { useCallback, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WelcomeNoticeState, WelcomeNoticeStore } from './welcome-store.ts'
@@ -13,7 +13,7 @@ import css from './WelcomeNotice.module.css'
 /** Registration-side dependencies of {@link WelcomeNotice}. */
 export interface WelcomeNoticeInjected {
   hooks: {
-    /** Durable or process-local acknowledgement state. */
+    /** Durable acknowledgement state. */
     welcome: SnapshotStore<WelcomeNoticeState>
   }
   /** Welcome acknowledgement controller. */

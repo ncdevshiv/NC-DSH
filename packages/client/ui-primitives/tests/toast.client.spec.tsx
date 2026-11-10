@@ -24,6 +24,43 @@ describe('Toast', () => {
     }
   })
 
+  it('holds for the owner\'s window and hands the stylesheet the same value', () => {
+    vi.useFakeTimers()
+    try {
+      const onDone = vi.fn()
+      const view = render(<Toast text="切换失败" holdMs={6000} onDone={onDone} />)
+      // One value drives both, so a banner can never unmount mid-fade: the
+      // timer waits the hold plus the fade, and the stylesheet delays the
+      // fade by the same hold.
+      expect(view.getByRole('alert').style.getPropertyValue('--dsh-toast-hold')).toBe('6000ms')
+      vi.advanceTimersByTime(6999)
+      expect(onDone).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(1)
+      expect(onDone).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps its original expiry across rerenders and calls the latest completion handler', () => {
+    vi.useFakeTimers()
+    try {
+      const first = vi.fn()
+      const latest = vi.fn()
+      const view = render(<Toast text="archived" onDone={first} />)
+      vi.advanceTimersByTime(1000)
+      view.rerender(<Toast text="archived" onDone={latest} />)
+      vi.advanceTimersByTime(2999)
+      expect(first).not.toHaveBeenCalled()
+      expect(latest).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(1)
+      expect(first).not.toHaveBeenCalled()
+      expect(latest).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('centers over its anchor and re-measures on window resize', () => {
     vi.useFakeTimers()
     try {
@@ -41,6 +78,37 @@ describe('Toast', () => {
     }
   })
 
+  it('flows prefixed actions inline as one sentence and hands each press to the owner', () => {
+    vi.useFakeTimers()
+    try {
+      const undo = vi.fn()
+      const filter = vi.fn()
+      const view = render(
+        <Toast
+          text="会话已归档，可"
+          tone="success"
+          actions={[
+            { label: '撤销', onClick: undo },
+            { prefix: '或', label: '筛选已归档会话', onClick: filter },
+          ]}
+          onDone={vi.fn()}
+        />,
+      )
+      // The success tone brings the circled green check itself; no icon prop.
+      // The success tone brings the circled green check itself; no icon prop.
+      const glyph = view.getByRole('alert').querySelector('[aria-hidden]')
+      expect(glyph?.className).toContain('success')
+      expect(glyph?.querySelector('svg')).toBeTruthy()
+      expect(view.getByRole('alert').textContent).toBe('会话已归档，可撤销或筛选已归档会话')
+      fireEvent.click(view.getByRole('button', { name: '撤销' }))
+      expect(undo).toHaveBeenCalledTimes(1)
+      fireEvent.click(view.getByRole('button', { name: '筛选已归档会话' }))
+      expect(filter).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('renders without an icon and cancels its timer on unmount', () => {
     vi.useFakeTimers()
     try {
@@ -50,6 +118,22 @@ describe('Toast', () => {
       view.unmount()
       vi.advanceTimersByTime(10_000)
       expect(onDone).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('announces a polite notice as status and keeps the default assertive', () => {
+    vi.useFakeTimers()
+    try {
+      const polite = render(<Toast text="已保存" politeness="polite" tone="success" onDone={vi.fn()} />)
+      expect(polite.getByRole('status').textContent).toBe('已保存')
+      expect(polite.queryByRole('alert')).toBeNull()
+      polite.unmount()
+      // Omitting the prop is what every other owner sees: an interrupting alert.
+      const plain = render(<Toast text="已保存" tone="success" onDone={vi.fn()} />)
+      expect(plain.getByRole('alert').textContent).toBe('已保存')
+      expect(plain.queryByRole('status')).toBeNull()
     } finally {
       vi.useRealTimers()
     }

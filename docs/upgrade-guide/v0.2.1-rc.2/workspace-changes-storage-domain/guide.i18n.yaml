@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.2/workspace-changes-storage-domain/guide.md
+/:
+  en: 19e64ef77d7bf47f
+  zh: 0ec8e9f74577341e
+/the-workspace-changes-plugin-waits-for-the-storage-stack:
+  en: d264820bfdd1b80c
+  zh: 81fe5fd86562514b
+/the-workspace-changes-plugin-waits-for-the-storage-stack/change:
+  en: f4263a0ff2c49716
+  zh: 57b1acb72e2b7ba0
+/the-workspace-changes-plugin-waits-for-the-storage-stack/migration:
+  en: 09cd524d497517e6
+  zh: 24874d14a47f90b4

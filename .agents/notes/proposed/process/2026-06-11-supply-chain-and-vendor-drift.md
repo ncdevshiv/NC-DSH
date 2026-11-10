@@ -6,12 +6,12 @@ English | [中文](2026-06-11-supply-chain-and-vendor-drift.zh.md)
 
 ## Problem
 
-The vendor manifest ([the vendoring decision](../../implemented/process/2026-06-11-vendor-cordis-as-source.md)) is enforced at commit time in the *forward* direction (vendored change ⇒ manifest update) but nothing verifies the manifest's *claims*: that vendor/ actually equals upstream-at-SHA plus exactly the logged modifications. And the handful of true npm dependencies have no advisory monitoring or update cadence.
+The vendor manifest ([the vendoring decision](../../archived/process/2026-06-11-vendor-cordis-as-source.md)) is enforced at commit time in the *forward* direction (vendored change ⇒ manifest update) but nothing verifies the manifest's *claims*: that vendor/ actually equals upstream-at-SHA plus exactly the logged modifications. And the handful of true npm dependencies have no advisory monitoring or update cadence.
 
 ## Proposal
 
 1. **Vendor drift check** (nightly CI): clone the upstream repos at the manifest SHAs (shallow), copy the corresponding package sources, and diff against `vendor/*/src`. The job fails unless the diff matches the logged local modifications (kept as a checked-in patch file per modification — the log entries become verifiable artifacts rather than prose).
-2. **Dependency advisories**: osv-scanner (or `pnpm audit`) job on the lockfile, scheduled + on lockfile-touching PRs.
+2. **Dependency advisories**: osv-scanner (or `bun audit`) job on the lockfile, scheduled + on lockfile-touching PRs.
 3. **License inventory**: a script asserting every vendored package carries its LICENSE and that package.json `license` fields match the inventory in vendor/README.md (we mix vendored MIT with our BSD-3) — CI step.
 4. **Renovate** (or a scheduled agent task) proposing npm dependency updates in small PRs that ride the full gate suite; vendored packages are excluded (their updates follow the manifest sync procedure, ideally as a semi-automated agent workflow: fetch upstream, re-apply patches, run gates, open PR with the manifest table updated).
 
@@ -21,7 +21,7 @@ The vendor manifest ([the vendoring decision](../../implemented/process/2026-06-
 
 ## Alternatives considered
 
-- **`pnpm audit` instead of osv-scanner** — either satisfies the advisory-scanning shape; the choice is deferred to implementation.
+- **`bun audit` instead of osv-scanner** — either satisfies the advisory-scanning shape; the choice is deferred to implementation.
 - **A scheduled agent task instead of Renovate** — equivalent for proposing small update PRs that ride the full gate suite; vendored packages stay excluded either way (their updates follow the manifest sync procedure).
 
 ## Acceptance criteria

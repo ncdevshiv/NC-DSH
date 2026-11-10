@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # Run the blocking Windows gates (workspace build, production site) with real
-# win-x64 Node.js under Wine — the same script the pull-request `windows` job
-# in ci.yml executes and the optional local gate `bun run check:windows-wine`
+# win-x64 Node.js under Wine — the same script the master-only `windows` job
+# in ci-master.yml executes and the optional local gate `bun run check:windows-wine`
 # wraps. Owning rationale and fidelity limits:
 # .agents/notes/implemented/process/2026-08-08-native-windows-pull-request-ci.md
 #
 # The working tree is never mutated: tracked plus untracked-unignored files
-# are snapshotted into a scratch directory, the install there targets
-# win32-x64 optional dependencies (--os/--cpu) so the Windows
-# esbuild/rolldown/rollup binaries materialize for the Wine processes, and
-# the install and gates run inside the snapshot. The Wine prefix and the
-# checksum-verified Windows Node zip persist in .cache/wine-windows/ so
-# reruns skip provisioning.
+# are snapshotted into a scratch directory, the Wine-specific bun overrides
+# (hoisted layout, win32-x64 platform packages) are appended to the SNAPSHOT's
+# bun-workspace.yaml, and the install and gates run there against the shared
+# bun store. The Wine prefix and the checksum-verified Windows Node zip
+# persist in .cache/wine-windows/ so reruns skip provisioning.
 #
 # Environment: DSH_WINE_NODE_MAJOR (default $PRIMARY_NODE_VERSION, then 24)
 # picks the Windows Node line; DSH_WINE_GATE_CACHE_DIR relocates the cache;
@@ -20,6 +19,9 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+# The scratch tree has no Git metadata or Windows Git executable.
+DSH_CLIENT_COMMIT_HASH="$(git -C "$repo_root" rev-parse HEAD)"
+export DSH_CLIENT_COMMIT_HASH
 node_major="${DSH_WINE_NODE_MAJOR:-${PRIMARY_NODE_VERSION:-24}}"
 cache_dir="${DSH_WINE_GATE_CACHE_DIR:-$repo_root/.cache/wine-windows}"
 
@@ -47,7 +49,8 @@ missing=()
 command -v curl > /dev/null || missing+=('curl')
 command -v unzip > /dev/null || missing+=('unzip')
 [ -n "$checksum_tool" ] || missing+=('sha256sum or shasum (apt: coreutils | macOS ships shasum)')
-command -v bun > /dev/null || missing+=('bun (https://bun.sh/install)')
+if ! command -v bun > /dev/null; then corepack enable > /dev/null 2>&1 || true; fi
+command -v bun > /dev/null || missing+=('bun (corepack enable)')
 if (( ${#missing[@]} > 0 )); then
   printf 'wine-windows-gates: missing required tool: %s\n' "${missing[@]}" >&2
   exit 1
@@ -143,23 +146,43 @@ boot_wine() {
 
 snapshot_and_install() {
   # Tracked + untracked-unignored files, minus agent-session litter; the
-  # existence filter drops paths staged as deleted. The install runs on the
-  # SNAPSHOT only: --os/--cpu retarget optional dependencies at win32-x64 so
-  # the Windows esbuild/rolldown/rollup binaries materialize for the Wine
-  # Node processes, and hoisted linking keeps every entrypoint at a real file
-  # path because Node under Wine cannot resolve through the isolated linker's
-  # store symlinks. The lockfile already records those resolutions, so
-  # --frozen-lockfile stays valid; --ignore-scripts skips host lifecycle
-  # scripts no gate loads.
+  # existence filter drops paths staged as deleted. Then the Wine-specific
+  # install-time overrides go on the SNAPSHOT only: hoisted because Windows
+  # Node under Wine does not realpath bun's isolated-layout symlinks, and
+  # win32-x64 so the Windows esbuild/rolldown/rollup binaries materialize.
+  # Neither is recorded in the lockfile, so --frozen-lockfile stays valid;
+  # --ignore-scripts skips host lifecycle scripts no gate loads.
   git -C "$repo_root" ls-files -z --cached --others --exclude-standard -- . ':!:.claude' ':!:.codex' \
     | while IFS= read -r -d '' file; do [ -e "$repo_root/$file" ] && printf '%s\0' "$file"; done \
     | tar -C "$repo_root" --null --files-from=- -cf - \
     | tar -C "$scratch/tree" -xf -
-  (cd "$scratch/tree" && bun install --frozen-lockfile --ignore-scripts --linker=hoisted --os=win32 --cpu=x64 \
-    > "$scratch/logs/install.log" 2>&1) || {
-    tail -40 "$scratch/logs/install.log" >&2
-    return 1
-  }
+  cat >> "$scratch/tree/bun-workspace.yaml" << 'EOF'
+
+nodeLinker: hoisted
+supportedArchitectures:
+  os: [current, win32]
+  cpu: [current, x64]
+EOF
+  # The hoisted linker — used only by this lane — has an upstream rename
+  # race (bun/bun#12880): parallel linkers staging a nested package copy
+  # (observed on the tree's nested esbuild versions) rename their _tmp_*
+  # directory onto a path another racer already claimed, and the loser
+  # exits ERR_BUN_ENOENT although an identical re-install succeeds.
+  # Exactly that signature earns up to two retries on a clean tree — the
+  # snapshot contains no node_modules, so wiping them restores the
+  # pre-install state; any other failure, or the race still standing after
+  # the final attempt, fails loud with the log tail.
+  local attempt
+  for attempt in 1 2 3; do
+    (cd "$scratch/tree" && bun install --frozen-lockfile --ignore-scripts > "$scratch/logs/install.log" 2>&1) \
+      && return 0
+    grep -q 'ERR_BUN_ENOENT.*rename.*_tmp_' "$scratch/logs/install.log" || break
+    (( attempt < 3 )) || break
+    echo "wine-windows-gates: bun hoisted-linker rename race (bun/bun#12880) on install attempt $attempt; retrying on a clean tree" >&2
+    find "$scratch/tree" -name node_modules -type d -prune -exec rm -rf {} +
+  done
+  tail -40 "$scratch/logs/install.log" >&2
+  return 1
 }
 
 mkdir "$scratch/tree"
@@ -219,12 +242,14 @@ cat "$scratch/logs/smoke.log"
 grep -q '^smoke: win32 x64' "$scratch/logs/smoke.log" || { echo 'wine-windows-gates: Windows Node smoke did not report win32 x64' >&2; exit 1; }
 
 # ---- the two blocking surfaces, concurrently ------------------------------
-# The build preserves the face order from package.json: compile and bundle the
-# Host face before compiling and bundling the Client face.
+# The build mirrors the root build:lib:host and build:lib:client scripts:
+# compile and bundle the Host face, bundle apps/desktop from the Host lib/
+# outputs, then compile and bundle the Client face.
 # Both statuses are captured so one failure cannot hide the other's result.
 build_gate() {
-  wine_node "$scratch/logs/host-tsc.log" "$tsc_js" -b tsconfig.host.json --pretty false || return $?
+  wine_node "$scratch/logs/host-tsc.log" --max-old-space-size=4096 "$tsc_js" -b tsconfig.host.json --pretty false || return $?
   wine_node "$scratch/logs/host-tsdown.log" "$tsdown_js" --env.DSH_BUILD_FACE host || return $?
+  (cd apps/desktop && wine_node "$scratch/logs/desktop-tsdown.log" "../../$tsdown_js") || return $?
   wine_node "$scratch/logs/client-tsc.log" "$tsc_js" -b tsconfig.client.json --pretty false || return $?
   wine_node "$scratch/logs/client-tsdown.log" "$tsdown_js" --env.DSH_BUILD_FACE client
 }
@@ -252,9 +277,10 @@ report() {
     for log in "$@"; do tail -n 200 "$log" >&2 || true; done
   fi
 }
-report 'build (Host tsc/tsdown, Client tsc/tsdown)' "$build_status" \
+report 'build (Host tsc/tsdown, desktop tsdown, Client tsc/tsdown)' "$build_status" \
   "$scratch/logs/host-tsc.log" \
   "$scratch/logs/host-tsdown.log" \
+  "$scratch/logs/desktop-tsdown.log" \
   "$scratch/logs/client-tsc.log" \
   "$scratch/logs/client-tsdown.log"
 report 'production site (vitepress build)' "$site_status" "$scratch/logs/site.log"

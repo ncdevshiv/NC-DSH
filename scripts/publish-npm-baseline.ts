@@ -4,7 +4,6 @@ import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   existsSync,
-  globSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -18,15 +17,11 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 import { createInterface } from 'node:readline/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { discoverNpmBaselineManifests } from './npm-baseline-packages.ts'
 import { validateTarballPayload } from './publication-payload.ts'
 
 const DEFAULT_REGISTRY = 'https://registry.npm.harnessment.com'
 const DEFAULT_OUTPUT_DIRECTORY = '.artifacts/npm-baseline'
-const PACKAGE_PATTERNS = [
-  'vendor/*/package.json',
-  'packages/!(experimental)/*/package.json',
-  'apps/*/package.json',
-] as const
 const DEPENDENCY_SECTIONS = [
   'dependencies',
   'devDependencies',
@@ -242,7 +237,7 @@ class WorkspacePackageSet {
   ) {}
 
   static discover(root: string): WorkspacePackageSet {
-    const manifestPaths = globSync(PACKAGE_PATTERNS, { cwd: root }).sort()
+    const manifestPaths = discoverNpmBaselineManifests(root)
     if (manifestPaths.length === 0) {
       throw new Error('no package manifests found under vendor/, packages/, or apps/')
     }
@@ -566,11 +561,14 @@ class BaselinePackager {
       )
       this.runner.run('bun', ['run', 'build'], worktree.path)
       this.runner.run('bun', ['run', 'publint'], worktree.path)
-      this.runner.run('bun', ['run', 'verify-built-package-invariants'], worktree.path)
-      // bun has no recursive pack; pack each publication member directly.
-      for (const pkg of packageSet.packages) {
-        this.runner.run('bun', ['pm', 'pack', '--destination', artifactDirectory], join(worktree.path, pkg.directory))
-      }
+      this.runner.run('bun', [
+        '--filter', './vendor/**',
+        '--filter', './packages/**',
+        '--filter', './apps/**',
+        '--recursive',
+        'pack',
+        '--pack-destination', artifactDirectory,
+      ], worktree.path)
 
       const bundle = ReleaseBundle.create(
         artifactDirectory,
@@ -587,9 +585,11 @@ class BaselinePackager {
       console.log(`  version:  ${bundle.manifest.version}`)
       console.log(`  dist-tag: ${bundle.manifest.distTag}`)
       console.log(`  manifest: ${resolve(bundle.directory, RELEASE_MANIFEST_NAME)}`)
-      console.log('  publish:  ' + formatCopyableCommand('node', [
-        '--import',
-        'tsx/esm',
+      console.log('  publish:  ' + formatCopyableCommand('bun', [
+        '--dir',
+        this.repositoryRoot,
+        'exec',
+        'tsx',
         resolve(this.repositoryRoot, 'scripts/publish-npm-baseline.ts'),
         'publish',
         '--manifest',
@@ -767,9 +767,9 @@ interface InspectedTarball {
 }
 
 function inspectTarball(path: string, runner: CommandRunner): InspectedTarball {
-  const manifest = JSON.parse(
+  const manifest: unknown = JSON.parse(
     runner.capture('tar', ['-xOf', path, 'package/package.json'], dirname(path)),
-  ) as unknown
+  )
   if (!isRecord(manifest)) throw new Error(`${path} contains an invalid package.json`)
   return {
     name: expectString(manifest, 'name', path),
@@ -998,10 +998,10 @@ function quoteShellArgument(value: string): string {
 
 function printUsage(): void {
   console.log(`Usage:
-  node --import tsx/esm scripts/publish-npm-baseline.ts pack [options]
-  node --import tsx/esm scripts/publish-npm-baseline.ts release [options] [--yes]
-  node --import tsx/esm scripts/publish-npm-baseline.ts publish --manifest <path> [--yes]
-  node --import tsx/esm scripts/publish-npm-baseline.ts verify --manifest <path>
+  bun exec tsx scripts/publish-npm-baseline.ts pack [options]
+  bun exec tsx scripts/publish-npm-baseline.ts release [options] [--yes]
+  bun exec tsx scripts/publish-npm-baseline.ts publish --manifest <path> [--yes]
+  bun exec tsx scripts/publish-npm-baseline.ts verify --manifest <path>
 
 Pack/release options:
   --ref <git-ref>       Git commit to stage (default: HEAD)

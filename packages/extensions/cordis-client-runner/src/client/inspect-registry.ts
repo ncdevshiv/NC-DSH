@@ -3,9 +3,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {
   CordisInspectProviderManifest, CordisInspectQueryRequest, CordisInspectQueryResolution,
-  CordisInspectRequestId, JsonValue,
+  CordisInspectRequestId, SessionId,
 } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 /** Context supplied to a Client inspect provider query. */
 export interface ClientCordisInspectQueryContext {
@@ -21,6 +21,12 @@ export interface ClientCordisInspectProviderRegistration {
   manifest: CordisInspectProviderManifest
   /** Execute one declared read-only method. */
   query(method: string, input: JsonValue | undefined, context: ClientCordisInspectQueryContext): Promise<JsonValue>
+}
+
+/** Whether one publish failure is the expected gap while a Connection is replaced. */
+function transientCarrierFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /gateway\/cancelled|gateway\/disconnected|no active Connection|inactive context|is not a function|aborted/u.test(message)
 }
 
 /** Remote operations needed by the Client registry. */
@@ -82,6 +88,10 @@ export class ClientCordisInspectRegistry {
       this.syncChain = this.syncChain.then(async () => {
         await this.host.sync(manifests)
       }).catch((error: unknown) => {
+        // A republish racing a Connection replacement is expected: the carrier
+        // has no live socket yet and the next reset republishes. Only a failure
+        // that survives a live carrier is worth reporting.
+        if (transientCarrierFailure(error)) return
         console.error('[cordis-client-runner] syncing inspect providers failed:', error)
       })
     })

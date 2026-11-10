@@ -2,7 +2,7 @@
 
 [English](system-prompt.md) | 中文
 
-[system-prompt 包](../../packages/core/system-prompt)负责管理提示词贡献者与一次组装调用之间交换的数据。该包的 [README](../../packages/core/system-prompt/README.md) 记录注册、排序、作用域与渲染行为；本页记录各插件实现或传递的确切跨包类型。
+[system-prompt 包](../../packages/core/system-prompt)负责管理提示词贡献者与一次组装调用之间交换的数据。该包的 [README](../../packages/core/system-prompt/README.zh.md) 记录注册、排序、作用域与渲染行为；本页记录各插件实现或传递的确切跨包类型。
 
 源码：[`packages/core/system-prompt/src/index.ts`](../../packages/core/system-prompt/src/index.ts)。
 
@@ -39,7 +39,9 @@ interface ToolProviderResult {
 
 ## 提示词段落
 
-`PromptSection` 是一份只读的同进程注册约定。其文本可以是静态的，也可以从当前组装上下文动态解析。协作式组装完成后，一个有效的 `complete` 段会成为唯一的提示词段落。
+导出的 `PERSONA_PREFIX_SECTION`（`deployment:persona-prefix`）与 `PERSONA_SUFFIX_SECTION`（`deployment:persona-suffix`）为全局配置和带作用域贡献所共享的段落命名。它们对应的 `PromptSectionOrderName` 项为 `DEPLOYMENT_PERSONA_PREFIX` 与 `DEPLOYMENT_PERSONA_SUFFIX`；[包 README](../../packages/core/system-prompt/README.zh.md#configure-the-prompt)规定其位置与模板配置。
+
+`PromptSection` 是一份只读的同进程注册约定。其文本可以是静态的，也可以从当前组装上下文动态解析。各段先按 order 升序排列，再按名称的代码单元顺序排列；仓库贡献方通过 `getSectionOrder()` 解析服务持有的具名分配。Runtime-context 贡献方通过 `getContextOrder()` 解析独立分配。协作式组装完成后，一个有效的 `complete` 段会成为唯一的提示词段落。agent loop（智能体循环）用 `renderPrompt` 渲染组装后的各段，并把文本作为 `system/message` surface 节点提交——首个步骤作为 surface 第 0 号节点追加，之后在渲染文本变化时原地替换，或者当已准备调用声明 `systemPromptUpdate: 'in-history'` 时，在序列延续期间把非空更新追加到已缓存历史之后——因此提示词作为派生历史中的消息而不是请求字段到达模型（[决策](../../.agents/notes/implemented/architecture/2026-09-02-system-prompt-as-surface-node.zh.md)；[决策规则](../../packages/core/agent-loop/README.zh.md#understand-the-implementation)）。
 
 ```ts type-equiv
 /** One contributed section of the system prompt (registry input). */
@@ -47,17 +49,18 @@ interface PromptSection {
   /** Unique name — a duplicate registration throws (see {@link SystemPrompt.section}). */
   readonly name: string
   /**
-   * Sections are concatenated in ascending order. Convention: `-100` is the
-   * harness identity, `0` the deployment persona, tool guidance uses 100–199;
-   * other negative orders also render before the persona.
+   * Sections are concatenated in ascending order. Equal orders use code-unit
+   * name order.
    */
   readonly order: number
   /**
    * Static text or a provider evaluated at each assembly with that assembly's
    * {@link AssembleContext}. The text may reference `{{variable}}`s — they are
-   * interpolated later, by {@link renderPrompt}.
+   * interpolated later, by {@link renderPrompt}, unless `interpolate` is false.
    */
   readonly text: string | ((context: AssembleContext) => string)
+  /** Whether to interpolate prompt variables. Defaults to true; false preserves literal text. */
+  readonly interpolate?: boolean
   /**
    * Treat this contribution as the complete system prompt. Assembly still
    * runs the cooperative waterfall so tools, contexts, and variables can be
@@ -79,8 +82,26 @@ interface PromptContext {
   readonly name: string
   /** Contexts are joined in ascending order. */
   readonly order: number
-  /** Static text or a provider evaluated for each assembly. Empty text contributes nothing. */
+  /** Static text or a provider evaluated at assembly and admission refresh. Empty text contributes nothing. */
   readonly text: string | ((context: AssembleContext) => string)
+  /** Whether to interpolate prompt variables. Defaults to true; false preserves literal text. */
+  readonly interpolate?: boolean
+  /** Keep this operational context when optional runtime context is disabled. */
+  readonly required?: boolean
+}
+```
+
+`required: true` 在可选运行时上下文被抑制时保留操作所需的贡献。`interpolate: false` 原样保留文本，包括看起来像变量的目录名。`AssembledContext` 将已求值文本及其插值选择传给渲染过程。
+
+```ts type-equiv
+/** One resolved dynamic context contribution. */
+interface AssembledContext {
+  /** The contributing context's unique name. */
+  name: string
+  /** The resolved text before variable interpolation. */
+  text: string
+  /** Whether to interpolate prompt variables. Defaults to true; false preserves literal text. */
+  interpolate?: boolean
 }
 ```
 
@@ -90,7 +111,7 @@ interface PromptContext {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `bun run verify-cordis-catalog` in doc-sync; regenerate with `bun run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `bun run verify-cordis-catalog` in doc-sync; regenerate with `bun run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxsystemprompt--systemprompt"></a>
 
@@ -110,6 +131,20 @@ Registry service for the prompt inputs assembled before each model step.
 section(section: PromptSection): () => void
 
 /**
+ * Resolve the centrally owned placement of a repository prompt section.
+ * @param name - stable section placement name.
+ * @returns the section's numeric sort order.
+ */
+getSectionOrder(name: PromptSectionOrderName): number
+
+/**
+ * Resolve the centrally owned placement of a repository runtime context.
+ * @param name - stable context placement name.
+ * @returns the context's numeric sort order.
+ */
+getContextOrder(name: PromptContextOrderName): number
+
+/**
  * Register ordered dynamic context in the calling context's scope. Scoped
  * entries shadow global entries with the same name.
  * @param context - the context contribution to register.
@@ -118,7 +153,7 @@ section(section: PromptSection): () => void
 context(context: PromptContext): () => void
 
 /**
- * Suppress every dynamic runtime-context contribution in the calling
+ * Suppress optional dynamic runtime-context contributions in the calling
  * context's scope without changing the services that own or enforce those
  * facts. Multiple suppressors remain independently disposable.
  * @returns the exact Cordis effect disposer.
@@ -145,6 +180,18 @@ tools(provider: (context: AssembleContext) => ToolProviderResult): () => void
 variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void
 
 /**
+ * Refresh accepted registered runtime facts for request admission. Contexts
+ * added only by the assembly waterfall retain their accepted values. Current
+ * suppression removes optional contexts, and missing required registrations
+ * are restored in registry order. Sections, tools, and interpolation variables
+ * retain the accepted assembly; their providers and waterfall do not rerun.
+ * @param assembly - accepted assembly for this scope and step.
+ * @param context - the same scope and current plugin-defined assembly fields.
+ * @returns the accepted assembly with current runtime-context provider text.
+ */
+refreshContext(assembly: PromptAssembly, context: AssembleContext = {}): PromptAssembly
+
+/**
  * Assemble global and scoped providers, detach tool parameters, apply
  * canonical ordering, then run the assembly waterfall. Scoped sections and
  * variables shadow globals. The returned waterfall value is authoritative
@@ -156,7 +203,7 @@ variable(name: string, provider: (context: AssembleContext) => string | undefine
 async assemble(context: AssembleContext = {}): Promise<PromptAssembly>
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:338`](../../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-prompt/src/index.ts)
 
 <a id="system-prompt-events"></a>
 
@@ -184,9 +231,9 @@ Expert waterfall over the assembled sections, contexts, tools, and variables. Sc
 'system-prompt/assemble'(this: Scoped<SystemPrompt>, assembly: PromptAssembly, context: AssembleContext, next: () => Promise<PromptAssembly>): Promise<PromptAssembly>
 ```
 
-Types: [Scoped](scope.md)
+Types: [Scoped](scope.zh.md)
 
-Source: [`packages/core/system-prompt/src/index.ts:31`](../../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-prompt/src/index.ts)
 
 <a id="system-promptchange--emit"></a>
 
@@ -203,5 +250,5 @@ Emitted when any prompt provider changes. This registry notification is unfilter
 'system-prompt/change'(): void
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:37`](../../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-prompt/src/index.ts)
 <!-- END GENERATED cordis-surface -->

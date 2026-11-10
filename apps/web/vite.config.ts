@@ -1,13 +1,17 @@
+import { readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import { productWebBundleIsolation } from './product-isolation.ts'
+import { katexWoff2Fonts } from './katex-fonts.ts'
 
 const src = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url))
 const STANDALONE_ERROR = 'apps/web is not a standalone application: bare Vite cannot inject window.__DSH_BOOT__. '
   + 'From a repository checkout, run `bun dsh web`; an installed package uses `dsh web`. '
-  + 'For client-plugin HMR, run `bun dsh web` together with `bun run dev:web`.'
+  + 'For client-plugin HMR, run `bun run dev:web`, which starts `dsh web` and the rebuild watchers together.'
 const DEFAULT_CLIENT_TITLE = 'DSH Local Build'
 
 /** Escape build-time text before placing it in the HTML title element. */
@@ -26,12 +30,67 @@ function clientDocumentTitle(): Plugin {
   }
 }
 
+/** Keep the redistribution license beside the bundled brand font. */
+function brandFontLicense(): Plugin {
+  return {
+    name: 'dsh-brand-font-license',
+    async generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'assets/fonts/Montserrat-OFL.txt',
+        source: await readFile(src('../../packages/client/ui-theme/src/styles/Montserrat-OFL.txt')),
+      })
+    },
+  }
+}
+
 /** Fail before a Vite dev or preview server can expose the boot-manifest-free shell. */
 function rejectStandaloneServe(): Plugin {
   return {
     name: 'dsh-reject-standalone-web-serve',
     config(_config, env) {
       if (env.command === 'serve') throw new Error(STANDALONE_ERROR)
+    },
+  }
+}
+
+/**
+ * Emit preview.html beside index.html: the built index page with one module
+ * script — the worker bootstrap entry — spliced ahead of its entry tag. Both
+ * pages share every chunk; the extra tag is the only difference, so the
+ * static worker deployment ships the served page verbatim plus its
+ * bootstrap.
+ */
+function emitPreviewPage(): Plugin {
+  let bootstrapFile: string | undefined
+  let write = true
+  let written = false
+  let outputDirectory = ''
+  return {
+    name: 'dsh-emit-preview-page',
+    configResolved(config) {
+      write = config.build.write
+      outputDirectory = resolve(config.root, config.build.outDir)
+    },
+    buildStart() {
+      bootstrapFile = undefined
+      written = false
+    },
+    generateBundle(_options, bundle) {
+      if (!write) return
+      for (const item of Object.values(bundle)) {
+        if (item.type === 'chunk' && item.isEntry && item.name === 'bootstrap') bootstrapFile = item.fileName
+      }
+      if (bootstrapFile === undefined) throw new Error('vite: preview bootstrap entry missing from the bundle')
+    },
+    writeBundle() { written = true },
+    async closeBundle() {
+      if (!write || !written || bootstrapFile === undefined) return
+      const page = await readFile(resolve(outputDirectory, 'index.html'), 'utf8')
+      const anchor = page.indexOf('<script type="module"')
+      if (anchor === -1) throw new Error('vite: built index.html lost its module entry tag')
+      const tag = `<script type="module" crossorigin src="./${bootstrapFile}"></script>`
+      await writeFile(resolve(outputDirectory, 'preview.html'), `${page.slice(0, anchor)}${tag}${page.slice(anchor)}`)
     },
   }
 }
@@ -91,36 +150,50 @@ const BOOT_GRAMMAR_FILES: readonly string[] = [
   'dist/json.mjs',
 ]
 
-/** Font asset extensions routed to assets/fonts/ (KaTeX's woff2/woff/ttf faces). */
+/** Font asset extensions routed to assets/fonts/. */
 const FONT_EXTENSIONS: readonly string[] = ['.woff2', '.woff', '.ttf']
 
 /**
  * npm package name of a resolved module id: the segment after the last
- * `node_modules/`. Bun installs every package into the single hoisted
- * node_modules tree, so the trailing segments name the package directly.
+ * `node_modules/`. bun nests the real package under an inner node_modules.
  */
 function npmPackageOf(id: string): string | undefined {
   const parts = id.split('/node_modules/')
   if (parts.length === 1) return undefined
   const [first, second] = parts[parts.length - 1].split('/')
-  if (first.startsWith('.')) return undefined // dot-directory (e.g. Vite's dep-optimizer cache), not a package
+  if (first.startsWith('.')) return undefined // .bun store segment, not a package
   if (first.startsWith('@')) return second === undefined ? undefined : `${first}/${second}`
   return first
 }
 
 export default defineConfig({
-  plugins: [rejectStandaloneServe(), clientDocumentTitle(), react()],
+  // Relative asset URLs: preview.html mounts the same output under any base
+  // directory, and the served index resolves identically from the site root.
+  base: './',
+  plugins: [
+    rejectStandaloneServe(), clientDocumentTitle(), brandFontLicense(), katexWoff2Fonts(), react(), emitPreviewPage(),
+    productWebBundleIsolation(src('../..'), src('.')),
+  ],
   build: {
+    // The worker bootstrap holds its page at top-level await; Vite's default
+    // `modules` target (es2020-era) rejects that syntax.
+    target: 'es2022',
     sourcemap: true,
-    // Watch rebuilds skip the public-dir copy: two writers over one dist asset
-    // collide with Windows EBUSY and killed the watcher outright (the
-    // single-instance guard plus dev-web's stage supervisor are the other two
-    // layers of that defense). Requires one prior non-watch `bun run build`
-    // for dist to hold the public files at all — the documented dev-web
-    // prerequisite.
-    copyPublicDir: !process.argv.includes('--watch'),
     rollupOptions: {
+      input: {
+        index: src('./index.html'),
+        // Standalone entry, not an index.html script tag: Vite folds every
+        // module tag of one page into a single synthetic entry, and only a
+        // separate input keeps the shared page chunks bootstrap-free.
+        bootstrap: src('./src/preview.ts'),
+      },
       output: {
+        // The worker-preview surface groups under dist/preview/ (the page
+        // itself stays at dist/preview.html), so the published payload can
+        // exclude it as one directory.
+        entryFileNames(chunk): string {
+          return chunk.name === 'bootstrap' ? 'preview/[name]-[hash].js' : 'assets/[name]-[hash].js'
+        },
         // Output layout: the two main chunks stay at assets/ root; lazy
         // @shikijs/langs grammar chunks group under assets/langs/; fonts
         // (all KaTeX faces referenced by vendor.css) group under
@@ -152,6 +225,10 @@ export default defineConfig({
       },
     },
   },
+  worker: {
+    // The preview worker rides dist/preview/ with the rest of that surface.
+    rollupOptions: { output: { entryFileNames: 'preview/[name]-[hash].js' } },
+  },
   resolve: {
     // One instance per shared npm identity: a bare specifier otherwise resolves
     // from the importer's directory, so a diverging range ships a second React
@@ -159,7 +236,7 @@ export default defineConfig({
     // react/jsx-runtime and react-dom/client — and resolve from this package's
     // node_modules, so react must stay a devDependency here and any watcher must
     // run vite from this directory (scripts/dev-web.ts). Workspace packages need
-    // no entry: bun links each of them directly at its package directory.
+    // no entry: bun links each of them to a single directory.
     dedupe: ['react', 'react-dom'],
     // Workspace packages are consumed as built lib products: each resolves
     // through its own package.json exports from the importer's directory, and

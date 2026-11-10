@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, LlmConfigurableProvider, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmConfigurableProvider, LlmModelTestResult, StreamChunk } from '@deepseek-ai/dsh-llm'
 
 class NoopAdapter extends LlmAdapter {
 
@@ -89,16 +89,6 @@ describe('llm/adapters-updated', () => {
     expect(observed).toEqual([['a']])
   })
 
-  it('rethrows the first INVARIANT-coded listener failure after notifying the rest', async () => {
-    const ctx = await setup()
-    const later = vi.fn()
-    ctx.on('llm/adapters-updated', () => {
-      throw Object.assign(new Error('registry incoherent'), { code: 'INVARIANT' })
-    })
-    ctx.on('llm/adapters-updated', later)
-    expect(() => ctx.llm.registerAdapter(['a'], new NoopAdapter())).toThrow('registry incoherent')
-    expect(later).toHaveBeenCalledTimes(1)
-  })
 })
 
 describe('configurable-provider directory', () => {
@@ -124,10 +114,21 @@ describe('configurable-provider directory', () => {
 
   it('detaches stored entries from caller-owned objects', async () => {
     const ctx = await setup()
-    const source = entry()
+    const env = ['OPENAI_API_KEY']
+    const baseURLEnv = ['ENDPOINT']
+    const source = entry({ defaultBaseURL: 'https://api.openai.com/v1', baseURLEnv, nativeAuth: { env, oauth: false } })
     ctx.llm.registerConfigurableProviders([source])
     source.displayName = 'mutated'
-    expect(ctx.llm.listConfigurableProviders()[0]!.displayName).toBe('OpenAI')
+    env.push('mutated')
+    baseURLEnv.push('mutated')
+    const listed = ctx.llm.listConfigurableProviders()
+    expect(listed).toEqual([
+      entry({ defaultBaseURL: 'https://api.openai.com/v1', baseURLEnv: ['ENDPOINT'], nativeAuth: { env: ['OPENAI_API_KEY'], oauth: false } }),
+    ])
+    ;(listed[0]!.nativeAuth!.env as string[]).push('mutated')
+    ;(listed[0]!.baseURLEnv as string[]).push('mutated')
+    expect(ctx.llm.listConfigurableProviders()[0]!.nativeAuth!.env).toEqual(['OPENAI_API_KEY'])
+    expect(ctx.llm.listConfigurableProviders()[0]!.baseURLEnv).toEqual(['ENDPOINT'])
   })
 
   it('withdraws every entry when the registration disposes', async () => {
@@ -235,19 +236,77 @@ describe('model discovery registry', () => {
       .resolves.toEqual([])
   })
 
-  it('normalizes what an interrogation returns without inventing capacities', async () => {
+  it('preserves discovered capabilities without inventing missing metadata', async () => {
     const ctx = await setup()
     ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve([
-      { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
+      {
+        id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256,
+        inputModalities: ['text', 'image'], reasoning: true,
+      },
       { id: '' },
       { id: 'keep' },
       { id: 'bare' },
+      { id: 'plain', reasoning: false },
     ] as never))
 
     expect(await ctx.llm.discoverModels('llm-example', { baseURL: 'https://gateway.example/v1' })).toEqual([
+      {
+        id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256,
+        inputModalities: ['text', 'image'], reasoning: true,
+      },
+      // A listing that says nothing about reasoning leaves the fact unknown
+      // rather than asserting the model cannot think.
+      { id: 'bare' },
+      { id: 'plain', reasoning: false },
+    ])
+  })
+
+  it('carries cancellation into Remote discovery and maps provider failures', async () => {
+    const ctx = await setup()
+    const discover = vi.fn()
+      .mockResolvedValueOnce([
+        { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
+        { id: '' },
+        { id: 'keep' },
+        { id: 'bare' },
+      ])
+      .mockRejectedValueOnce(new Error('endpoint offline'))
+      .mockRejectedValueOnce('provider refused')
+    ctx.llm.registerModelDiscovery('llm-example', discover)
+    const signal = new AbortController().signal
+
+    await expect(ctx.llm.remoteDiscoverModels(
+      'llm-example',
+      { baseURL: 'https://gateway.example/v1' },
+      signal,
+    )).resolves.toEqual([
       { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
       { id: 'bare' },
     ])
+    expect(discover).toHaveBeenNthCalledWith(
+      1,
+      { baseURL: 'https://gateway.example/v1' },
+      signal,
+    )
+
+    await expect(ctx.llm.remoteDiscoverModels(
+      'llm-example',
+      { baseURL: 'https://gateway.example/v1' },
+      signal,
+    )).rejects.toMatchObject({
+      code: 'llm/model-discovery-rejected',
+      message: 'endpoint offline',
+      details: { settingsNs: 'llm-example', baseURL: 'https://gateway.example/v1' },
+    })
+    await expect(ctx.llm.remoteDiscoverModels(
+      'llm-example',
+      { provider: 'known-route' },
+      signal,
+    )).rejects.toMatchObject({
+      code: 'llm/model-discovery-rejected',
+      message: 'provider refused',
+      details: { settingsNs: 'llm-example' },
+    })
   })
 
   it('refuses a namespace nothing serves and a draft with no endpoint', async () => {
@@ -264,5 +323,122 @@ describe('model discovery registry', () => {
       .rejects.toMatchObject({ code: 'INVALID_DISCOVERY' })
     // Naming a route alone is enough: the adapter may know it without an endpoint.
     await expect(ctx.llm.discoverModels('llm-example', { provider: 'known-route' })).resolves.toEqual([])
+  })
+})
+
+describe('model test registry', () => {
+  it('offers one probe per settings namespace and disposes with its fiber', async () => {
+    const ctx = await setup()
+    const test = vi.fn(() => Promise.resolve({ ok: true, model: 'from-provider', latencyMs: 7 }))
+
+    const dispose = ctx.llm.registerModelTest('llm-example', test)
+    await expect(ctx.llm.testModel('llm-example', { baseURL: 'https://gateway.example/v1', model: 'acme-large' }))
+      .resolves.toEqual({ ok: true, model: 'acme-large', latencyMs: 7 })
+    expect(test).toHaveBeenCalledWith({ baseURL: 'https://gateway.example/v1', model: 'acme-large' })
+
+    // Disposal is observed through the offer itself, which is the only thing
+    // the registration ever produced.
+    dispose()
+    await expect(ctx.llm.testModel('llm-example', { baseURL: 'https://gateway.example/v1', model: 'acme-large' }))
+      .rejects.toThrow(/no model test is registered/)
+  })
+
+  it('rejects an unnamed namespace and a second registration of the same one', async () => {
+    const ctx = await setup()
+    const test = (): Promise<LlmModelTestResult> => Promise.resolve({ ok: true, model: 'm', latencyMs: 1 })
+
+    expect(() => ctx.llm.registerModelTest('', test)).toThrow(/non-empty settings namespace/)
+    ctx.llm.registerModelTest('llm-example', test)
+    expect(() => ctx.llm.registerModelTest('llm-example', test)).toThrow(/already registered/)
+    // The refused second registration left the first one serving.
+    await expect(ctx.llm.testModel('llm-example', { baseURL: 'https://gateway.example/v1', model: 'm' }))
+      .resolves.toMatchObject({ ok: true })
+  })
+
+  it('refuses a namespace nothing serves and a request that cannot be dispatched', async () => {
+    const ctx = await setup()
+    ctx.llm.registerModelTest('llm-example', () => Promise.resolve({ ok: true, model: 'm', latencyMs: 0 }))
+
+    await expect(ctx.llm.testModel('llm-absent', { baseURL: 'https://gateway.example/v1', model: 'm' }))
+      .rejects.toMatchObject({ code: 'NO_TEST' })
+    await expect(ctx.llm.testModel('llm-example', { baseURL: 'https://gateway.example/v1', model: '' }))
+      .rejects.toMatchObject({ code: 'INVALID_TEST' })
+    await expect(ctx.llm.testModel('llm-example', { model: 'm' }))
+      .rejects.toMatchObject({ code: 'INVALID_TEST' })
+    await expect(ctx.llm.testModel('llm-example', { provider: '', baseURL: '', model: 'm' }))
+      .rejects.toMatchObject({ code: 'INVALID_TEST' })
+    // Naming a route alone is enough: the adapter may serve it without an endpoint.
+    await expect(ctx.llm.testModel('llm-example', { provider: 'known-route', model: 'm' }))
+      .resolves.toMatchObject({ ok: true })
+  })
+
+  it('carries cancellation into Remote probing and maps dispatch failures', async () => {
+    const ctx = await setup()
+    const test = vi.fn()
+      .mockResolvedValueOnce({ ok: false, model: 'wrong-name', latencyMs: 41, failure: { message: 'Invalid API key', code: 'AUTH', status: 401 } })
+      .mockRejectedValueOnce(new Error('adapter refused to start'))
+      .mockRejectedValueOnce('namespace refused')
+    ctx.llm.registerModelTest('llm-example', test)
+    const signal = new AbortController().signal
+
+    // A provider refusal is the answer the surface asked for, so it travels as a
+    // successful call with the provider's own failure inside.
+    await expect(ctx.llm.remoteTestModel('llm-example', { baseURL: 'https://gateway.example/v1', model: 'm' }, signal))
+      .resolves.toEqual({
+        ok: false,
+        model: 'm',
+        latencyMs: 41,
+        failure: { message: 'Invalid API key', code: 'AUTH', status: 401 },
+      })
+    expect(test).toHaveBeenNthCalledWith(1, { baseURL: 'https://gateway.example/v1', model: 'm' }, signal)
+
+    await expect(ctx.llm.remoteTestModel('llm-example', { baseURL: 'https://gateway.example/v1', model: 'm' }, signal))
+      .rejects.toMatchObject({
+        code: 'llm/model-test-rejected',
+        message: 'adapter refused to start',
+        details: { settingsNs: 'llm-example', model: 'm', baseURL: 'https://gateway.example/v1' },
+      })
+    await expect(ctx.llm.remoteTestModel('llm-example', { provider: 'known-route', model: 'm' }, signal))
+      .rejects.toMatchObject({
+        code: 'llm/model-test-rejected',
+        message: 'namespace refused',
+        details: { settingsNs: 'llm-example', model: 'm' },
+      })
+  })
+
+  it('keeps a probe out of the discovery offer and a discovery out of the probe', async () => {
+    const ctx = await setup()
+    ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve([]))
+
+    // One offer per action: a namespace that only lists models cannot probe one.
+    await expect(ctx.llm.testModel('llm-example', { provider: 'known-route', model: 'm' }))
+      .rejects.toMatchObject({ code: 'NO_TEST' })
+    ctx.llm.registerModelTest('llm-example', () => Promise.resolve({ ok: true, model: 'm', latencyMs: 2 }))
+    await expect(ctx.llm.testModel('llm-example', { provider: 'known-route', model: 'm' })).resolves.toMatchObject({ ok: true })
+    await expect(ctx.llm.discoverModels('llm-example', { provider: 'known-route' })).resolves.toEqual([])
+  })
+})
+
+describe('imageRequestPricing resolution', () => {
+  it('resolves the owning adapter declaration and degrades everywhere else to undefined', async () => {
+    const ctx = await setup()
+    const pricing = { priceImages: () => [] }
+    class PricingAdapter extends NoopAdapter {
+      override imageRequestPricing(provider: string, model: string): typeof pricing | undefined {
+        return provider === 'a' && model === 'vision' ? pricing : undefined
+      }
+    }
+    const dispose = ctx.llm.registerAdapter(['a'], new PricingAdapter())
+    ctx.llm.registerAdapter(['plain'], new NoopAdapter())
+
+    expect(ctx.llm.imageRequestPricing('a', 'vision')).toBe(pricing)
+    expect(ctx.llm.imageRequestPricing('a', 'other')).toBeUndefined()
+    // The base adapter declares none.
+    expect(ctx.llm.imageRequestPricing('plain', 'vision')).toBeUndefined()
+    // Unregistered providers degrade instead of throwing: callers price
+    // durable history whose route may no longer be mounted.
+    expect(ctx.llm.imageRequestPricing('missing', 'vision')).toBeUndefined()
+    dispose()
+    expect(ctx.llm.imageRequestPricing('a', 'vision')).toBeUndefined()
   })
 })

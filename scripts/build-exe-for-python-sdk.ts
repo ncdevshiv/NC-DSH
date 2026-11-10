@@ -1,34 +1,44 @@
 /**
- * Build the SDK runtime executables and Python node carrier. The fixed
+ * Build the dsh executables and development Node carrier for the Python runtime wheel. The fixed
  * `@yao-pkg/pkg --sea` route, deploy flags, and artifact layout are owned by
  * .agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md.
  * The staged closure is symlink-free, and whole-tree assets cover Cordis's
  * runtime imports that pkg cannot discover statically.
  */
 
+import { createHash } from 'node:crypto'
+import { build as bundle } from 'tsdown'
 import { spawn } from 'node:child_process'
-import { existsSync, globSync, readFileSync, statSync } from 'node:fs'
-import { chmod, copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
+import { bunInvocation, restoreLegacyHoists } from './executable-packaging.ts'
+import { existsSync, statSync } from 'node:fs'
+import { chmod, copyFile, cp, glob, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
-import { resolveLinuxNodePtyAddon } from './build-exe-for-python-sdk-native-pty.ts'
+import { pathToFileURL } from 'node:url'
+import { resolveLinuxNodePtyAddon, resolveWindowsNodePtyAddons } from './executable-native-pty.ts'
+import { officeSidecarArchives, runtimeNpmArchive, OFFICE_ASSET_IGNORES } from './build-exe-for-python-sdk-office.ts'
+import { syncPythonRuntimeProduct } from './build-exe-for-python-sdk-resources.ts'
+import { deduplicateStagedWorkspacePackages, materializeStagedLinks } from './build-exe-for-python-sdk-staging.ts'
+import { prepareOfficeSkillAssets } from './primary-runtime/prepare.ts'
+import primaryLock from './primary-runtime/lock.json' with { type: 'json' }
 
 const root = resolve(import.meta.dirname, '..')
 
 /** The closure manifest whose dependencies define the executable. */
-const DEPLOY_ROOT_PACKAGE = 'dsh-jsonrpc-agent-pkg'
-/** The closed-runtime app entry inside the deployed closure. */
-const ENTRY_BIN = 'node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/packaged-bin.js'
-const OUTPUT_BASENAME = 'dsh-jsonrpc-agent-pkg'
+const DEPLOY_ROOT_PACKAGE = 'dsh-python-runtime-closure'
+/** The sole executable entry inside the deployed closure. */
+const ENTRY_BIN = 'runtime-bootstrap.mjs'
+/** Python-visible executable basename. */
+const OUTPUT_BASENAME = 'deepseek-harness-sdk-runtime'
 /** Default Node major; SEA mode requires at least Node 22. */
 const DEFAULT_NODE_RANGE = 'node24'
-/** Pinned for reproducible builds. */
-const PKG_SPEC = '@yao-pkg/pkg@6.21.0'
 const OUT_DIR = 'dist-exe'
 /** Python package destination; created when absent. */
 const PYTHON_RUNTIME_DIR = 'python/sdk-runtime/src/deepseek_harness_runtime/runtime'
 /** The deployed closure doubles as the node-mode carrier. */
 const PYTHON_NODE_SUBDIR = 'node'
+/** Legacy deploy may hoist peer-specialized workspace packages back here. */
+const DEPLOY_SOURCE_NODE_MODULES = 'python/sdk-runtime/node_modules'
 /** Documentation excluded from the generated runtime directory. */
 const DEPLOY_ONLY_DOCS = ['README.md', 'README.zh.md', 'README.i18n.yaml']
 
@@ -39,16 +49,31 @@ const DEPLOY_ONLY_DOCS = ['README.md', 'README.zh.md', 'README.i18n.yaml']
  */
 const ASSET_GLOBS = [
   'package.json',
+  '*.mjs',
   'node_modules/**/*.js',
   'node_modules/**/*.cjs',
   'node_modules/**/*.mjs',
   'node_modules/**/package.json',
   'node_modules/**/*.json',
+  // Plugin display metadata resolves these package-owned images at runtime.
+  'node_modules/@deepseek-ai/dsh-*/**/*.{svg,png,jpg,jpeg,webp}',
+  // Package-owned Markdown includes runtime skill instructions.
+  'node_modules/**/*.md',
+  'node_modules/**/*.dylib',
+  'node_modules/**/*.dll',
   'node_modules/**/*.node',
+  'node_modules/**/*.so',
+  'node_modules/**/*.so.*',
   'node_modules/**/*.wasm',
+  'node_modules/**/*.yaml',
+  'node_modules/**/*.yml',
+  // web-app builds this path dynamically, so pkg cannot discover the static frontend.
+  'node_modules/@deepseek-ai/dsh-web-frontend/dist/**/*',
+  // The diagnosis provider extracts its PowerShell script for an external interpreter.
+  'node_modules/@deepseek-ai/dsh-sandbox-windows-acl/assets/**/*',
 ]
 
-const PLATFORMS = ['linux', 'macos'] as const
+const PLATFORMS = ['linux', 'macos', 'win'] as const
 const ARCHES = ['x64', 'arm64'] as const
 type Platform = (typeof PLATFORMS)[number]
 type Arch = (typeof ARCHES)[number]
@@ -68,10 +93,7 @@ class Target {
   private constructor(
     /** pkg Node range (`node<major>`). */
     readonly nodeRange: string,
-    /**
-     * pkg platform tag. Windows is a documented non-goal
-     * (.agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md).
-     */
+    /** pkg platform tag. */
     readonly platform: Platform,
     /** pkg CPU tag. */
     readonly arch: Arch,
@@ -102,6 +124,9 @@ class Target {
     if (!isArch(arch)) {
       throw new Error(`build-exe-for-python-sdk: target ${JSON.stringify(spec)}: arch must be one of ${ARCHES.join(', ')}, got ${JSON.stringify(arch)}.`)
     }
+    if (platform === 'win' && arch !== 'x64') {
+      throw new Error(`build-exe-for-python-sdk: target ${JSON.stringify(spec)}: Windows supports x64 only.`)
+    }
     return new Target(nodeRange, platform, arch)
   }
 
@@ -110,13 +135,22 @@ class Target {
    * @returns the host target; throws on an unsupported host platform or arch.
    */
   static host(): Target {
-    const platform = process.platform === 'darwin' ? 'macos' : process.platform === 'linux' ? 'linux' : undefined
+    const platform = process.platform === 'darwin'
+      ? 'macos'
+      : process.platform === 'linux'
+        ? 'linux'
+        : process.platform === 'win32'
+          ? 'win'
+          : undefined
     if (platform === undefined) {
       throw new Error(`build-exe-for-python-sdk: unsupported host platform ${process.platform}; pass --targets explicitly.`)
     }
     const arch = process.arch === 'x64' || process.arch === 'arm64' ? process.arch : undefined
     if (arch === undefined) {
       throw new Error(`build-exe-for-python-sdk: unsupported host arch ${process.arch}; pass --targets explicitly.`)
+    }
+    if (platform === 'win' && arch !== 'x64') {
+      throw new Error('build-exe-for-python-sdk: Windows supports x64 only; use an x64 Node process.')
     }
     return new Target(DEFAULT_NODE_RANGE, platform, arch)
   }
@@ -129,8 +163,10 @@ class BuildCli {
   private constructor(
     /** Build targets; defaults to the host platform only. */
     readonly targets: readonly Target[],
-    /** Skip step 1 (`bun run build`); lib/ artifacts must already exist. */
+    /** Skip the package build; lib/ artifacts must already exist. */
     readonly skipBuild: boolean,
+    /** Build through `bun run build:artifacts`, which omits the aggregate test and script typechecks. */
+    readonly buildArtifacts: boolean,
     /** Print every command and config patch instead of executing. */
     readonly dryRun: boolean,
   ) {}
@@ -154,6 +190,9 @@ class BuildCli {
       console.log(BuildCli.usage())
       process.exit(0)
     }
+    if (values['skip-build'] && values['build-artifacts']) {
+      throw new Error('build-exe-for-python-sdk: --skip-build and --build-artifacts cannot be combined.')
+    }
     const targets = values.targets === undefined
       ? [Target.host()]
       : values.targets.split(',').map(part => part.trim()).filter(part => part !== '').map(spec => Target.parse(spec))
@@ -166,7 +205,7 @@ class BuildCli {
       }
       seen.add(key)
     }
-    return new BuildCli(targets, values['skip-build'], values['dry-run'])
+    return new BuildCli(targets, values['skip-build'], values['build-artifacts'], values['dry-run'])
   }
 
   private static parseRaw(argv: string[]) {
@@ -175,6 +214,7 @@ class BuildCli {
       options: {
         'targets': { type: 'string' },
         'skip-build': { type: 'boolean', default: false },
+        'build-artifacts': { type: 'boolean', default: false },
         'dry-run': { type: 'boolean', default: false },
         'help': { type: 'boolean', default: false },
       },
@@ -183,69 +223,19 @@ class BuildCli {
 
   private static usage(): string {
     return [
-      'Usage: node --import tsx/esm scripts/build-exe-for-python-sdk.ts [flags]',
+      'Usage: bun exec tsx scripts/build-exe-for-python-sdk.ts [flags]',
       '',
-      '  --targets=<t1,t2,...>  pkg targets, e.g. node24-linux-x64,node24-linux-arm64,node24-macos-arm64.',
+      '  --targets=<t1,t2,...>  pkg targets, e.g. node24-linux-x64,node24-linux-arm64,node24-macos-arm64,node24-macos-x64,node24-win-x64.',
       '                         Default: the host platform only (on node24).',
       '  --skip-build           skip `bun run build` (lib/ artifacts must already exist).',
+      '  --build-artifacts      run `bun run build:artifacts` instead, omitting the aggregate test and script typechecks.',
       '  --dry-run              print every command and config patch without executing.',
       '  --help                 print this help.',
       '',
-      `Build route: ${PKG_SPEC} --sea; see .agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md.`,
+      'Build route: @yao-pkg/pkg --sea (root devDependency, bun-patched); see .agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md.',
       `Stages the node carrier in ${PYTHON_RUNTIME_DIR}/${PYTHON_NODE_SUBDIR} and writes executables to ${OUT_DIR}/.`,
     ].join('\n')
   }
-}
-
-function bunBin(): string {
-  return 'bun'
-}
-
-/** The subset of a package manifest the closure walk reads. */
-interface PackageManifest {
-  dependencies?: Record<string, string>
-}
-
-/**
- * Map every workspace package name to its repository-relative source directory,
- * from the root manifest's `workspaces` globs.
- */
-function workspacePackageDirectories(): Map<string, string> {
-  const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { workspaces?: string[] }
-  if (!Array.isArray(rootManifest.workspaces) || rootManifest.workspaces.length === 0) {
-    throw new Error('build-exe-for-python-sdk: package.json declares no workspaces; the workspace closure cannot be derived.')
-  }
-  const directories = new Map<string, string>()
-  for (const pattern of rootManifest.workspaces) {
-    for (const path of globSync(`${pattern}/package.json`, { cwd: root })) {
-      const manifest = JSON.parse(readFileSync(resolve(root, path), 'utf8')) as PackageManifest & { name?: string }
-      if (typeof manifest.name === 'string') directories.set(manifest.name, dirname(path))
-    }
-  }
-  return directories
-}
-
-/**
- * Workspace packages reachable from one manifest through dependency names that
- * resolve inside the workspace. Range specs are included when a workspace
- * package carries the name, matching the deploy behavior this replaces; peers
- * are excluded because the runtime manifest supplies every peer itself.
- */
-function workspaceClosureOf(manifest: PackageManifest, directories: Map<string, string>): string[] {
-  const closure = new Set<string>()
-  const queue = Object.keys(manifest.dependencies ?? {})
-  while (queue.length > 0) {
-    const name = queue.shift()
-    if (name === undefined || closure.has(name)) continue
-    const dir = directories.get(name)
-    if (dir === undefined) continue
-    closure.add(name)
-    const nested = JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')) as PackageManifest
-    for (const dependency of Object.keys(nested.dependencies ?? {})) {
-      if (directories.has(dependency) && !closure.has(dependency)) queue.push(dependency)
-    }
-  }
-  return [...closure].sort((left, right) => left.localeCompare(right))
 }
 
 /**
@@ -264,8 +254,7 @@ function formatCommand(command: string, args: string[]): string {
  */
 class SingleExeBuild {
   /**
-   * The cleared deploy target, pkg input, and Python node-mode carrier. The
-   * checked-in default `cordis.yml` remains in its parent directory.
+   * The cleared deploy target, pkg input, and Python node-mode carrier.
    */
   readonly staging = resolve(root, PYTHON_RUNTIME_DIR, PYTHON_NODE_SUBDIR)
   private readonly outDir = resolve(root, OUT_DIR)
@@ -274,7 +263,7 @@ class SingleExeBuild {
 
   /** Verify the closure before compiling or packaging. */
   async verifyClosure(): Promise<void> {
-    await this.run('runtime dependency closure', bunBin(), ['run', 'verify-runtime-closure'])
+    await this.runBun('runtime dependency closure', ['run', 'verify-runtime-closure'])
   }
 
   /** Build all package artifacts unless `--skip-build` was passed. */
@@ -283,73 +272,59 @@ class SingleExeBuild {
       console.log('build-exe-for-python-sdk: skipping bun run build (--skip-build)')
       return
     }
-    await this.run('build', bunBin(), ['run', 'build'])
+    const args = this.cli.buildArtifacts ? ['run', 'build:artifacts'] : ['run', 'build']
+    await this.runBun('build', args)
   }
 
-  /** Clear and stage the runtime closure into the node carrier. */
+  /** Clear and deploy the runtime closure into the node carrier. */
   async deployStaging(): Promise<void> {
     if (this.staging === root || root.startsWith(this.staging + sep)) {
       throw new Error(`build-exe-for-python-sdk: refusing to clear staging dir ${this.staging}: it contains the repo root.`)
     }
     if (this.cli.dryRun) console.log(`build-exe-for-python-sdk: [dry-run] rm -rf ${this.staging}`)
     else await rm(this.staging, { recursive: true, force: true })
-    await this.stageWorkspaceSources()
-    await this.run('install', bunBin(), [
-      'install',
-      '--production',
-      '--ignore-scripts',
-      '--linker=hoisted',
-    ], { cwd: this.staging })
+    try { await this.runBun('deploy', [
+      '--filter',
+      DEPLOY_ROOT_PACKAGE,
+      'deploy',
+      '--legacy',
+      '--prod',
+      // Production deployment omits workspace tooling such as Electron's patched signer.
+      '--config.allow-unused-patches=true',
+      '--config.node-linker=hoisted',
+      '--config.auto-install-peers=false',
+      '--config.link-workspace-packages=true',
+      '--config.hoist-workspace-packages=false',
+      this.staging,
+    ]) } finally {
+      // Legacy deploy records production-only workspace state; restore the development installation before exec.
+      await this.runBun('restore development dependencies', ['install', '--offline', '--frozen-lockfile', '--prod=false', '--ignore-scripts'])
+    }
+    await this.restoreLegacyHoists()
     await this.materializeStagedLinks()
     if (this.cli.dryRun) {
       for (const name of DEPLOY_ONLY_DOCS) console.log(`build-exe-for-python-sdk: [dry-run] rm -f ${join(this.staging, name)}`)
     } else {
       await Promise.all(DEPLOY_ONLY_DOCS.map(name => rm(join(this.staging, name), { force: true })))
+      for await (const file of glob('node_modules/**/{README*.md,CHANGELOG*.md,HISTORY*.md,*.map,*.d.ts,*.d.mts,*.d.cts}', {
+        cwd: this.staging, exclude: ['node_modules/**/assets/**'],
+      })) await rm(join(this.staging, file), { force: true })
     }
   }
 
   /**
-   * Copy the closure manifest and its transitive workspace dependencies into a
-   * standalone staging workspace (`closure/` + `deps/*`), so a plain production
-   * install materializes the deployed closure exactly as the release note
-   * defines it: hoisted real files for registry packages, workspace links the
-   * link-materialization pass below turns into copies.
+   * Restore direct packages that bun's legacy hoister places beside the deploy
+   * source instead of in the target. The runtime manifest supplies every peer,
+   * so package-local node_modules trees are omitted to preserve one flat Cordis
+   * instance and a symlink-free packaged payload.
    */
-  private async stageWorkspaceSources(): Promise<void> {
-    const directories = workspacePackageDirectories()
-    const closureDir = directories.get(DEPLOY_ROOT_PACKAGE)
-    if (closureDir === undefined) {
-      throw new Error(`build-exe-for-python-sdk: closure package ${DEPLOY_ROOT_PACKAGE} not found in the root workspaces.`)
-    }
-    const closureManifestPath = join(root, closureDir, 'package.json')
-    const closureManifest = JSON.parse(await readFile(closureManifestPath, 'utf8')) as PackageManifest
-    const closure = [DEPLOY_ROOT_PACKAGE, ...workspaceClosureOf(closureManifest, directories)]
+  private async restoreLegacyHoists(): Promise<void> {
     if (this.cli.dryRun) {
-      console.log(`build-exe-for-python-sdk: [dry-run] stage ${closure.length} workspace package(s) into ${this.staging}`)
+      console.log('build-exe-for-python-sdk: [dry-run] restore direct dependencies omitted by legacy deploy')
       return
     }
-    await mkdir(join(this.staging, 'deps'), { recursive: true })
-    const staged = new Map<string, string>()
-    for (const name of closure) {
-      const memberDir = directories.get(name)
-      if (memberDir === undefined) throw new Error(`build-exe-for-python-sdk: staged dependency ${name} left the workspace map.`)
-      const sourceDir = join(root, memberDir)
-      const destinationDir = name === DEPLOY_ROOT_PACKAGE
-        ? join(this.staging, 'closure')
-        : join(this.staging, 'deps', name.replace(/[@/]/g, '-'))
-      staged.set(name, destinationDir)
-      await cp(sourceDir, destinationDir, {
-        recursive: true,
-        dereference: false,
-        filter: path => !path.includes(`${sep}node_modules`) && !path.startsWith(join(sourceDir, 'node_modules') + sep),
-      })
-    }
-    await writeFile(join(this.staging, 'package.json'), `${JSON.stringify({
-      name: 'dsh-runtime-staging',
-      private: true,
-      workspaces: ['closure', 'deps/*'],
-    }, null, 2)}\n`)
-    console.log(`build-exe-for-python-sdk: staged ${staged.size} workspace package(s) into ${this.staging}`)
+    const restored = await restoreLegacyHoists(this.staging, resolve(root, DEPLOY_SOURCE_NODE_MODULES))
+    if (restored.length > 0) console.log(`build-exe-for-python-sdk: restored legacy deploy hoists: ${restored.join(', ')}`)
   }
 
   /** Replace deploy-time package links with files and reject any remaining link. */
@@ -358,74 +333,70 @@ class SingleExeBuild {
       console.log('build-exe-for-python-sdk: [dry-run] materialize staged package links')
       return
     }
-    const nodeModules = join(this.staging, 'node_modules')
-    let remaining = await this.findSymlink(nodeModules)
-    while (remaining !== undefined) {
-      const segments = remaining.slice(nodeModules.length + 1).split(sep)
-      const binIndex = segments.lastIndexOf('.bin')
-      if (binIndex >= 0) {
-        await rm(join(nodeModules, ...segments.slice(0, binIndex + 1)), { recursive: true, force: true })
-        remaining = await this.findSymlink(nodeModules)
-        continue
-      }
-      const destination = remaining
-      const source = await realpath(destination)
-      const nestedNodeModules = join(source, 'node_modules')
-      await rm(destination, { recursive: true, force: true })
-      await cp(source, destination, {
-        recursive: true,
-        dereference: true,
-        filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
-      })
-      remaining = await this.findSymlink(nodeModules)
-    }
-  }
-
-  /** Return the first symbolic link below a directory, if one exists. */
-  private async findSymlink(directory: string): Promise<string | undefined> {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name)
-      const metadata = await lstat(path)
-      if (metadata.isSymbolicLink()) return path
-      if (metadata.isDirectory()) {
-        const nested = await this.findSymlink(path)
-        if (nested !== undefined) return nested
-      }
-    }
-    return undefined
+    await materializeStagedLinks(this.staging)
+    await deduplicateStagedWorkspacePackages(this.staging, root)
   }
 
   /** Add the executable entry and pkg assets to the staged manifest. */
   async injectPkgConfig(): Promise<void> {
-    const patch = { bin: ENTRY_BIN, pkg: { assets: ASSET_GLOBS } }
+    const sourceModules = join(root, 'node_modules').replaceAll('\\', '/')
+    const patch = { bin: ENTRY_BIN, pkg: { assets: ASSET_GLOBS, ignore: [
+      ...OFFICE_ASSET_IGNORES,
+      `${sourceModules}/**`, `${sourceModules}/.bun/**`,
+      ...['packages', 'apps', 'vendor', 'native', 'scripts'].map(directory => `${join(root, directory).replaceAll('\\', '/')}/**`),
+      `${root.replaceAll('\\', '/')}/tsconfig*.json`,
+      '**/*.map', '**/*.d.ts', '**/*.d.mts', '**/*.d.cts',
+    ] } }
     const manifestPath = join(this.staging, 'package.json')
     if (this.cli.dryRun) {
       console.log(`build-exe-for-python-sdk: [dry-run] patch ${manifestPath} with ${JSON.stringify(patch)}`)
       return
     }
     if (!existsSync(manifestPath)) {
-      throw new Error(`build-exe-for-python-sdk: ${manifestPath} missing — the staged install did not produce a staged package.`)
+      throw new Error(`build-exe-for-python-sdk: ${manifestPath} missing — bun deploy did not produce a staged package.`)
     }
     if (!existsSync(join(this.staging, ENTRY_BIN))) {
-      throw new Error(`build-exe-for-python-sdk: ${join(this.staging, ENTRY_BIN)} missing — run without --skip-build so lib/ artifacts exist.`)
+      throw new Error(`build-exe-for-python-sdk: staged bootstrap ${join(this.staging, ENTRY_BIN)} is missing.`)
+    }
+    const helpers = [
+      { name: 'primary-runtime', source: 'scripts/primary-runtime/prepare.ts', exports: 'downloadNodeRuntime, preparePrimaryRuntime' },
+      { name: 'office-sidecar', source: 'scripts/build-exe-for-python-sdk-office.ts', exports: 'downloadOfficeSidecar' },
+    ]
+    const entries: Record<string, string> = {}
+    for (const helper of helpers) {
+      const entry = join(this.staging, `.${helper.name}-entry.ts`)
+      entries[helper.name] = entry
+      await writeFile(entry, `export { ${helper.exports} } from ${JSON.stringify(join(root, helper.source).replaceAll('\\', '/'))}\n`)
+    }
+    try {
+      await bundle({ config: false, tsconfig: false, inputOptions: { tsconfig: false }, target: 'es2024', entry: entries,
+        outDir: this.staging, clean: false, format: 'esm', platform: 'node', dts: false,
+        deps: { neverBundle: [/^@deepseek-ai\//u], alwaysBundle: [/.*/u] }, shims: true, outExtensions: () => ({ js: '.mjs' }),
+        define: { 'import.meta.main': 'false' } })
+    } finally {
+      for (const entry of Object.values(entries)) await rm(entry, { force: true })
     }
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>
     await writeFile(manifestPath, `${JSON.stringify({ ...manifest, ...patch }, null, 2)}\n`)
+    await this.run('resource helper imports', process.execPath, ['--input-type=module', '--eval',
+      ['primary-runtime.mjs', 'office-sidecar.mjs'].map(file => `await import(${JSON.stringify(pathToFileURL(join(this.staging, file)).href)})`).join('\n')])
     console.log(`build-exe-for-python-sdk: injected pkg config into ${manifestPath}`)
   }
 
   /**
    * Package one target; SEA mode accepts one target per invocation.
    * @param target - the pkg target triple to build.
-   * @returns the executable and ripgrep sidecar paths, plus the macOS spawn helper path when required.
+   * @returns the executable, resource directories, ripgrep, and required macOS spawn helper paths.
    */
   async pack(target: Target): Promise<string[]> {
-    const product = join(this.outDir, `${OUTPUT_BASENAME}-${target.platform}-${target.arch}`)
+    const productBase = join(this.outDir, `${OUTPUT_BASENAME}-${target.platform}-${target.arch}`)
+    const product = target.platform === 'win' ? `${productBase}.exe` : productBase
     await this.prepareNativePty(target)
+    const platform = target.platform === 'macos' ? 'darwin' : target.platform === 'win' ? 'win32' : target.platform
     if (!this.cli.dryRun) await mkdir(this.outDir, { recursive: true })
-    await this.run(`pkg ${target.spec}`, bunBin(), [
-      'x',
-      PKG_SPEC,
+    await this.runBun(`pkg ${target.spec}`, [
+      'exec',
+      'pkg',
       this.staging,
       '--sea',
       '--targets',
@@ -437,7 +408,21 @@ class SingleExeBuild {
       throw new Error(`build-exe-for-python-sdk: product ${product} is missing after the pkg run; inspect ${this.outDir}.`)
     }
     const ripgrep = await this.copyRipgrepSidecar(target, product)
-    if (target.platform !== 'macos') return [product, ripgrep]
+    const resources = join(this.outDir, `${target.platform}-${target.arch}`)
+    if (this.cli.dryRun) {
+      console.log(`build-exe-for-python-sdk: [dry-run] lock optional resource downloads and copy Office skills to ${resources}`)
+    } else {
+      await rm(resources, { recursive: true, force: true })
+      await mkdir(resources, { recursive: true })
+      const { version, packageManager } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as { version: string; packageManager: string }
+      const office = await officeSidecarArchives(this.staging, { platform, arch: target.arch })
+      const bun = await runtimeNpmArchive('bun', packageManager.replace('bun@', ''))
+      const inputs = { version, target: `${target.platform === 'macos' ? 'mac' : target.platform}-${target.arch}`, office, bun }
+      const identity = createHash('sha256').update(JSON.stringify({ ...inputs, primaryLock })).digest('hex')
+      await writeFile(join(resources, 'downloads.json'), JSON.stringify({ ...inputs, identity }, undefined, 2) + '\n')
+      await prepareOfficeSkillAssets(join(this.staging, 'node_modules/@deepseek-ai/dsh-skill-office/assets'), join(resources, 'office-skills'))
+    }
+    if (target.platform !== 'macos') return [product, ripgrep, resources]
     const spawnHelper = `${product}-spawn-helper`
     const source = join(this.staging, 'node_modules', 'node-pty', 'prebuilds', `darwin-${target.arch}`, 'spawn-helper')
     if (this.cli.dryRun) {
@@ -446,21 +431,24 @@ class SingleExeBuild {
       await copyFile(source, spawnHelper)
       await chmod(spawnHelper, 0o755)
     }
-    return [product, ripgrep, spawnHelper]
+    return [product, ripgrep, spawnHelper, resources]
   }
 
   /** Copy the target ripgrep binary beside the executable so Node can spawn it outside pkg's virtual filesystem. */
   private async copyRipgrepSidecar(target: Target, product: string): Promise<string> {
-    const platform = target.platform === 'macos' ? 'darwin' : target.platform
+    const platform = target.platform === 'macos' ? 'darwin' : target.platform === 'win' ? 'win32' : target.platform
+    const executable = target.platform === 'win' ? 'rg.exe' : 'rg'
     const source = join(
       this.staging,
       'node_modules',
       '@vscode',
       `ripgrep-${platform}-${target.arch}`,
       'bin',
-      'rg',
+      executable,
     )
-    const destination = `${product}-rg`
+    const destination = target.platform === 'win'
+      ? `${product.slice(0, -'.exe'.length)}-rg.exe`
+      : `${product}-rg`
     if (this.cli.dryRun) {
       console.log(`build-exe-for-python-sdk: [dry-run] cp ${source} ${destination}`)
       return destination
@@ -482,7 +470,6 @@ class SingleExeBuild {
     const stagedBuild = join(this.staging, 'node_modules', 'node-pty', 'build')
     if (this.cli.dryRun) console.log(`build-exe-for-python-sdk: [dry-run] rm -rf ${stagedBuild}`)
     else await rm(stagedBuild, { recursive: true, force: true })
-    if (target.platform !== 'linux') return
     const packageDirectory = join(
       root,
       'packages',
@@ -491,6 +478,32 @@ class SingleExeBuild {
       'node_modules',
       'node-pty',
     )
+    const platform = target.platform === 'macos' ? 'darwin' : target.platform === 'win' ? 'win32' : target.platform
+    const selected = `${platform}-${target.arch}`
+    const prebuilds = join(this.staging, 'node_modules/node-pty/prebuilds')
+    if (this.cli.dryRun) console.log(`build-exe-for-python-sdk: [dry-run] keep only node-pty prebuilds ${selected}`)
+    else {
+      const source = join(packageDirectory, 'prebuilds', selected)
+      if (existsSync(source)) await cp(source, join(prebuilds, selected), { recursive: true })
+      for (const entry of await readdir(prebuilds, { withFileTypes: true })) {
+        if (entry.isDirectory() && entry.name !== selected) await rm(join(prebuilds, entry.name), { recursive: true, force: true })
+      }
+    }
+    if (target.platform === 'win') {
+      if (target.arch !== 'x64') {
+        throw new Error('build-exe-for-python-sdk: Windows supports x64 only.')
+      }
+      const host = Target.host()
+      if (target.platform !== host.platform || target.arch !== host.arch) {
+        throw new Error(
+          'build-exe-for-python-sdk: build the Windows runtime under x64 Node on its target host; '
+          + `target ${target.platform}-${target.arch} does not match host ${host.platform}-${host.arch}.`,
+        )
+      }
+      resolveWindowsNodePtyAddons(join(this.staging, 'node_modules', 'node-pty'), target.arch)
+      return
+    }
+    if (target.platform !== 'linux') return
     const destination = join(stagedBuild, 'Release', 'pty.node')
     const source = resolveLinuxNodePtyAddon(packageDirectory, target.arch)
     if (this.cli.dryRun) {
@@ -519,6 +532,10 @@ class SingleExeBuild {
         console.log(`  ${path}`)
         continue
       }
+      if (statSync(path).isDirectory()) {
+        console.log(`  ${path}  (resource directory)`)
+        continue
+      }
       const megabytes = statSync(path).size / (1024 * 1024)
       console.log(`  ${path}  (${megabytes.toFixed(1)} MB)`)
     }
@@ -540,8 +557,7 @@ class SingleExeBuild {
     await mkdir(destDir, { recursive: true })
     for (const path of products) {
       const destination = join(destDir, basename(path))
-      await copyFile(path, destination)
-      await chmod(destination, statSync(path).mode & 0o777)
+      await syncPythonRuntimeProduct(path, destination)
       console.log(`build-exe-for-python-sdk: synced ${destination}`)
     }
   }
@@ -552,9 +568,8 @@ class SingleExeBuild {
    * @param label - the step name used in logs and error messages.
    * @param command - the executable.
    * @param args - its arguments.
-   * @param options - optional working directory override for the child.
    */
-  private async run(label: string, command: string, args: string[], options: { cwd?: string } = {}): Promise<void> {
+  private async run(label: string, command: string, args: string[]): Promise<void> {
     const printable = formatCommand(command, args)
     if (this.cli.dryRun) {
       console.log(`build-exe-for-python-sdk: [dry-run] ${printable}`)
@@ -563,7 +578,7 @@ class SingleExeBuild {
     console.log(`build-exe-for-python-sdk: ${label}: ${printable}`)
     await new Promise<void>((resolvePromise, reject) => {
       const child = spawn(command, args, {
-        cwd: options.cwd ?? root,
+        cwd: root,
         stdio: 'inherit',
         // Artifact builds must not mutate or validate a developer's Git hooks.
         env: { ...process.env, CI: 'true' },
@@ -580,6 +595,12 @@ class SingleExeBuild {
         reject(new Error(`build-exe-for-python-sdk: ${label} failed (${cause}): ${printable}`))
       })
     })
+  }
+
+  /** Run bun through its JavaScript entrypoint when the caller supplies one. */
+  private async runBun(label: string, args: string[]): Promise<void> {
+    const [command, invocationArgs] = bunInvocation(args)
+    await this.run(label, command, invocationArgs)
   }
 }
 

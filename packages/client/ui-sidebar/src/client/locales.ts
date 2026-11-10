@@ -1,17 +1,12 @@
-/** `sidebar` namespace dictionaries: shell controls (brand row, New Session, fold toggle, section tabs). */
+/** `sidebar` namespace dictionaries for shell controls and global panels. */
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'session.new': '新会话',
   'session.new.label': '新建会话',
-  'session.new.connecting': '正在创建…',
-  'session.new.failed': '新建会话失败：{message}',
   'toggle.open': '打开侧边栏',
   'toggle.collapse': '收起侧边栏',
-  'section.home': '首页',
-  'section.code': '代码',
-  'section.work': '工作',
-  'section.team': '团队',
+  'panels.label': '全局面板',
 } satisfies Record<string, string>
 
 /** The sidebar namespace key union. */
@@ -21,12 +16,7 @@ export type SidebarKey = keyof typeof zh
 export const en = {
   'session.new': 'New Session',
   'session.new.label': 'New session',
-  'session.new.connecting': 'Creating…',
-  'session.new.failed': 'New session failed: {message}',
   'toggle.open': 'Open sidebar',
   'toggle.collapse': 'Collapse sidebar',
-  'section.home': 'Home',
-  'section.code': 'Code',
-  'section.work': 'Work',
-  'section.team': 'Team',
+  'panels.label': 'Global panels',
 } satisfies Record<SidebarKey, string>

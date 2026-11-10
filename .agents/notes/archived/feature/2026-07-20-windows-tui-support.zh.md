@@ -17,7 +17,7 @@ TUI 平台契约必须以交付给用户的运行时为准，而不是取决于�
 
 真实 Loader 冒烟测试根据宿主选择原生伪终端边界。macOS 和 Linux 继续使用 Python POSIX PTY 驱动，Windows 则使用 `node-pty` 和 ConPTY。两种驱动接收相同的启动命令、环境、终端尺寸、以标记为触发条件的输入动作、超时、预期退出码和输出断言；3 个冒烟场景都会在每个受支持平台上运行。
 
-`node-pty` 是 examples 工作区仅供测试使用的依赖。该依赖经评审的原生安装脚本在 `pnpm-workspace.yaml` 中显式启用；生产 TUI 包（package）不会新增依赖或子进程层。
+`node-pty` 是 examples 工作区仅供测试使用的依赖。该依赖经评审的原生安装脚本在 `bun-workspace.yaml` 中显式启用；生产 TUI 包（package）不会新增依赖或子进程层。
 
 ## 曾考虑的替代方案
 

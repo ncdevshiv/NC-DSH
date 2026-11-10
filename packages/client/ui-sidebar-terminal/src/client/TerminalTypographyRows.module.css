@@ -1,0 +1,124 @@
+/* Terminal typography rows: the same cell rhythm as the theme's font-size row,
+ * sharing the General section column so the two font settings read as one set. */
+
+.fontSizeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.fontSizeRowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 48px;
+}
+
+.fontSizeRowTitle {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.fontSizeRowDesc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.fontSizeRowControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fontSizeStepper {
+  position: relative; /* the arrow column anchors to the pill's right edge */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  height: 36px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+.fontSizeValue {
+  min-width: 18px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+}
+
+.fontSizeUnit {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.fontSizeArrows {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+}
+
+.fontSizeStepper:hover .fontSizeArrows,
+.fontSizeStepper:focus-within .fontSizeArrows {
+  opacity: 1;
+}
+
+/* Arrow buttons keep their focus and accessibility-tree presence while hidden
+   with opacity, so keyboard focus itself triggers the reveal. */
+.fontSizeArrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 12px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dsw-radius-xs);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 75%, transparent);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.fontSizeArrow:hover:not(:disabled) {
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.fontSizeArrow:disabled {
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+}
+
+/* Font-family select: rendered in its own face, so the list previews the
+   choice the user is deciding between. */
+.fontFamilySelect {
+  min-width: 160px;
+  height: 36px;
+  padding: 0 8px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-module-platform);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.fontFamilySelect:focus-visible {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+}

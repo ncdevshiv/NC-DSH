@@ -33,7 +33,7 @@
       "path": "../lsp"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../session/working-directory"
     }
   ]
 }

@@ -27,6 +27,6 @@ The fork backend seeds the child with the parent's **balanced completed-turn pre
 - The fork-routing slice is now guarded at the full-transcript tier, not just by unit tests. Removing the `slice(seedLength)` (replaying the whole child log) turns **both** new scenarios red — the fork child receives the parent's recorded chunks instead of its own — proving the guard bites (verified red→green when the scenarios landed).
 - `subagent-mixed` is the first snapshot scenario to drive two *different* subagent backends in one transcript, exercising the per-session replay keying across a spawn and a fork child simultaneously.
 - Out-of-process (ACP) subagent replay remains a different shape (each child is its own process with its own replay) and is still tracked as `TODO(acp-subagent-replay)` — these scenarios are in-process only.
-- Re-recording (`pnpm run test:snapshot:record`) regenerates all four fork/spawn fixtures from the live API; the two new scenarios self-skip without a key like every recorded scenario.
+- Re-recording (`bun run test:snapshot:record`) regenerates all four fork/spawn fixtures from the live API; the two new scenarios self-skip without a key like every recorded scenario.
 
 <!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->

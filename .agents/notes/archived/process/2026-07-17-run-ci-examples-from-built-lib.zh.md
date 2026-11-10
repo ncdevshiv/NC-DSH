@@ -22,7 +22,7 @@ CI 通过 `node --import tsx` 和根 tsconfig 的 `paths` 映射启动示例与�
 
 每个测试 Cordis 配置都必须能从配置文件所在目录向上解析裸模块。
 
-- `examples/` 作为一个 pnpm workspace 成员，提供统一的 `examples/node_modules` 解析根目录。
+- `examples/` 作为一个 bun workspace 成员，提供统一的 `examples/node_modules` 解析根目录。
 - 所有签入仓库的测试 Cordis 配置，包括快照配置和包内测试 fixture，都放在对应的 `examples/<agent>/` 目录树下。归属 `packages/<group>/<package>/` 的配置映射到 `examples/<agent>/tests/fixtures/<group>/<package>/cordis.yml`；测试驱动和断言仍留在包内。
 - 示例 Cordis 配置中引用的每个包都同时登记在 `examples/package.json` 和根 `tsconfig.json` 的 references 中，分别支持 `lib` 与 `src` 解析。
 

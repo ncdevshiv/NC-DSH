@@ -1,4 +1,4 @@
-import { lstat, readdir, realpath, rm } from 'node:fs/promises'
+import { lstat, readFile, readdir, realpath, rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
@@ -68,6 +68,7 @@ export class RepositoryCleaner {
     const canonicalRoot = await realpath(this.root)
 
     await this.addIfPresent(targets, join(this.root, '.dsh-build'), canonicalRoot)
+    await this.addIfPresent(targets, join(this.root, 'apps/desktop/.desktop-build'), canonicalRoot)
 
     // These checks cover legacy root-level incremental state emitted by older configs.
     await this.addIfPresent(targets, join(this.root, '.typecheck'), canonicalRoot)
@@ -76,15 +77,24 @@ export class RepositoryCleaner {
     }
     await this.addIfPresent(
       targets,
-      join(this.root, 'native/landlock-run/tsconfig.tsbuildinfo'),
+      join(this.root, 'native/system/tsconfig.tsbuildinfo'),
       canonicalRoot,
     )
 
     // The root project-reference graph is the source of truth for live build targets.
     // Each emitting project declares lib/types as outDir; its parent lib also owns
     // the sibling runtime bundles, so the complete build output root is removed.
-    for (const outputDirectory of this.buildOutputDirectories()) {
+    const graph = this.projectGraph()
+    for (const outputDirectory of graph.outputs) {
       await this.addIfPresent(targets, outputDirectory, canonicalRoot)
+    }
+
+    // Compiler output that landed inside a source tree is build residue as well:
+    // each removed file is proven by its own source map to be emitted from the
+    // sibling TypeScript source, which stays.
+    for (const outputFile of await this.sourceTreeCompilerOutput(graph.sources)) {
+      this.assertRepositoryTarget(outputFile)
+      targets.add(outputFile)
     }
 
     for (const groupDirectory of await childDirectories(join(this.root, 'packages'))) {
@@ -117,11 +127,12 @@ export class RepositoryCleaner {
     return [...targets].sort()
   }
 
-  private buildOutputDirectories(): string[] {
+  private projectGraph(): { outputs: string[]; sources: string[] } {
     const outputs = new Set<string>()
+    const sources = new Set<string>()
     const pending = [join(this.root, 'tsconfig.json')]
     const visited = new Set<string>()
-    const nativeEntryOutput = join(this.root, 'native/landlock-run/packages/entry/lib')
+    const nativeEntryOutput = join(this.root, 'native/system/packages/entry/lib')
 
     while (pending.length > 0) {
       const nextConfigPath = pending.pop()
@@ -131,6 +142,9 @@ export class RepositoryCleaner {
       visited.add(configPath)
 
       const parsed = parseConfig(configPath)
+      for (const fileName of parsed.fileNames) {
+        if (fileName.endsWith('.ts') || fileName.endsWith('.tsx')) sources.add(fileName)
+      }
       if (parsed.options.outDir !== undefined) {
         const typesDirectory = resolve(parsed.options.outDir)
         const outputDirectory = basename(typesDirectory) === 'types'
@@ -150,7 +164,57 @@ export class RepositoryCleaner {
       }
     }
 
-    return [...outputs]
+    return { outputs: [...outputs], sources: [...sources] }
+  }
+
+  /**
+   * Find compiler output that landed next to a TypeScript source.
+   *
+   * A file qualifies only when its own source map names the sibling TypeScript
+   * source it was emitted from, so a hand-written JavaScript file, a file whose
+   * map names another input, and a file whose source is gone all stay.
+   * @param sources - The TypeScript sources of the project graph.
+   * @returns The residue files and their source maps.
+   */
+  private async sourceTreeCompilerOutput(sources: string[]): Promise<string[]> {
+    const residue: string[] = []
+    for (const source of sources) {
+      const base = source.replace(/\.tsx?$/, '')
+      for (const output of [`${base}.js`, `${base}.d.ts`]) {
+        if (!await this.provesCompilerOutput(output)) continue
+        residue.push(output, `${output}.map`)
+      }
+    }
+    return residue
+  }
+
+  /**
+   * Check whether a file's source map proves the file was emitted from a
+   * sibling TypeScript source.
+   * @param outputPath - The candidate output file.
+   * @returns `true` when the file has a source map naming a sibling source.
+   */
+  private async provesCompilerOutput(outputPath: string): Promise<boolean> {
+    const mapPath = `${outputPath}.map`
+    if (!await exists(mapPath)) return false
+    let map: unknown
+    try {
+      map = JSON.parse(await readFile(mapPath, 'utf8'))
+    } catch {
+      return false
+    }
+    const sources = (map as { sources?: unknown }).sources
+    if (!Array.isArray(sources)) return false
+    const directory = dirname(outputPath)
+    for (const entry of sources) {
+      if (typeof entry !== 'string') continue
+      const source = resolve(directory, entry)
+      // TypeScript reports program files with forward slashes; compare resolved paths.
+      if (resolve(dirname(source)) !== resolve(directory)) continue
+      if (!source.endsWith('.ts') && !source.endsWith('.tsx')) continue
+      if (await exists(source)) return true
+    }
+    return false
   }
 
   private assertRepositoryTarget(path: string): void {

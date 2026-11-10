@@ -14,6 +14,7 @@ import ts from 'typescript'
 import { markdownFences } from './markdown.ts'
 import { partitionPairedMarkdownDerivatives } from './paired-markdown-derivatives.ts'
 import { isArchivedAgentNotePath } from './repo-files.ts'
+import { mayContainEquivFence } from './type-equiv-prefilter.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -28,6 +29,13 @@ interface ManifestEntry {
   symbol: string
   /** Source file (repo-relative) that exports the symbol. */
   source: string
+  /** Explicit module augmentations whose members complete an interface. */
+  augmentations?: Array<{
+    /** Source file (repo-relative) containing the augmentation. */
+    source: string
+    /** String-literal module specifier containing the merged interface. */
+    module: string
+  }>
   /** Complete declaration (default), or a body-stripped public class API. */
   projection?: 'public-api'
 }
@@ -83,7 +91,9 @@ function blockSymbol(code: string): string | null {
 /** Extract every source-equivalence block from one Markdown file. */
 function extractEquivBlocks(docRel: string): EquivBlock[] {
   const blocks: EquivBlock[] = []
-  for (const fence of markdownFences(readFileSync(resolve(root, docRel), 'utf8'))) {
+  const source = readFileSync(resolve(root, docRel), 'utf8')
+  if (!mayContainEquivFence(source)) return blocks
+  for (const fence of markdownFences(source)) {
     if (fence.info === 'ts type-equiv public-api') {
       throw new Error(`verify-type-equiv: ${docRel}:${fence.line} — use the concise \`ts public-api\` fence`)
     }
@@ -106,6 +116,26 @@ function extractEquivBlocks(docRel: string): EquivBlock[] {
   return blocks
 }
 
+/** One manifest source file's text and its parse. */
+interface ParsedSource {
+  text: string
+  sourceFile: ts.SourceFile
+}
+
+/** Parsed manifest sources by absolute path; declaration extraction only reads them. */
+const parsedSources = new Map<string, ParsedSource>()
+
+/** Read and parse one manifest source file at most once per run. */
+function parsedSource(sourceRel: string): ParsedSource {
+  const abs = resolve(root, sourceRel)
+  const cached = parsedSources.get(abs)
+  if (cached !== undefined) return cached
+  const text = readFileSync(abs, 'utf8')
+  const parsed = { text, sourceFile: ts.createSourceFile(abs, text, ts.ScriptTarget.Latest, /* setParentNodes */ true) }
+  parsedSources.set(abs, parsed)
+  return parsed
+}
+
 /**
  * The declaration text of `symbol` in `sourceRel`, with `export` stripped, or
  * null when the symbol is not declared there. Uses the TS parser so it spans
@@ -113,9 +143,7 @@ function extractEquivBlocks(docRel: string): EquivBlock[] {
  * uniformly while including declaration and member JSDoc.
  */
 function sourceDeclaration(sourceRel: string, symbol: string): string | null {
-  const abs = resolve(root, sourceRel)
-  const text = readFileSync(abs, 'utf8')
-  const sf = ts.createSourceFile(abs, text, ts.ScriptTarget.Latest, /* setParentNodes */ true)
+  const { text, sourceFile: sf } = parsedSource(sourceRel)
   for (const stmt of sf.statements) {
     const named =
       ts.isInterfaceDeclaration(stmt) || ts.isTypeAliasDeclaration(stmt)
@@ -131,6 +159,63 @@ function sourceDeclaration(sourceRel: string, symbol: string): string | null {
     }
   }
   return null
+}
+
+interface InterfacePart {
+  text: string
+  sourceFile: ts.SourceFile
+  declaration: ts.InterfaceDeclaration
+}
+
+/** Find one top-level interface declaration in a source file. */
+function sourceInterface(sourceRel: string, symbol: string): InterfacePart | null {
+  const { text, sourceFile } = parsedSource(sourceRel)
+  const declaration = sourceFile.statements.find((statement): statement is ts.InterfaceDeclaration =>
+    ts.isInterfaceDeclaration(statement) && statement.name.text === symbol,
+  )
+  return declaration === undefined ? null : { text, sourceFile, declaration }
+}
+
+/** Find one interface declaration inside an explicit string-literal module augmentation. */
+function augmentedInterface(sourceRel: string, moduleName: string, symbol: string): InterfacePart | null {
+  const { text, sourceFile } = parsedSource(sourceRel)
+  for (const statement of sourceFile.statements) {
+    if (!ts.isModuleDeclaration(statement) || !ts.isStringLiteral(statement.name)
+      || statement.name.text !== moduleName || !statement.body || !ts.isModuleBlock(statement.body)) continue
+    const declaration = statement.body.statements.find((member): member is ts.InterfaceDeclaration =>
+      ts.isInterfaceDeclaration(member) && member.name.text === symbol,
+    )
+    if (declaration !== undefined) return { text, sourceFile, declaration }
+  }
+  return null
+}
+
+/** Render one interface plus explicitly named module augmentations as its merged declaration. */
+function mergedInterfaceDeclaration(entry: ManifestEntry): string | null {
+  const base = sourceInterface(entry.source, entry.symbol)
+  if (base === null) return null
+  const additions: InterfacePart[] = []
+  for (const augmentation of entry.augmentations ?? []) {
+    const part = augmentedInterface(augmentation.source, augmentation.module, entry.symbol)
+    if (part === null) return null
+    additions.push(part)
+  }
+
+  const parts = [base, ...additions]
+  const docs = parts.map(part => sourceJSDoc(part.text, part.declaration)).filter(Boolean)
+  const typeParameters = base.declaration.typeParameters
+    ?.map(parameter => parameter.getText(base.sourceFile)).join(', ')
+  const heritage = parts.flatMap(part =>
+    part.declaration.heritageClauses?.map(clause => clause.getText(part.sourceFile)) ?? [],
+  ).join(' ')
+  const header = `interface ${entry.symbol}${typeParameters ? `<${typeParameters}>` : ''}${heritage ? ` ${heritage}` : ''} {`
+  const members = parts.flatMap(part => part.declaration.members.map((member) => {
+    const jsDoc = sourceJSDoc(part.text, member)
+    const declaration = part.text.slice(member.getStart(part.sourceFile), member.getEnd())
+    return jsDoc === '' ? declaration : `${jsDoc}\n${declaration}`
+  }))
+  const declaration = [header, ...members.map(member => member.split('\n').map(line => `  ${line}`).join('\n')), '}'].join('\n')
+  return docs.length === 0 ? declaration : `${docs.join('\n')}\n${declaration}`
 }
 
 /** Leading source JSDoc attached to one declaration or member. */
@@ -173,9 +258,7 @@ function bodylessMember(text: string, sf: ts.SourceFile, member: ts.ClassElement
  * retained so the projection is the source-owned public contract.
  */
 function sourcePublicApi(sourceRel: string, symbol: string): string | null {
-  const abs = resolve(root, sourceRel)
-  const text = readFileSync(abs, 'utf8')
-  const sf = ts.createSourceFile(abs, text, ts.ScriptTarget.Latest, /* setParentNodes */ true)
+  const { text, sourceFile: sf } = parsedSource(sourceRel)
   for (const stmt of sf.statements) {
     if (!ts.isClassDeclaration(stmt) || stmt.name?.text !== symbol) continue
     const classDoc = sourceJSDoc(text, stmt)
@@ -270,9 +353,11 @@ let verified = 0
 for (const e of entries) {
   const b = blockByKey.get(keyOf(e))
   if (!b) continue // already reported as an orphan entry
-  const decl = e.projection === 'public-api'
-    ? sourcePublicApi(e.source, e.symbol)
-    : sourceDeclaration(e.source, e.symbol)
+  const decl = e.augmentations !== undefined
+    ? mergedInterfaceDeclaration(e)
+    : e.projection === 'public-api'
+      ? sourcePublicApi(e.source, e.symbol)
+      : sourceDeclaration(e.source, e.symbol)
   if (decl === null) {
     errors.push(`symbol ${e.symbol} not found in ${e.source} (manifest entry for ${e.doc})`)
     continue

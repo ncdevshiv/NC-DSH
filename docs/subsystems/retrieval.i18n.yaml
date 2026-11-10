@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for retrieval.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/subsystems/retrieval.md
+/retrieval:
+  en: 33df5c5f7e30a78b
+  zh: 86db65620e36e6f5
+/retrieval/the-service-ctx-retrieval:
+  en: 233e3c976f49d0a9
+  zh: fd86458627e649dd
+/retrieval/records:
+  en: f6c073b67e62ae83
+  zh: c824696c9cf9d775
+/retrieval/modes:
+  en: 1a44bb0e2e823e3d
+  zh: fb841769dce33748
+/retrieval/repository-local-storage:
+  en: 25d97347e5403cab
+  zh: cd036c498004c561

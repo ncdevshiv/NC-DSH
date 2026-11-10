@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/decisions/README.md
+/:
+  en: 5ed79066eccd999b
+  zh: 6a743cb043dc2df6
+/nc-ag-architecture-decision-records:
+  en: 0a5522817e3ae5a9
+  zh: 1883ab4382a12db5
+/nc-ag-architecture-decision-records/summary:
+  en: 6126915d41341424
+  zh: bcd5da484400f3f6
+/nc-ag-architecture-decision-records/table-of-contents:
+  en: ad73078290770fb5
+  zh: 4cd441c0f767cdca
+/nc-ag-architecture-decision-records/adr-1-a-platform-owned-store:
+  en: e7062e948b699f90
+  zh: 512aaf60d1be3bbe
+/nc-ag-architecture-decision-records/adr-2-isolated-worktrees-with-leases-and-fencing:
+  en: fa9ab1361db98dae
+  zh: 49a7285ffc50bf78
+/nc-ag-architecture-decision-records/adr-3-evidence-based-completion:
+  en: 3de8952398694ac9
+  zh: 4b1c7ec213c77793
+/nc-ag-architecture-decision-records/adr-4-model-tiers-instead-of-per-profile-models:
+  en: 621678297ba98d08
+  zh: 8698d569fccf1a18
+/nc-ag-architecture-decision-records/adr-5-deterministic-planning-by-default:
+  en: bb1cfe7e12682ec8
+  zh: b4c5b3f932c374e2
+/nc-ag-architecture-decision-records/adr-6-the-orchestrator-decides-infrastructure-enforces:
+  en: c488c60224783ec1
+  zh: 9710bf5ed3e254ca

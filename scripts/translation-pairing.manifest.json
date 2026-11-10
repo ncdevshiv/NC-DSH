@@ -3,11 +3,11 @@
     ".agents/notes/AGENTS.md",
     ".agents/notes/implemented/AGENTS.md",
     ".agents/notes/implemented/CLAUDE.md",
+    ".github/review-ownership/README.md",
     "docs/AGENTS.md",
     "docs/cordis-api/inherited.md",
     "docs/i18n/style-samples.md",
     "docs/i18n/terminology.md",
-    "docs/i18n/translation-prompt.md",
-    "core-deps/"
+    "docs/i18n/translation-prompt.md"
   ]
 }

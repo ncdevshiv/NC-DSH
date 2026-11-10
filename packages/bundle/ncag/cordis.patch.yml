@@ -1,0 +1,29 @@
+# The dsh-ncag bundle patch: the NC-AG autonomous multi-agent platform, mounted
+# beside the harness's own agent loop.
+#
+# Two rows: the platform service (it owns one orchestrator and its database), and
+# the tool plugin that exposes the four `ncag_*` tools to the model. The
+# orchestrator spawns its own agents through the harness LLM service, so every
+# NC-AG role runs on the same configured provider routes as the rest of dsh.
+#
+# Optional overrides; the platform loads with zero configuration:
+#   NCAG_DATABASE_PATH     platform SQLite database (defaults under the harness home)
+#   NCAG_WORKSPACE_ROOT    agent workspace directory (defaults under the harness home)
+#   NCAG_MODEL_PRICING     JSON price overrides; empty means token-only accounting
+# The default model follows the user's main model; the NC-AG settings tab owns
+# per-tier overrides, prices and limits.
+- insert:
+    - id: ncag
+      name: '@deepseek-ai/dsh-ncag-service'
+      config:
+        databasePath: !!js process.env.NCAG_DATABASE_PATH ?? process.getBuiltinModule('node:path').join(process.env.DSH_HOME ?? process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:os').homedir(), '.dsh'), 'ncag', 'platform.db')
+        workspaceRoot: !!js process.env.NCAG_WORKSPACE_ROOT ?? process.getBuiltinModule('node:path').join(process.env.DSH_HOME ?? process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:os').homedir(), '.dsh'), 'ncag', 'workspaces')
+        modelPricing: !!js process.env.NCAG_MODEL_PRICING ?? '[]'
+        defaultRoute: !!js "(() => { const s = ctx.get('agentDefaultModel')?.currentSelection(); return s === undefined ? null : { provider: s.provider, model: s.model } })()"
+        preferredProviders: !!js (process.env.NCAG_PREFERRED_PROVIDERS ?? '').split(',').filter(Boolean)
+        maxConcurrentAgents: !!js Number(process.env.NCAG_MAX_CONCURRENT_AGENTS ?? 4)
+        maxStepsPerTask: !!js Number(process.env.NCAG_MAX_STEPS ?? 24)
+        maxOutputTokens: !!js Number(process.env.NCAG_MAX_OUTPUT_TOKENS ?? 4096)
+
+    - id: tools-ncag
+      name: '@deepseek-ai/dsh-tool-ncag'

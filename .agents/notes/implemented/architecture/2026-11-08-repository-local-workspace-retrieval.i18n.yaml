@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for 2026-11-08-repository-local-workspace-retrieval.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-08-repository-local-workspace-retrieval.md
+/agent-note-repository-local-workspace-retrieval-through-zvec:
+  en: 40b246b03c9548d6
+  zh: 6bc2fffd11ddc346
+/agent-note-repository-local-workspace-retrieval-through-zvec/problem:
+  en: a21396ca5a339d1a
+  zh: 27a9b18038574c28
+/agent-note-repository-local-workspace-retrieval-through-zvec/decision:
+  en: a15c7c13f167e5ac
+  zh: ff261e3705c47ff0
+/agent-note-repository-local-workspace-retrieval-through-zvec/decision/a-workspace-retrieval-seam-not-a-second-session-backend:
+  en: 9ff8329fd45f36ff
+  zh: 2ba9a8f205302f1d
+/agent-note-repository-local-workspace-retrieval-through-zvec/decision/zvec-as-the-shipped-provider:
+  en: f4afb9fdb0817b4c
+  zh: c4384348a9604850
+/agent-note-repository-local-workspace-retrieval-through-zvec/decision/embeds-are-optional-and-never-download-at-startup:
+  en: e12a87eec906b3b2
+  zh: 0ac40da703a9a87b
+/agent-note-repository-local-workspace-retrieval-through-zvec/decision/one-model-tool-pair-and-one-live-indexer:
+  en: 1bc430b2f1c7819b
+  zh: f03d63c37c0acb3c
+/agent-note-repository-local-workspace-retrieval-through-zvec/alternatives-considered:
+  en: e4c632d82132075e
+  zh: 63d4485cd518437a
+/agent-note-repository-local-workspace-retrieval-through-zvec/consequences:
+  en: 6577bf7ff249e60c
+  zh: ce68fed488915a35
+/agent-note-repository-local-workspace-retrieval-through-zvec/related:
+  en: 1939ff8e9a4cf592
+  zh: 872ab65367cdf6b9

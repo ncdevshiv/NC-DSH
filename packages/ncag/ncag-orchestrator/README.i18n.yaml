@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/ncag/ncag-orchestrator/README.md
+/:
+  en: a2844a706982b104
+  zh: ec454159471b7625
+/deepseek-ai-dsh-ncag-orchestrator:
+  en: ae2d68fc0c3d88ba
+  zh: c1d7f48fed6f4aaa
+/deepseek-ai-dsh-ncag-orchestrator/summary:
+  en: 6278373252b53eed
+  zh: 23edd3c053cc5bde
+/deepseek-ai-dsh-ncag-orchestrator/table-of-contents:
+  en: 26f0e12ee2f9aeb8
+  zh: 8ab4ca6ac2e0e137
+/deepseek-ai-dsh-ncag-orchestrator/the-orchestrator:
+  en: 9192a8e67ab7132a
+  zh: 40ad92b18a02cadc
+/deepseek-ai-dsh-ncag-orchestrator/planning:
+  en: 48ac8544474aa346
+  zh: b597475b016a50c0
+/deepseek-ai-dsh-ncag-orchestrator/scheduling:
+  en: 3ec7e38805380a67
+  zh: fd23129e7111fb78
+/deepseek-ai-dsh-ncag-orchestrator/execution:
+  en: be1663fe8e9a8c2b
+  zh: 05da0b3a6d3f92e6
+/deepseek-ai-dsh-ncag-orchestrator/review-and-verification:
+  en: 810a138cd9ba671d
+  zh: c22220d74d4f544b
+/deepseek-ai-dsh-ncag-orchestrator/resources-and-git:
+  en: 8b9ac671fa2aa34d
+  zh: be071bece8f1fe74
+/deepseek-ai-dsh-ncag-orchestrator/decisions-cost-and-recovery:
+  en: 72cef67434cae23a
+  zh: 4b51950f60a809f1
+/deepseek-ai-dsh-ncag-orchestrator/known-limitations-and-deferred-work:
+  en: 7d58d13d942acf94
+  zh: 6fc5eded0be7dcda
+/deepseek-ai-dsh-ncag-orchestrator/dev-note:
+  en: 01752cabe8b2f44b
+  zh: 81b4651c58ac7d86

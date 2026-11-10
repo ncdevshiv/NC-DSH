@@ -2,7 +2,7 @@
 
 English | [中文](adding-an-llm-adapter.zh.md)
 
-How to connect a new model provider. Reference implementations: `packages/llm/llm-ai-sdk` (the shipped sidecar-mediated adapter serving every configured route) and `packages/test-support/llm-replay` (a minimal in-process keyless adapter). Read the `StreamChunk` doc in `packages/llm/llm/src/types.ts` first — it records the protocol conventions every adapter is verified against.
+How to connect a new model provider. Reference implementations: `packages/llm/llm-deepseek` (direct HTTP, SSE framed by `eventsource-parser`) and `packages/llm/llm-pi-ai` (wrapping an LLM library). Read the `StreamChunk` doc in `packages/llm/llm/src/types.ts` first — it records the protocol conventions both adapters were verified against.
 
 ## The shape
 
@@ -29,14 +29,14 @@ Registration is effect-based (HMR-safe); one adapter per provider route — dupl
 - Allocate block `index`es in first-seen stream order; reuse the index for every delta of the same block.
 - Errors have exactly two sanctioned paths: THROW from `stream()` (transport and protocol failures — use `LlmError` with a stable code), or end the stream with `finish {kind: 'error' | 'aborted'}` (provider in-band failures). Consumers handle both; pick per failure class and document it.
 - Honor `options.signal` (pass it to fetch / your SDK).
-- A `GenerateOptions` field your provider cannot honor (e.g. a `stop` list on a provider without stop sequences): throw `LlmError(..., 'UNSUPPORTED')` rather than silently dropping it.
+- A `GenerateOptions` field your provider cannot honor (e.g. a `stop` list on a provider without stop sequences): throw `LlmError(..., 'UNSUPPORTED_OPTION')` rather than silently dropping it.
 - If the provider requires response ids, signatures, or other native metadata on follow-up calls, emit the minimal lossless-JSON projection as `finish.replayState`. Validate it when rebuilding history. `LlmRuntime` passes it only when the historical provider route and target provider route are currently owned by the exact same adapter instance; your adapter decides whether same-model, cross-model, or cross-provider restoration is legal. Never infer native replay from provider/model names alone when state is absent.
 
 Provider-specific thinking-mode toggles remain in the adapter's Config. Exact model metadata uses one provider-neutral capability seam: implement `resolveModel()` with provider/model identity and optional `context` and `reasoning` fields, declare a configured `defaultEffort` only when one exists, and honor the resolver's optional `AbortSignal`. Reasoning efforts are ordered opaque ids mapped to provider requests by the adapter. Preserve the adapter's authoritative selectable list, including an adapter-defined `off` when supported, without exposing final wire spellings or clamping unsupported values; an id need not equal its wire representation.
 
 ## Implementation structure
 
-Keep wire types, request serialization, transport parsing, chunk translation, and the adapter class as separate responsibilities; [`llm-ai-sdk`](../../packages/llm/llm-ai-sdk/README.md) is the reference layout.
+Keep wire types, request serialization, transport parsing, chunk translation, and the adapter class as separate responsibilities; [`llm-deepseek`](../../packages/llm/llm-deepseek/README.md) is the reference layout.
 
 ## Verification
 

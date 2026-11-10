@@ -1,112 +1,139 @@
+---
+description: "The one-shot Codex subagent provider for users and maintainers choosing a product backend, installing a Profile bundle, or configuring an unattended Codex delegation."
+kind: "package-bundle"
+---
+
 # @deepseek-ai/dsh-subagent-codex
 
 English | [中文](README.zh.md)
 
-This package registers a Profile-named Codex subagent provider whose default name is `codex`. Each accepted run starts the official package-local Codex wrapper with `app-server --stdio` in the delegating Session's workspace, creates one ephemeral Codex thread, submits one self-contained text task, and returns either the selected final answer or a separate safe failure diagnostic through the shared [`dsh-subagent`](../subagent/README.md) result contract.
+## Summary
 
-## Start and ownership
+Install `@deepseek-ai/dsh-subagent-codex` into a Profile when delegated work should run in a genuine, unattended Codex session in the parent Session's workspace. Each delegation uses a fresh isolated Codex thread for one self-contained text task and returns only the selected answer or a safe failure diagnostic. Native Codex configuration and authentication remain authoritative, while `permissionMode` selects the non-interactive approval and sandbox behavior. The Bundle supplies a compatible native Codex payload and adds its delegation tool as a global tool.
 
-`start(request)` accepts only a non-empty sequence of text blocks and derives the child cwd from the parent Session. It then spawns the fixed command through [`dsh-subprocess`](../../subprocess/subprocess/README.md), performs `initialize` → `initialized`, maps the Profile-selected mode into official `thread/start` approval/reviewer/sandbox fields beside `{ cwd, ephemeral: true }`, and publishes the run only after Codex returns a valid ephemeral thread. A failure or cancellation before publication closes the wire, terminates the managed process tree, waits for it to exit, and rejects `start()`. Non-cancellation rejections expose only the fixed `initialize` or `thread-start` stage plus an already observed process outcome; raw product and Host errors remain on internal cause chains.
+## Table of Contents
 
-The published `run.result` starts exactly one turn. It accepts only notifications for that run's thread and turn, then waits for the authoritative `turn/completed` terminal notification. The latest `agentMessage` with `phase: "final_answer"` wins; when Codex emits no explicit final phase, the latest message with `phase: null` is the compatibility fallback. Commentary never replaces either answer, and a successful turn with no nonblank answer settles as an error.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-For command and file approvals, the unattended provider selects a non-approval decision offered by the request, preferring `cancel`; the stable 0.147.0 request shape without an offered-decision list falls back to `decline`. It answers permission requests with an empty turn-scoped permission set, answers user-input requests with no answers, and declines MCP elicitation. A request with no legal unattended response, or any unknown server request, fails the run. The wire records only the effective mode, request category, decision, and fixed safe reason. It also recognizes declined command/file items and `sandboxError` terminals. Codex 0.147.0 writes some early `never` rejections and sandbox violations only to structured stderr, so the Provider pipes stderr, forwards it unchanged to the host, and matches two fixed signatures in a bounded per-run tail; raw stderr never enters the diagnostic.
+-----
 
-Local cancellation wins the result race and maps to `aborted`. For failed turns, the diagnostic preserves all eleven string and five object variants in the Codex 0.147.0 `codexErrorInfo` union; the four connection/stream variants retain a numeric `httpStatusCode` when supplied, while `activeTurnNotSteerable` does not expose `turnKind`. The diagnostic also names `turn-start`, `turn`, or `process`, independently includes available exit code and signal, and uses `unknown` for unrecognized or malformed values without copying raw fields. `contextWindowExceeded` remains `max-tokens`; every other remote interruption or failure remains `error`, and the provider produces no `refusal`. A contributing permission decision follows the structured failure line. Successful and locally cancelled runs omit both facts.
+<a id="use-this-package"></a>
+## Use this package
 
-`dispose()` is idempotent: it requests a best-effort `turn/interrupt` with both current ids when they are known, closes the JSON-RPC wire, ends stdin, invokes the shared process-tree termination escalation, waits for whole-tree exit, and detaches the stderr observer. Independent cleanup rejection uses the fixed `teardown` stage and any available process outcome. When startup and rollback both fail, the top-level aggregate message preserves both safe stage lines while the raw failures remain internal.
+Enable **Codex subagent** in the Web or Desktop Plugins page when a task needs a fresh native Codex session in the parent workspace.
 
-## Capabilities and context
+### Installing the Bundle
 
-The provider advertises no optional start-time capabilities and reports `inheritsParentContext: false`. Codex receives the standalone text task and the parent Session cwd, but not the parent conversation, persona, tool filter, depth policy, or structured-output contract. The ephemeral Codex thread id and turn id stay private to this run and are never persisted in the parent Session.
+The Official entry is visible offline. Enabling it installs the [target for the running DSH installation](../../boot/plugin-manager/README.md#use-this-package) through the ordinary bundle installer and selects its profile layer. The layer registers the provider and adds `subagent_codex` to every Agent as a global tool; it starts no native process until delegation. Restart when the installer reports that one is required.
 
-## Configuration
+Switching Off deselects the layer and leaves the package installed. Remove is a separate package operation. Enabling or switching Off registers or removes the global tool in the running Host, so live Agents see the change on their next request.
 
-| Key | Default | Meaning |
+The layer inserts Host rows only, so any profile can select it, including the shipped headless, SDK, and ACP profiles. Existing provider-only consumers follow the [upgrade guide](../../../docs/upgrade-guide/v0.2.1-alpha.1/native-subagent-bundle-tools/guide.md).
+
+### Configuration
+
+| Field | Default | Meaning |
 |---|---|---|
-| `providerName` | `codex` | Non-empty registry name on `ctx.subagents`; each mounted instance needs a unique value. |
-| `env` | `{}` | Explicit child environment layered over the subprocess seam's credential-scrubbed parent environment. |
-| `permissionMode` | `never` | Native non-interactive approval and sandbox mode fixed for every thread from this Provider instance. |
-| `disposeGraceMs` | `3000` | Positive finite grace in milliseconds, no greater than [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.md), between the shared process-tree owner's termination tiers; disposal then waits for whole-tree exit. |
+| `providerName` | `codex` | Non-empty registry name on `ctx.subagents`; each mounted instance needs a unique value |
+| `model` | native Codex settings | Optional non-empty model name fixed for every thread from this provider instance; omission sends no app-server override |
+| `env` | `{}` | Explicit child environment layered over the credential-scrubbed parent environment |
+| `permissionMode` | `never` | Native non-interactive approval and sandbox mode fixed for every thread from this provider instance |
+| `disposeGraceMs` | `3000` | Grace between the shared managed-range owner's termination tiers |
 
 | `permissionMode` value | `thread/start` fields | Native behavior |
 |---|---|---|
-| `never` | `approvalPolicy: never`; sandbox omitted | Never ask for approval; execution failures return to the model under the native sandbox. |
-| `approve-for-me` | `approvalPolicy: on-request`, `approvalsReviewer: auto_review`, `sandbox: workspace-write` | Route permission requests through Codex automatic review without a human. |
-| `dangerously-bypass-approvals-and-sandbox` | `approvalPolicy: never`, `sandbox: danger-full-access` | Skip approval and sandbox enforcement; this value must be selected explicitly. |
+| `never` | `approvalPolicy: never`; sandbox omitted | Never ask for approval; execution failures return to the model under the native sandbox |
+| `approve-for-me` | `approvalPolicy: on-request`, `approvalsReviewer: auto_review`, `sandbox: workspace-write` | Route permission requests through Codex automatic review without a human |
+| `dangerously-bypass-approvals-and-sandbox` | `approvalPolicy: never`, `sandbox: danger-full-access` | Skip approval and sandbox enforcement; this value must be selected explicitly |
 
-Production resolves the `codex` bin declared by its pinned `@openai/codex@0.147.0` dependency and launches that JavaScript wrapper with the current Node executable. The wrapper selects the matching native platform payload; the provider neither inspects nor falls back to a host `codex` on `PATH`. Native Codex configuration and authentication remain authoritative through the parent cwd, `HOME`, and `CODEX_HOME`, while the Provider overrides only the selected thread approval/reviewer/sandbox fields. All other project, model, provider, MCP, hook, skill, and account settings remain native. The plugin does not select a model, create `CODEX_HOME`, log in, or probe an account. Credential-shaped ambient variables are removed by the subprocess seam before the explicit `env` overlay is applied.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-subagent-codex) is the exhaustive source for every accepted field and its JSDoc. A configured `model` passes unchanged on each ephemeral `thread/start`; omission leaves native model selection in force. The provider does not discover models, rewrite aliases, select `modelProvider` or `serviceTier`, or set a fallback. Credential-shaped ambient variables are removed before the explicit `env` overlay, so an API key intended for the child must be supplied there.
 
-This package is an optional Profile Bundle. Install it into the target Profile, then restart that Profile; installation brings the official wrapper and one compatible native platform payload into that Profile, while the declared `cordis.patch.yml` layer registers only the dormant `codex` Host provider and starts no Codex process. Removing the package withdraws that provider and its private runtime closure on the next Profile start.
+<a id="exposing-the-tool"></a>
+### Exposing the tool
 
-```sh
-dsh plugin --profile <name> add @deepseek-ai/dsh-subagent-codex
-dsh plugin --profile <name> remove @deepseek-ai/dsh-subagent-codex
-dsh --profile <name>
-```
-
-Installation controls Host availability, not model permission. The Bundle supplies the dormant default `codex` row; the Profile may replace that row's complete config or mount additional rows with distinct `providerName`, `permissionMode`, and `env` values. Loading an instance starts no Codex process until a bound tool calls it. Each `dsh-tool-subagent` row names one provider and needs its own `toolName`, so the model sees static tools rather than a dynamic provider selector. Full Agent Presets carry a matching default product tool row with `disabled: true`; copy a preset and remove that field to expose `subagent_codex` only to agents composed from the copy. Its `one-shot` policy keeps omitted or `false` `run_in_background` calls in the foreground, while explicit `true` returns a parent-owned Job id for `job_output` or `job_kill`. The base host and full presets already provide the generic Job registry and controls.
-
-The standalone composition below shows the complete explicit capability. A Profile based on `@deepseek-ai/dsh-base` keeps its existing Job rows, adds the product provider and tool rows, and does not mount duplicate Job services.
+The bundle inserts `tool-subagent-codex` as a Host row, so `subagent_codex` is a global tool visible to every preset, including minimal. Later user patches can configure or disable that row by id. A preset that registers its own tool with the same name shadows the global tool for its Agents. To mount the provider and tool without selecting the bundle layer, insert the same rows in `cordis.patch.yml`:
 
 ```yaml
-- id: subagent-codex-safe
-  name: '@deepseek-ai/dsh-subagent-codex'
-  config:
-    providerName: codex-safe
-    permissionMode: never
-    env:
-      OPENAI_API_KEY: !!js process.env.OPENAI_API_KEY
-
-- id: subagent-codex-bypass
-  name: '@deepseek-ai/dsh-subagent-codex'
-  config:
-    providerName: codex-bypass
-    permissionMode: dangerously-bypass-approvals-and-sandbox
-    env:
-      OPENAI_API_KEY: !!js process.env.OPENAI_API_KEY
+- insert:
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: codex
+        toolName: subagent_codex
+        maxDepth: provider-managed
 ```
 
-```yaml
-- id: jobs
-  name: '@deepseek-ai/dsh-jobs-local'
+The tool returns a child id after accepting the task and sends its result to the parent Agent on completion. Each external activation executes once and accepts no follow-up input or resume.
 
-- id: tool-jobs
-  name: '@deepseek-ai/dsh-tool-jobs'
+### What you get
 
-- id: tool-subagent-codex-safe
-  name: '@deepseek-ai/dsh-tool-subagent'
-  disabled: true
-  config:
-    provider: codex-safe
-    toolName: subagent_codex_safe
-    backgroundMode: one-shot
-    maxDepth: provider-managed
+The completion notice contains the selected Codex answer, or the stop reason and optional safe diagnostic. The parent Session also retains the external task identity and complete terminal result independently of the notice; no local child Session is created. Product reasoning, tool activity, raw stderr, and workspace diffs do not enter the parent Session.
 
-- id: tool-subagent-codex-bypass
-  name: '@deepseek-ai/dsh-tool-subagent'
-  config:
-    provider: codex-bypass
-    toolName: subagent_codex_bypass
-    backgroundMode: one-shot
-    maxDepth: provider-managed
-```
+### Failure and recovery
 
-## Product compatibility and evidence
+An install that omits optional dependencies, uses an unsupported platform, or loses the selected payload leaves the provider dormant and fails the first delegation at `initialize` with a safe `unknown` category and any observed process outcome; there is no host-CLI fallback. Raw wrapper text stays on Host stderr. A cancelled run settles as `aborted`.
 
-The production wire intentionally implements only the app-server methods required by this one-shot contract. The runtime dependency and all six optional-dependency aliases are pinned to `@openai/codex@0.147.0` / `codex-cli 0.147.0`. A normal install selects one payload for the current OS and CPU. For the current darwin-arm64 payload, `npm pack --dry-run --json @openai/codex@0.147.0-darwin-arm64` reports 111,199,052 packed bytes and 274,777,843 unpacked bytes. That package contains native `codex`, `codex-code-mode-host`, `rg`, and `zsh` resources; other platforms may differ, and these values are disclosure rather than an installation threshold.
+-----
 
-Generated schema evidence and package tests pin all sixteen error-info variants, HTTP-status locations, six lifecycle stages, process outcomes, stop-reason mapping, unknown fallback, sanitization, permission ordering, cancellation, concurrency, and cleanup aggregation. The keyless real-product test drives the package wrapper against a loopback Responses fixture and observes the package-local argv, exact Bearer key, original task, byte-exact final answer, thread-level `never` overriding ambient `on-request`, automatic-review startup, unattended rejection without file side effects, a real `internalServerError`, explicit dangerous-bypass writing in suite-owned temporary storage, process/protocol failure with safe exit facts, and wrapper/native quiescence. The same tier proves two named instances retain separate environments and native modes.
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
-Installing with optional dependencies omitted, using an unsupported platform, or losing the selected payload makes the first delegation fail at `initialize` with the safe `unknown` category and any observed process outcome. Raw wrapper text remains on Host stderr; the provider neither probes a host CLI nor retries with one. An isolated wrapper fixture separately proves the native payload failure and absence of host fallback.
+<details>
+<summary>Implementation internals — click to expand</summary>
 
+This section explains how the provider drives a real Codex app-server and where the observable behavior comes from; the full contract lives in [Use this package](#use-this-package).
+
+### Design concept
+
+- **One fresh process, thread, and turn per run.** Every run spawns a fresh app-server, creates one ephemeral thread, and executes exactly one turn; there is no continuation, resume, or pooling.
+- **Native configuration is authoritative.** Codex configuration and authentication stay native through the parent cwd, `HOME`, and `CODEX_HOME`; the provider overrides only the optional model and the thread's approval, reviewer, and sandbox fields.
+- **Unattended by design.** Approval, user-input, and MCP requests are answered or declined without a human; unknown server requests fail the run.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: config schema, provider registration |
+| [`src/run.ts`](src/run.ts) | The run lifecycle, turn execution, result selection, and diagnostics |
+| [`src/wire.ts`](src/wire.ts) | The minimal app-server JSON-RPC wire implementation |
+| [`cordis.patch.yml`](cordis.patch.yml) | The Profile layer that registers the provider and contributes preset delegation tools |
+
+### Run flow
+
+A start accepts only a non-empty sequence of text blocks and uses the child cwd selected by the subagent service. It spawns the fixed command through the subprocess seam, performs the `initialize` → `initialized` handshake, maps the Profile-selected mode and optional model into official `thread/start` fields beside `{ cwd, ephemeral: true }`, and publishes the run only after Codex returns a valid ephemeral thread. The published result starts exactly one turn, accepts only notifications for that run's thread and turn, and waits for the authoritative `turn/completed` terminal. The latest `agentMessage` with `phase: "final_answer"` wins; without one, the latest `phase: "partial_answer"` message (stable answer text that later assistant output or tool calls may follow) is selected; when Codex emits neither explicit answer phase, the latest message with `phase: null` is the compatibility fallback. `commentary` messages are never selected, and any other phase fails the run. A successful turn with no nonblank answer settles as an error. Failed turns use the coarse categories `limit`, `access-policy`, `service`, `transport`, `product-error`, `invalid-result`, or `unknown`; an early app-server exit uses `process`, and applicable connection and stream failures retain a numeric `httpStatusCode`.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from this provider to the seam it plugs into and the sibling product provider.
+
+- [Subagent subsystem](../../../docs/subsystems/subagent.md) — the service contract, provider contract, and terminal result semantics.
+- [dsh-subagent seam](../subagent/README.md) — the registry and start API this provider registers on.
+- [Claude Code subagent provider](../subagent-claude-code/README.md) — the sibling product backend over the official Agent SDK.
+- [historical Claude Code and Codex backends](../../../.agents/notes/archived/feature/2026-08-04-claude-code-and-codex-subagent-backends.md) — the design record for the product providers.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-subagent-codex) — every accepted config field and its source declaration.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Child request
 
 #### What the model sees
 
-The Codex child receives the standalone text blocks as one turn in a fresh ephemeral thread. Its workspace is the parent Session cwd; its model, system instructions, tools, and authentication come from native Codex configuration, the selected Provider instance's Profile configuration fixes the thread's environment, non-interactive approval policy, and sandbox mode, and the executable version comes from the Bundle's pinned platform payload.
+The Codex child receives the standalone text blocks as one turn in a fresh ephemeral thread. Its workspace is the selected child working directory; the selected Provider instance fixes any configured model, environment, non-interactive approval policy, and sandbox mode, while an omitted model and every other product setting come from native Codex configuration. The executable version comes from the Bundle's pinned platform payload.
 
 #### Token effect
 
@@ -120,24 +147,42 @@ Independent of the parent request cache. Reuse depends only on Codex's own provi
 
 #### What the model sees
 
-Through `dsh-tool-subagent`, a foreground call gives the parent the selected final Codex answer or an error containing the stop reason and optional safe diagnostic for a non-completed result. The diagnostic can distinguish the fixed error-info category, protocol stage, numeric HTTP status, and observed process outcome without copying product prose. A background call first returns a Job id; the generic job controls later deliver a completion notice, expose the same final answer or failed status detail through `job_output`, and let `job_kill` request cancellation. Codex commentary, reasoning, tool activity, raw stderr, workspace diffs, usage, product ids, commands, paths, and protocol payloads are not copied into the parent Session.
+Through `dsh-tool-subagent`, the parent model first receives a child id, then the selected Codex answer (final, partial, or unphased, in that order of precedence) or a failure notice with its stop reason and safe diagnostic. Diagnostics contain only fixed stage, category, and observed protocol or process facts. Product reasoning, intermediate messages, tool activity, stderr, usage, product identifiers, commands, paths, and raw protocol payloads are not copied into the parent Session.
 
 #### Token effect
 
-Foreground input grows by the retained final answer or error. Background input also includes the start acknowledgement, completion notice, and any `job_output`, `job_kill`, or later status results; child tokens still do not enter the parent context. This provider adds no parent tool schema by itself.
+Parent input grows by the start acknowledgement and completion notice, including the selected answer or failure detail. Child tokens do not enter the parent context. This provider adds no parent tool schema by itself.
 
 #### KV Cache effect
 
-Append-only: foreground adds one result after the reusable parent prefix, while background appends the Job acknowledgement, notice, and later control or collection results. Background scheduling can add a notice-driven turn, but none of these messages rewrites the earlier prefix.
+Start acknowledgements and completion notices append after the reusable parent request prefix. A notice may wake another turn without rewriting the existing prefix.
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when this provider is a poor fit or needs special operational care. They are current package constraints, not a general Codex comparison or a task backlog.
+
 - **One fresh process, thread, and turn per run** — there is no continuation, resume, pooling, progress stream, or product-session persistence.
-- **Static instance selection** — Profile rows fix provider names and tool bindings; calls cannot choose a provider dynamically, and every exposed tool needs a unique `toolName`.
+- **Static instance selection** — Profile rows fix provider names, optional models, and tool bindings; calls cannot choose or change either a provider or model dynamically, and every exposed tool needs a unique `toolName`.
 - **Authentication and account state remain native** — the Bundle supplies the CLI but does not create an account, log in, trust a project, or rewrite Codex settings; configuration and authentication failures surface with their lifecycle stage and the safe `unknown` fallback rather than a separate public taxonomy.
 - **The native platform payload is required at delegation time** — installs that omit optional dependencies, unsupported platforms, and missing or damaged payloads fail at the first run; there is no host-CLI fallback.
-- **Compatibility is pinned by development evidence** — upgrading from the verified 0.147.0 protocol baseline requires regenerating upstream schema evidence and rerunning handshake, answer-selection, approval, cancellation, keyless real-product, and credentialed DeepSeek nonce tests.
+- **Compatibility is pinned by development evidence** — upgrading from the verified 0.153.4 protocol baseline requires regenerating upstream schema evidence and rerunning handshake, answer-selection, approval, cancellation, keyless real-product, and credentialed DeepSeek nonce tests.
 - **No human approval path** — known unattended approval requests are denied and unknown server requests fail closed; the three Profile modes never create a DSH interaction channel or per-call allow policy.
-- **Assistant payload is final text only** — a failed run may additionally expose the separate safe diagnostic; reasoning, commentary, intermediate messages, tool traffic, usage, raw stderr, and workspace diffs remain outside the parent Session, while generic Job ids, notices, and status come from the shared job runtime.
-- **No optional shared capabilities** — output schemas, child personas, tool filtering, and harness depth enforcement are rejected by the shared service for this provider.
+- **Assistant payload is the selected answer text only** — failed runs can also expose a separate safe diagnostic; reasoning, intermediate messages, tool traffic, usage, stderr, and workspace diffs remain outside the parent Session. Task identity and terminal results are retained in the parent log.
+- **No optional shared capabilities** — `agentPreset`, `agentOptions`, output schemas, and harness depth enforcement are rejected by the shared service for this provider.
 - **No wall-clock timeout or side-effect rollback** — the caller cancels long work, and files or external systems changed before cancellation are not restored.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers: open questions and undecided directions. It is explicitly non-authoritative — shipped behavior and limits live in the sections above and in the package code.
+
+- **Payload size disclosure** — the current darwin-arm64 platform payload packs to about 114 MB and unpacks to about 282 MB; these are disclosure numbers, not installation thresholds.
+- **Version-pinned protocol** — the runtime dependency is pinned to `@openai/codex@0.153.4`; upgrading requires regenerating the upstream schema evidence and rerunning the credentialed nonce tests.
+
+</details>

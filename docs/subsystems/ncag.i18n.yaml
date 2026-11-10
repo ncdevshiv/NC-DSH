@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for ncag.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/subsystems/ncag.md
+/:
+  en: 8ead4d24d5a926d7
+  zh: 0ce275e27ec6fe45
+/nc-ag:
+  en: 4010587285474274
+  zh: 9d12e79f7f974f84
+/nc-ag/identifiers:
+  en: 9b40d453960de657
+  zh: a272190bdf56df56
+/nc-ag/records:
+  en: 811f250fd770debc
+  zh: 0725fe1c7f545913
+/nc-ag/state-machines:
+  en: 0d3e1c3ee3065214
+  zh: 719ac7dcc9b3890a
+/nc-ag/communication-contract:
+  en: 9ec7578d30fff1c1
+  zh: 954b7af4e0c945be
+/nc-ag/lease-contract:
+  en: 5f480113ae7b0645
+  zh: 76bd8a52b9150e25
+/nc-ag/audit-chain:
+  en: c4a7fde07cfdea09
+  zh: 82507a8c6e00aa27

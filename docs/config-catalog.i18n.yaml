@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for config-catalog.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   bun run verify-translation-pairing --write docs/config-catalog.md
-config-catalog.md: d746c2dbe1e7591c0df754b9f433ba3ea5893239
-config-catalog.zh.md: f98ee63a578fabe62934a83a70d6eb58b4c1adb9
+/:
+  en: b403f0133c5a5c0b
+  zh: a1870c1068817951
+/plugin-config-catalog:
+  en: 0d90730c8599ec02
+  zh: 61089144b1a2b2de
+/plugin-config-catalog/loadable-plugins-with-no-config:
+  en: 171d45e5a8385abc
+  zh: 0fc1aa514caea442
+/plugin-config-catalog/seam-packages-not-directly-loadable:
+  en: 4555f0e0510d8c80
+  zh: b05727ed838f4570
+/plugin-config-catalog/library-packages-no-plugin-entry:
+  en: 2efa9041cc87895c
+  zh: d5f13c9c77bd5593

@@ -11,7 +11,7 @@
  *   2  apply.ts, index.ts   assembly point and re-export shell
  *
  * Run directly:
- *   node --import tsx/esm scripts/verify-client-domain-graph.ts
+ *   bun exec tsx scripts/verify-client-domain-graph.ts
  */
 
 import { globSync, readdirSync, readFileSync, statSync } from 'node:fs'

@@ -7,12 +7,12 @@
  * executable exists (a CI accommodation for hosts without PowerShell).
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
+import { runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 
 // The probe follows the executor's own resolution (Program Files installs on
@@ -20,11 +20,11 @@ import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 const hasPwsh = spawnSync(resolvePwshPath(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$true'], { encoding: 'utf8' }).status === 0
 
 const driver = fileURLToPath(new URL(
-  '../../../../examples/acp-agent/tests/fixtures/shell/tool-pwsh/driver.ts',
+  './fixtures/loader/driver.ts',
   import.meta.url,
 ))
 const configPath = fileURLToPath(new URL(
-  '../../../../examples/acp-agent/tests/fixtures/shell/tool-pwsh/cordis.yml',
+  './fixtures/loader/cordis.yml',
   import.meta.url,
 ))
 const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
@@ -33,10 +33,19 @@ interface PwshLoaderReport {
   schemaHasRunInBackground: boolean
   promptHasMarkerSection: boolean
   foregroundText: string
+  foregroundCwd: string
+  foregroundMeta: { cwd: string }
   backgroundText: string
+  backgroundCwd: string
+  backgroundMeta: { cwd: string }
 }
 
 describe.skipIf(!hasPwsh)('tool-pwsh through a real Loader composition', () => {
+  // Self-hosted Windows runners reach ~40s for this smoke under the full
+  // coverage load (measured on the 192-thread CI pool), against the
+  // 30s default process deadline. Give the subprocess headroom so the
+  // assembled boot completes instead of being SIGKILLed mid-load.
+  const processTimeoutMs = 90_000
   it('registers the pwsh surface and renders real foreground and background results', async () => {
     let report: PwshLoaderReport | undefined
     const { stderr } = await runLoaderSmoke({
@@ -46,8 +55,14 @@ describe.skipIf(!hasPwsh)('tool-pwsh through a real Loader composition', () => {
       libBinScript: driver,
       configPath,
       tsconfigPath: repoTsconfig,
+      processTimeoutMs,
       inspect: async (cwd) => {
         report = JSON.parse(await readFile(join(cwd, 'pwsh-loader-report.json'), 'utf8')) as PwshLoaderReport
+        const expectedCwd = await realpath(cwd)
+        expect(await realpath(report.foregroundCwd)).toBe(expectedCwd)
+        expect(report.foregroundMeta).toEqual({ cwd: report.foregroundCwd })
+        expect(await realpath(report.backgroundCwd)).toBe(expectedCwd)
+        expect(report.backgroundMeta).toEqual({ cwd: report.backgroundCwd })
       },
     })
     expect(stderr).not.toContain('UNHANDLED')
@@ -59,5 +74,7 @@ describe.skipIf(!hasPwsh)('tool-pwsh through a real Loader composition', () => {
     expect(report?.foregroundText).toBe('loader-ok\n')
     expect(report?.backgroundText).toContain('loader-bg-ok')
     expect(report?.backgroundText).toContain('[status: completed, exit code: 0]')
-  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+    // 15s of vitest headroom past the subprocess deadline, mirroring
+    // LOADER_SMOKE_TEST_TIMEOUT_MS's margin over its process window.
+  }, processTimeoutMs + 15_000)
 })

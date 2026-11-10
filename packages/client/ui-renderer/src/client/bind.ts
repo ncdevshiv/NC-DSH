@@ -4,7 +4,9 @@
  * This is the ONE hook constructor in the client stack — engines and hosts
  * traffic in bare sources; binding happens on the React side.
  */
-import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/shim/with-selector.js'
+// Both the runtime and DefinitelyTyped exports maps expose this extensionless
+// shim subpath.
+import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/shim/with-selector'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 
 /**

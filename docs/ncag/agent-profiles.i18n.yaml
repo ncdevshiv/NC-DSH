@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for agent-profiles.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/ncag/agent-profiles.md
+/:
+  en: e068cd8149a83d3e
+  zh: 450d86b937f86db0
+/nc-ag-agent-profiles:
+  en: b686272d48b35d5b
+  zh: dc8a95a50802ee67
+/nc-ag-agent-profiles/summary:
+  en: bae922d4c766b964
+  zh: bb9afd0097a31eb4
+/nc-ag-agent-profiles/table-of-contents:
+  en: 4e1bea1b813bbae3
+  zh: 3457d07cd335faba
+/nc-ag-agent-profiles/built-in-profiles:
+  en: 6b3a712ee8f3ba4e
+  zh: 2588e2b3be51d982
+/nc-ag-agent-profiles/capabilities-and-tiers:
+  en: c105b8d6b09a19f5
+  zh: 7ab69c9cfd5395ca
+/nc-ag-agent-profiles/adding-a-profile:
+  en: c293a4c62cf89d6d
+  zh: be35914f37c4fed3

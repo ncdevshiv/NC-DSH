@@ -1,7 +1,7 @@
 /** SQLite schema for the disposable session full-text read model. */
 
 import type { DatabaseSync } from 'node:sqlite'
-import { mkdir, open } from 'node:fs/promises'
+import { mkdir, open, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 /** Current derived-index schema version. Incompatible versions reset in place. */
@@ -12,6 +12,19 @@ export const SESSION_QUERY_SQLITE_APPLICATION_ID = 0x44534851
 
 /** Supported SQLite journal modes. */
 export type JournalMode = 'wal' | 'delete' | 'truncate' | 'persist'
+
+/** SQLite's fixed 16-byte file signature. */
+const SQLITE_FILE_SIGNATURE = Buffer.from('SQLite format 3\0', 'latin1')
+
+/** Byte offset of the 4-byte big-endian application id in the SQLite file header. */
+const SQLITE_APPLICATION_ID_OFFSET = 68
+
+/** Header bytes needed to read the signature and application id. */
+const SQLITE_IDENTITY_BYTES = 72
+
+/** SQLite primary result codes for an unreadable database image. */
+const SQLITE_CORRUPT = 11
+const SQLITE_NOTADB = 26
 
 const DERIVED_USER_TABLES = new Set([
   'search_state',
@@ -38,7 +51,51 @@ async function createDatabaseFile(path: string): Promise<void> {
 }
 
 /**
+ * Read the application id recorded in the database file header without asking
+ * SQLite to interpret the image, so a recognized derived index remains
+ * identifiable when its pages are corrupt.
+ * @param path - resolved database path.
+ * @returns the recorded application id, or `undefined` when the file is absent
+ *   or does not carry a complete SQLite header.
+ */
+async function readHeaderApplicationId(path: string): Promise<number | undefined> {
+  let handle
+  try {
+    handle = await open(path, 'r')
+  } catch {
+    /* v8 ignore next -- an unreadable header cannot prove ownership; the caller keeps the original failure */
+    return undefined
+  }
+  try {
+    const header = Buffer.alloc(SQLITE_IDENTITY_BYTES)
+    const { bytesRead } = await handle.read(header, 0, header.length, 0)
+    if (bytesRead < header.length) return undefined
+    if (!header.subarray(0, SQLITE_FILE_SIGNATURE.length).equals(SQLITE_FILE_SIGNATURE)) return undefined
+    return header.readUInt32BE(SQLITE_APPLICATION_ID_OFFSET)
+  } finally {
+    await handle.close()
+  }
+}
+
+/** Whether a node:sqlite failure reports a database image SQLite cannot read. */
+function isUnreadableDatabase(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const errcode = (error as { errcode?: unknown }).errcode
+  return errcode === SQLITE_CORRUPT || errcode === SQLITE_NOTADB
+}
+
+/** Remove one derived index file and the journal sidecars its journal mode can create. */
+async function removeDerivedDatabase(path: string): Promise<void> {
+  for (const suffix of ['', '-wal', '-shm', '-journal']) {
+    await rm(`${path}${suffix}`, { force: true })
+  }
+}
+
+/**
  * Open, validate, and initialize persistent and connection-local schemas.
+ * An unreadable image that still carries this package's application id is a
+ * corrupt derived index, so it is removed and rebuilt once in place. A file
+ * this package cannot identify is never removed.
  * @param path - dedicated derived-index path or `:memory:`; missing filesystem paths are created owner-only.
  * @param journalMode - validated SQLite journal mode.
  * @returns initialized database handle owned by the search service.
@@ -49,6 +106,26 @@ export async function openSearchDatabase(path: string, journalMode: JournalMode)
     await mkdir(dirname(actual), { recursive: true, mode: 0o700 })
     await createDatabaseFile(actual)
   }
+  try {
+    return await openValidatedDatabase(actual, journalMode)
+  } catch (error: unknown) {
+    if (actual === ':memory:' || !isUnreadableDatabase(error)) throw error
+    let owner: number | undefined
+    try {
+      owner = await readHeaderApplicationId(actual)
+    } catch {
+      /* v8 ignore next -- unreadable identity keeps the original open failure */
+      owner = undefined
+    }
+    if (owner !== SESSION_QUERY_SQLITE_APPLICATION_ID) throw error
+    await removeDerivedDatabase(actual)
+    await createDatabaseFile(actual)
+    return await openValidatedDatabase(actual, journalMode)
+  }
+}
+
+/** Open and validate one database handle, closing it when validation fails. */
+async function openValidatedDatabase(actual: string, journalMode: JournalMode): Promise<DatabaseSync> {
   const { DatabaseSync } = await import('node:sqlite')
   const db = new DatabaseSync(actual)
   try {

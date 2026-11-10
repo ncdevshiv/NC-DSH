@@ -6,11 +6,19 @@
  * @module dsh-llm/call-config
  */
 
-import type { GenerateOptions } from './types.ts'
+import type { GenerateOptions, LlmResolvedModelInfo } from './types.ts'
 import type { ReasoningEffortId } from './brand.ts'
 
 /** Process-local identities of request objects assembled by dsh-agent-loop. */
 const AGENT_LOOP_REQUESTS = new WeakSet<GenerateOptions>()
+
+/** Concrete generation settings; omitted controls use the selected route's defaults. */
+export interface LlmCallControls {
+  reasoningEffort?: ReasoningEffortId
+  temperature?: number
+  maxTokens?: number
+  stop?: string[]
+}
 
 // TODO(call-config-shape): Revisit which fields are epoch-level for cache reuse
 // and where provider-specific request options belong.
@@ -20,14 +28,24 @@ const AGENT_LOOP_REQUESTS = new WeakSet<GenerateOptions>()
  * the loop builds requests from the logged header rather than accepting these
  * per call.
  */
-export interface LlmCallConfig {
+export interface LlmCallConfig extends LlmCallControls {
   provider: string
   model: string
-  reasoningEffort?: ReasoningEffortId
-  temperature?: number
-  maxTokens?: number
-  stop?: string[]
 }
+
+/**
+ * Synchronous, pure configuration of one call before defaults and validation.
+ * Compose functions in the desired order; later writes replace earlier ones.
+ * The returned controls cannot change the captured route. Errors reject
+ * preparation before dispatch; only the resolved configuration is recordable.
+ * @param controls - detached, deeply frozen proposed controls, without defaults.
+ * @param model - detached, deeply frozen metadata from the captured adapter generation.
+ * @returns concrete controls; omitted fields receive the route's defaults.
+ */
+export type ConfigureCall = (
+  controls: Readonly<LlmCallControls>,
+  model: Readonly<LlmResolvedModelInfo>,
+) => LlmCallControls
 
 /**
  * Effective config fields supplied by exact-model adapter resolution rather
@@ -75,43 +93,4 @@ export function markAgentLoopRequest<T extends GenerateOptions>(request: T): T {
  */
 export function isAgentLoopRequest(request: GenerateOptions): boolean {
   return AGENT_LOOP_REQUESTS.has(request)
-}
-
-/**
- * Deep-freeze a value in place with an iterative traversal, guarding cycles,
- * so later mutation throws without imposing a JavaScript call-stack depth cap.
- * {@link AbortSignal} objects are deliberately skipped because they are the
- * request's live cancellation channel and freezing them breaks abort.
- * @param value - the value to freeze in place.
- * @returns the same value, frozen.
- */
-export function deepFreeze<T>(value: T): T {
-  const seen = new WeakSet<object>()
-  const pending: (
-    | { kind: 'visit'; node: unknown }
-    | { kind: 'property'; source: Record<string, unknown>; key: string }
-  )[] = [{ kind: 'visit', node: value }]
-  while (pending.length > 0) {
-    const task = pending.pop()
-    /* v8 ignore next -- the loop condition guarantees one pending task. */
-    if (task === undefined) continue
-    if (task.kind === 'property') {
-      pending.push({ kind: 'visit', node: task.source[task.key] })
-      continue
-    }
-    const node = task.node
-    if (node === null || typeof node !== 'object') continue
-    if (node instanceof AbortSignal) continue
-    if (seen.has(node)) continue
-    seen.add(node)
-    Object.freeze(node)
-    const keys = Object.keys(node)
-    for (let index = keys.length - 1; index >= 0; index--) {
-      const key = keys[index]
-      /* v8 ignore next -- the loop is bounded by the captured key count. */
-      if (key === undefined) continue
-      pending.push({ kind: 'property', source: node as Record<string, unknown>, key })
-    }
-  }
-  return value
 }

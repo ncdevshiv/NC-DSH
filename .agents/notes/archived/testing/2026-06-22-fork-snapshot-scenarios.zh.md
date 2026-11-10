@@ -27,6 +27,6 @@ fork 后端使用父项的**已配平完整轮次前缀**为子项提供 seed。
 - fork 路由切片现在由全 transcript 层守卫，而不仅仅是单元测试。移除 `slice(seedLength)`（回放整个子会话日志）会让**两个**新场景变红——fork 子会话收到的是父会话记录的分片而非自己的——证明守卫确实生效（场景落地时已验证红→绿）。
 - `subagent-mixed` 是第一个在同一个 transcript 中驱动两种*不同* subagent 后端的快照场景，同时覆盖了跨 spawn 和 fork 子会话的逐会话回放键控。
 - 进程外（ACP（Agent Client Protocol））subagent 回放形态不同（每个子会话是独立进程、有自己的回放），仍以 `TODO(acp-subagent-replay)` 跟踪——本文场景仅限进程内。
-- 重新录制（`pnpm run test:snapshot:record`）会从真实 API 重新生成全部四个 fork/spawn fixture；两个新场景在无密钥时自动跳过，与所有已录制场景一致。
+- 重新录制（`bun run test:snapshot:record`）会从真实 API 重新生成全部四个 fork/spawn fixture；两个新场景在无密钥时自动跳过，与所有已录制场景一致。
 
 <!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->

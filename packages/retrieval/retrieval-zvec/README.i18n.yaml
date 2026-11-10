@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write packages/retrieval/retrieval-zvec/README.md
+/:
+  en: 6857350b90a6378e
+  zh: 981de6ad22f24064
+/deepseek-ai-dsh-retrieval-zvec:
+  en: 21e6d8428d086cab
+  zh: 639ebe66df2b9927
+/deepseek-ai-dsh-retrieval-zvec/summary:
+  en: ccc903d815602a94
+  zh: 1da812329b0adfdd
+/deepseek-ai-dsh-retrieval-zvec/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5116965997f5f24a
+/deepseek-ai-dsh-retrieval-zvec/use-this-package:
+  en: 3205e066b6918ece
+  zh: 9b0ee3e7f0cf5544
+/deepseek-ai-dsh-retrieval-zvec/use-this-package/minimal-configuration:
+  en: 7e37db274e87bd2a
+  zh: bf73a4eebe80df21
+/deepseek-ai-dsh-retrieval-zvec/use-this-package/repository-local-data:
+  en: 83299c2229d1c07b
+  zh: 274074001b2c7e20
+/deepseek-ai-dsh-retrieval-zvec/use-this-package/semantics-and-lifecycle:
+  en: 97df57a29a7417e8
+  zh: f7f9482b18fc3409
+/deepseek-ai-dsh-retrieval-zvec/use-this-package/failures:
+  en: 82ea3a8971372776
+  zh: 90306e292af8e387
+/deepseek-ai-dsh-retrieval-zvec/understand-the-implementation:
+  en: a98cb02cbd11f89f
+  zh: 60915e887301f797
+/deepseek-ai-dsh-retrieval-zvec/understand-the-implementation/source-map:
+  en: 1926ca31d66e2a00
+  zh: 89fcee55cebbc022
+/deepseek-ai-dsh-retrieval-zvec/further-exploration:
+  en: 82ce86211f381511
+  zh: 7462e5cdbcce3b5a
+/deepseek-ai-dsh-retrieval-zvec/model-experience:
+  en: ac341a93e0776788
+  zh: 032a63601fbb0ec2
+/deepseek-ai-dsh-retrieval-zvec/model-experience/kv-cache-effect:
+  en: 40294c1c31b74824
+  zh: e57f97b8601ff64c
+/deepseek-ai-dsh-retrieval-zvec/known-limitations-and-deferred-work:
+  en: 5c0eb5096c55b9c7
+  zh: 1c76e0fd7a243bab
+/deepseek-ai-dsh-retrieval-zvec/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 0f97af5d08ee9787

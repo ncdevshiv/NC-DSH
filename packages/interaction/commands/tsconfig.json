@@ -33,10 +33,10 @@
       "path": "../../util/brand"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../typert/protocol"
     },
     {
-      "path": "../../typert/protocol"
+      "path": "../../util/crypto"
     }
   ]
 }

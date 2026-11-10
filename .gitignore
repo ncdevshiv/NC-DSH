@@ -1,14 +1,20 @@
 CLAUDE.local.md
 .env
+apps/desktop/.env.windows
+apps/desktop/.env.macos
+apps/desktop/*.p12
 node_modules/
 lib/
 *.tsbuildinfo
+bun-debug.log
+.bun-store/
 .cache/
 examples/*/*.jsonl
 .storages/
 .sessions/
 examples/*/.sessions/
 coverage/
+.coverage-times.json
 .doc-typecheck-*/
 .node-next-types-*/
 .oxlint-contract-*/
@@ -24,28 +30,51 @@ tmp/
 .idea
 mise.toml
 dist-exe/
-python/sdk-runtime/src/deepseek_harness_runtime/runtime/dsh-jsonrpc-agent-*
-python/sdk-runtime/src/deepseek_harness_runtime/runtime/node/
+/dist/
+apps/desktop/.desktop-build/
+python/sdk-runtime/src/deepseek_harness_runtime/runtime/
 python/**/__pycache__/
 python/**/.pytest_cache/
+packages/**/__pycache__/
 apps/web/dist/
 .artifacts/
 .dsh-build/
+.dsh-report/
+# Workspace-local retrieval data: zvec collections, logs, and model caches.
+/.dsh/
 .playwright-mcp/
 .orig
 .worktrees/
 worktrees/
 .agents/worktrees/
 .typert-*/
-
-# ZCode session-local plans and agent scratch scripts.
-.zcode/
-.tmp-*/
-
-# Local reference checkouts that are not part of the repository.
-core-deps/
-
-# dataworm runtime state (daemon config + graph database).
-.dataworm/
-
-*.log
+native/system/test/bin/
+# Local scratch, quarantined residue, and generated caches that must not
+# reach source scanning, duplication checks, or the repository.
+.quarantine/
+.dev-scratch/
+.freebuff/
+.commandcode/
+embedding-cache/
+/undefined/
+/orphaned-packages-*/
+# Local tool state: agent board/journal, semantic index, and model cache.
+.nc-tools/
+# Desktop launcher logs and ad-hoc screenshots at the repository root.
+/*.log
+/*.log.*
+/*.png
+# Personal working notes that are not project artifacts.
+/IDEA.md
+/JOURNAL.md
+/JOURNAL-AI-SDK-SIDECAR.md
+/principle.md
+/NIO-ORCHESTRATOR-AUDIT.md
+/SELF-MODIFICATION-AUDIT.md
+/TOOLS-AUDIT.md
+/what_what_iwas_notable.md
+/bunswaplog.md
+/knip.json
+/knip-prune.cjs
+/start.cmd
+/start-desktop.ps1

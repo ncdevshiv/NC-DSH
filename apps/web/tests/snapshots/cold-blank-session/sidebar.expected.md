@@ -1,5 +1,0 @@
-- tree "Sessions":
-  - treeitem "Ungrouped" [expanded]:
-    - img
-    - text: Ungrouped
-  - treeitem "New Session" [selected]

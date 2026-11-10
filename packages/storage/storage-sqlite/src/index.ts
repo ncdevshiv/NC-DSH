@@ -157,12 +157,15 @@ export class SqliteStorageBackend implements StorageBackend {
  */
 export function apply(ctx: Context, config: Config) {
   const backend = new SqliteStorageBackend(config)
-  ctx.effect(() => {
+  // One composed effect owns both halves, so reverse disposal withdraws the
+  // service first — awaiting consumers still settling on it — and only then
+  // closes the database a settled consumer's final durable write still needs.
+  ctx.effect(function* () {
     const dispose = ctx.storage.backend.register('sqlite', backend)
-    return async () => {
+    yield async () => {
       dispose()
       await backend.close()
     }
+    yield ctx.provide(storageBackendServiceKey('sqlite'), backend)
   }, 'storage-sqlite.registerBackend')
-  ctx.provide(storageBackendServiceKey('sqlite'), backend)
 }

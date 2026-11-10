@@ -24,10 +24,10 @@
       "path": "../../core/tools"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../file-reference"
     },
     {
-      "path": "../file-reference"
+      "path": "../../session/working-directory"
     }
   ]
 }

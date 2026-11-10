@@ -1,37 +1,40 @@
-"""Locate the bundled DeepSeek Harness SDK runtime shipped with this package.
+"""Locate and execute the bundled dsh CLI shipped with the Python SDK runtime.
 
 Two runtime carriers coexist under ``runtime/``, both injected by the repo's
 ``scripts/build-exe-for-python-sdk.ts`` build (neither is checked into git):
 
 - **exe (production)**: single-file Node executables named
-  ``dsh-jsonrpc-agent-pkg-<platform>-<arch>`` (platform in {linux, macos}, arch in
-  {x64, arm64}) with a sibling ``-rg`` executable; macOS also uses a sibling
-  ``-spawn-helper``. The target machine needs no Node installation.
+  ``deepseek-harness-sdk-runtime-<platform>-<arch>`` for Linux/macOS and an
+  ``.exe`` counterpart for Windows. Each has a sibling ripgrep executable;
+  macOS also uses a sibling ``-spawn-helper``. The target machine needs no
+  Node installation.
 - **node (dev-only)**: the full deploy closure under ``runtime/node/``
   (``package.json`` + ``node_modules/``), executed as ``node
-  runtime/node/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/packaged-bin.js`` on a
+  runtime/node/runtime-bootstrap.mjs`` on a
   system Node >= 22.19. It is the current checkout's source build, never
   selected automatically, and excluded from wheel/sdist distributions.
 
-``runtime/cordis.yml`` IS checked in: it is the default agent configuration
-the client SDK injects via ``$DSH_CORDIS_CONFIG`` for zero-config runs — the
-runtime itself always requires an explicit config and has no built-in
-fallback.
+Both carriers execute the same dsh command grammar. The Python SDK selects the
+``sdk`` profile and requires an explicit Harness home; the installed ``dsh``
+console command requires ``DSH_HOME`` for the same reason.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 from pathlib import Path
+from ._resources import validate_downloads, validate_resources, office_launch_args
 
 PACKAGE_METADATA_FILENAME = "deepseek-harness-runtime.json"
 
 RUNTIME_MODE_ENV_VAR = "DSH_RUNTIME_MODE"
 
-_PLATFORM_TAGS = {"linux": "linux", "darwin": "macos"}
+_PLATFORM_TAGS = {"linux": "linux", "darwin": "macos", "win32": "win"}
 _ARCH_TAGS = {"x86_64": "x64", "amd64": "x64", "arm64": "arm64", "aarch64": "arm64"}
 
 _EXE_ACQUISITION_HINT = (
@@ -52,39 +55,30 @@ def bundled_package_dir() -> Path:
     return root
 
 
-def bundled_default_config_path() -> Path:
-    """Path of the checked-in default runtime configuration (``runtime/cordis.yml``).
-
-    The client SDK injects this path via ``$DSH_CORDIS_CONFIG`` when the caller
-    supplies no config and the launch resolves to the bundled runtime — the
-    runtime binary itself always demands an explicit config.
-    """
-    path = bundled_package_dir() / "runtime" / "cordis.yml"
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"deepseek-harness-runtime-bin is missing the default runtime config at {path}"
-        )
-    return path
-
-
 def bundled_runtime_path() -> Path:
     """Absolute path of the bundled single-file runtime executable for the current platform.
 
     Raises FileNotFoundError when the platform is unsupported, the executable
-    has not been placed into this package, the required ripgrep sidecar is
-    missing, or the required macOS spawn helper is missing; the message names
+    has not been placed into this package, the ripgrep sidecar or download
+    manifest is missing, or the required macOS spawn helper is missing.
+    Invalid download metadata raises ValueError. Missing executable messages name
     the acquisition routes (acquisition strategy is deliberately separate from
     this lookup interface, so an on-demand download can replace it without
     touching callers).
     """
     tag = _current_platform_tag()
-    path = bundled_package_dir() / "runtime" / f"dsh-jsonrpc-agent-pkg-{tag}"
+    extension = ".exe" if tag.startswith("win-") else ""
+    path = bundled_package_dir() / "runtime" / f"deepseek-harness-sdk-runtime-{tag}{extension}"
     if not path.is_file():
         raise FileNotFoundError(
             f"deepseek-harness-runtime-bin is missing the runtime executable at {path}. "
             + _EXE_ACQUISITION_HINT
         )
-    ripgrep = Path(f"{path}-rg")
+    ripgrep = (
+        path.with_name(f"{path.stem}-rg.exe")
+        if tag.startswith("win-")
+        else Path(f"{path}-rg")
+    )
     if not ripgrep.is_file():
         raise FileNotFoundError(
             f"deepseek-harness-runtime-bin is missing the ripgrep sidecar at {ripgrep}. "
@@ -97,6 +91,7 @@ def bundled_runtime_path() -> Path:
                 f"deepseek-harness-runtime-bin is missing the node-pty spawn helper at {helper}. "
                 + _EXE_ACQUISITION_HINT
             )
+    validate_downloads(path.with_name(tag), tag)
     return path
 
 
@@ -126,25 +121,22 @@ def resolve_bundled_launch_args(mode: str | None = None) -> tuple[str, ...]:
 def _current_platform_tag() -> str:
     plat = _PLATFORM_TAGS.get(sys.platform)
     arch = _ARCH_TAGS.get(platform.machine().lower())
-    if plat is None or arch is None:
+    if (
+        plat is None
+        or arch is None
+        or (plat == "win" and arch != "x64")
+    ):
         raise FileNotFoundError(
-            "no bundled dsh-jsonrpc-agent executable exists for this platform "
+            "no bundled DeepSeek Harness SDK runtime exists for this platform "
             f"(sys.platform={sys.platform!r}, machine={platform.machine()!r}); supported: "
-            "linux/macos on x64/arm64. " + _EXE_ACQUISITION_HINT
+            "Linux x64/arm64, macOS x64/arm64, and Windows x64. " + _EXE_ACQUISITION_HINT
         )
     return f"{plat}-{arch}"
 
 
 def _node_launch_args() -> tuple[str, str]:
     node_root = bundled_package_dir() / "runtime" / "node"
-    bin_js = (
-        node_root
-        / "node_modules"
-        / "@deepseek-ai"
-        / "dsh-sdk-jsonrpc-demo"
-        / "lib"
-        / "packaged-bin.js"
-    )
+    bin_js = node_root / "runtime-bootstrap.mjs"
     if not bin_js.is_file():
         raise FileNotFoundError(
             f"the dev-only node runtime closure is missing at {node_root} "
@@ -161,11 +153,70 @@ def _node_launch_args() -> tuple[str, str]:
     return (node, str(bin_js))
 
 
+def _download(resource: str) -> Path:
+    result = subprocess.run(resolve_bundled_launch_args(), capture_output=True, encoding="utf-8",
+                            env={**os.environ, "DSH_RUNTIME_DOWNLOAD": resource})
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or f"resource download failed with exit code {result.returncode}")
+    path = json.loads(result.stdout)
+    if not isinstance(path, str) or not Path(path).is_absolute():
+        raise ValueError("runtime returned an invalid resource path")
+    return Path(path)
+
+
+def download_office() -> Path:
+    """Download the locked npm Office sidecar and standalone Node into the resource cache.
+
+    Return its absolute directory. Reuse completed downloads; failures leave no
+    published partial installation. DSH_RESOURCE_CACHE selects the cache root.
+    This explicit operation requires network access on a cache miss, not a
+    Harness home, agent, or model. Other SDK operations never trigger downloads.
+    """
+    return _download("office")
+
+
+def download_primary_runtime() -> Path:
+    """Download locked CPython, libraries, Node, bun and skills into the resource cache.
+
+    Return the absolute primary-runtime directory. This is independent of the
+    Office engine download and does not copy resources into a Harness home.
+    Completed downloads are reused; DSH_RESOURCE_CACHE selects the cache root.
+    """
+    path = _download("primary")
+    validate_resources(path.parent, _current_platform_tag())
+    return path
+
+
+def resolve_office_launch_args() -> tuple[str, str]:
+    """Locate the explicitly downloaded Office CLI and its standalone Node; never download."""
+    tag = _current_platform_tag()
+    return office_launch_args(bundled_runtime_path().with_name(tag), tag)
+
+
+def main() -> None:
+    """Launch the CLI with explicit DSH_HOME; wait on Windows, replace the process on POSIX."""
+    if not os.environ.get("DSH_HOME", "").strip():
+        print(
+            "dsh: the Python runtime command requires an explicit DSH_HOME; "
+            "it never uses ~/.dsh implicitly",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    argv = (*resolve_bundled_launch_args(), *sys.argv[1:])
+    if sys.platform == "win32":
+        # Windows CRT exec does not replace the process; wait and preserve the runtime status.
+        raise SystemExit(subprocess.run(argv, env=os.environ).returncode)
+    os.execvpe(argv[0], argv, os.environ)
+
+
 __all__ = [
     "PACKAGE_METADATA_FILENAME",
     "RUNTIME_MODE_ENV_VAR",
-    "bundled_default_config_path",
     "bundled_package_dir",
     "bundled_runtime_path",
+    "download_office",
+    "download_primary_runtime",
+    "resolve_office_launch_args",
+    "main",
     "resolve_bundled_launch_args",
 ]

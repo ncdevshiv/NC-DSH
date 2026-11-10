@@ -8,8 +8,11 @@
  *
  * Script vocabulary (all optional):
  * - `FAKE_TEXT`: assistant text for each turn (default `hello from fake runtime`).
+ * - `FAKE_SESSION_EVENT`: one JSON event forwarded after the assistant with owned seq/time.
+ * - `FAKE_SESSION_EVENTS`: JSON event array forwarded in order after the assistant with owned seq/time.
  * - `FAKE_STATUS`: the `session.finished` status (default `ok`).
  * - `FAKE_REASON_KIND`: the `session.finished` reason kind (default `completed`; `none` omits the reason).
+ * - `FAKE_ABORT_REASON_KIND`: nested cause for an `aborted` turn (default `user`).
  * - `FAKE_SUBAGENT`: also emit a child session (subagent.started + child event + subagent.finished).
  * - `FAKE_ECHO_CWD`: prefix the assistant text with the process cwd.
  * - `FAKE_ECHO_ENV`: comma-separated env names to echo as `name=value` lines in the assistant text.
@@ -24,18 +27,22 @@
  * - `FAKE_MALFORMED_EVENT`: the turn's `session.event` carries a number as
  *   the event; `FAKE_MALFORMED_MESSAGE`: assistant/message content is not an
  *   array; `FAKE_MESSAGE_WITHOUT_DATA`: assistant/message with no data
- *   member; `FAKE_MALFORMED_REASON`: `session.finished` reason is a bare
- *   string (wire-validation probes).
- * - `FAKE_EMPTY_MESSAGE`: the turn streams a text chunk, then records an empty
- *   assistant/message for a usage-only max-tokens step.
+ *   member; `FAKE_MALFORMED_REASON`: the `turn/end` carries a bare reason
+ *   (`1`), an aborted reason without its cause (`aborted`), an unknown abort
+ *   cause (`abort-unknown`), a hook cause without its reason (`hook`), or no
+ *   data member (`no-data`) for wire-validation probes.
+ * - `FAKE_EMPTY_MESSAGE`: record an empty assistant/message whose embedded
+ *   stream contains only usage and max-tokens settlement.
  * - `FAKE_HANG_INIT`: never answer `initialize` (mid-handshake cancel probe).
  * - `FAKE_INIT_READY` + `FAKE_INIT_GO`: touch the READY file when `initialize`
  *   arrives, then poll for the GO file before answering (deterministic
  *   cancel-during-handshake window).
  * - `FAKE_HANG_PROMPT`: never answer `session/prompt` (for timeout/dispose tests).
- * - `FAKE_STREAM_THEN_MALFORMED`: stream a text chunk for the prompt, then
- *   answer `{}` (no accepted) — same-pipe ordering makes the chunk arrive
- *   before the protocol failure (partial-output retention probe).
+ * - `FAKE_EXIT_DURING_PROMPT`: commit one interrupted assistant message, then
+ *   exit 17 while the owned session run is waiting for its terminal state.
+ * - `FAKE_STREAM_THEN_MALFORMED`: commit a partial assistant attempt for the
+ *   prompt, then answer `{}` (no accepted) — same-pipe ordering makes the
+ *   attempt arrive before the protocol failure (partial-output retention probe).
  * - `FAKE_IGNORE_EOF` + `FAKE_SIGTERM_FILE`: keep running after stdin EOF; touch the file on SIGTERM (ladder probe).
  * - `FAKE_TRAP_SIGTERM`: with `FAKE_IGNORE_EOF`, survive SIGTERM too (SIGKILL-rung probe).
  * - `FAKE_EXIT_BEFORE_INIT`: exit 3 immediately (spawn-then-die probe).
@@ -46,6 +53,7 @@
 
 import { appendFileSync, existsSync, writeFileSync } from 'node:fs'
 import process from 'node:process'
+import { resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const env = process.env
@@ -74,6 +82,8 @@ function notify(method: string, params: object): void {
 }
 
 let seq = 0
+let originCwd = process.cwd()
+const workingDirectories = new Map<string, string>()
 function event(sessionId: string, type: string, data: object): void {
   notify('session.event', { sessionId, event: { type, seq: seq++, time: 0, data } })
 }
@@ -88,6 +98,26 @@ function assistantText(): string {
   return parts.join('\n')
 }
 
+function textStream(text: string): object[] {
+  return [
+    { type: 'chunk', time: 0, chunk: { type: 'block-start', index: 0, blockType: 'text' } },
+    { type: 'text-chunks', time0: 0, index: 0, dt: [], texts: [text] },
+    { type: 'chunk', time: 0, chunk: { type: 'block-end', index: 0, block: { type: 'text', text } } },
+    { type: 'chunk', time: 0, chunk: { type: 'finish', reason: { kind: 'stop' } } },
+  ]
+}
+
+function usageOnlyStream(): object[] {
+  return [
+    {
+      type: 'chunk',
+      time: 0,
+      chunk: { type: 'usage', usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 } },
+    },
+    { type: 'chunk', time: 0, chunk: { type: 'finish', reason: { kind: 'max-tokens' } } },
+  ]
+}
+
 function runTurn(sessionId: string): void {
   const text = assistantText()
   if (env.FAKE_MALFORMED_EVENT !== undefined) {
@@ -95,8 +125,12 @@ function runTurn(sessionId: string): void {
     return
   }
   event(sessionId, 'turn/start', { turn: 0 })
-  event(sessionId, 'assistant/chunk', { turn: 0, step: 0, chunk: { type: 'text-delta', index: 0, text } })
   if (env.FAKE_MALFORMED_MESSAGE !== undefined) {
+    event(sessionId, 'assistant/attempt', {
+      turn: 0,
+      step: 0,
+      stream: textStream(text),
+    })
     event(sessionId, 'assistant/message', {
       turn: 0,
       step: 0,
@@ -106,12 +140,20 @@ function runTurn(sessionId: string): void {
         content: 'not-an-array',
         source: { kind: 'model', provider: 'fake', model: 'fake' },
       },
+      stream: textStream(text),
     })
     return
   }
   if (env.FAKE_MESSAGE_WITHOUT_DATA !== undefined) {
     notify('session.event', { sessionId, event: { type: 'assistant/message', seq: seq++, time: 0 } })
     return
+  }
+  if (env.FAKE_EMPTY_MESSAGE !== undefined) {
+    event(sessionId, 'assistant/attempt', {
+      turn: 0,
+      step: 0,
+      stream: textStream(text),
+    })
   }
   event(sessionId, 'assistant/message', {
     turn: 0,
@@ -124,17 +166,63 @@ function runTurn(sessionId: string): void {
       content: env.FAKE_EMPTY_MESSAGE !== undefined ? [] : [{ type: 'text', text }],
       source: { kind: 'model', provider: 'fake', model: 'fake' },
     },
+    stream: env.FAKE_EMPTY_MESSAGE !== undefined ? usageOnlyStream() : textStream(text),
   })
+  if (env.FAKE_SESSION_EVENT !== undefined) {
+    const scripted: unknown = JSON.parse(env.FAKE_SESSION_EVENT)
+    if (scripted === null || typeof scripted !== 'object' || Array.isArray(scripted)) {
+      throw new Error('FAKE_SESSION_EVENT must be a JSON event object')
+    }
+    notify('session.event', { sessionId, event: { ...scripted, seq: seq++, time: 0 } })
+  }
+  if (env.FAKE_SESSION_EVENTS !== undefined) {
+    const scripted: unknown = JSON.parse(env.FAKE_SESSION_EVENTS)
+    if (!Array.isArray(scripted)) throw new Error('FAKE_SESSION_EVENTS must be a JSON event array')
+    const events: unknown[] = scripted
+    for (const value of events) {
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('FAKE_SESSION_EVENTS contains a non-object event')
+      notify('session.event', { sessionId, event: { ...value, seq: seq++, time: 0 } })
+    }
+  }
   const reasonKind = env.FAKE_REASON_KIND ?? 'completed'
-  event(sessionId, 'turn/end', { turn: 0, reason: { kind: reasonKind } })
+  if (reasonKind !== 'none') {
+    if (env.FAKE_MALFORMED_REASON === 'no-data') {
+      notify('session.event', { sessionId, event: { type: 'turn/end', seq: seq++, time: 0 } })
+      return
+    }
+    const reason = env.FAKE_MALFORMED_REASON === 'aborted'
+      ? { kind: 'aborted' }
+      : env.FAKE_MALFORMED_REASON === 'abort-unknown'
+        ? { kind: 'aborted', reason: { kind: 'future' } }
+        : env.FAKE_MALFORMED_REASON === 'hook'
+          ? { kind: 'aborted', reason: { kind: 'hook' } }
+          : env.FAKE_MALFORMED_REASON !== undefined
+            ? 'not-a-reason-envelope'
+            : reasonKind === 'aborted'
+              ? {
+                kind: 'aborted',
+                reason: env.FAKE_ABORT_REASON_KIND === 'hook'
+                  ? { kind: 'hook', reason: 'scripted hook abort' }
+                  : { kind: env.FAKE_ABORT_REASON_KIND ?? 'user' },
+              }
+              : reasonKind === 'error'
+                ? { kind: 'error', error: { message: 'scripted child error', code: 'UNKNOWN' } }
+                : { kind: reasonKind }
+    event(sessionId, 'turn/end', { turn: 0, reason })
+  }
   if (env.FAKE_SUBAGENT !== undefined) {
     const childId = `${sessionId}-child`
     notify('subagent.started', { parentSessionId: sessionId, childSessionId: childId })
     event(childId, 'assistant/message', {
       turn: 0,
       step: 0,
-      content: [{ type: 'text', text: 'child says hi' }],
-      provenance: { provider: 'fake', model: 'fake' },
+      message: {
+        id: `fake-child-${seq}`,
+        role: 'assistant',
+        content: [{ type: 'text', text: 'child says hi' }],
+        source: { kind: 'model', provider: 'fake', model: 'fake' },
+      },
+      stream: textStream('child says hi'),
     })
     notify('subagent.finished', {
       provider: 'spawn',
@@ -154,6 +242,7 @@ function sessionIdOf(params: Record<string, unknown> | undefined): string {
 }
 
 const reader = createInterface({ input: process.stdin })
+const settledSessions = new Set<string>()
 reader.on('line', (line) => {
   if (line.trim().length === 0) return
   const frame = JSON.parse(line) as { id?: string | number; method?: string; params?: Record<string, unknown> }
@@ -161,6 +250,7 @@ reader.on('line', (line) => {
   const respond = (result: object): void => { write({ jsonrpc: '2.0', id: frame.id, result }) }
   switch (frame.method) {
     case 'initialize':
+      if (typeof frame.params?.cwd === 'string') originCwd = frame.params.cwd
       if (env.FAKE_RECORD_INIT !== undefined) appendFileSync(env.FAKE_RECORD_INIT, `${JSON.stringify(frame.params)}\n`)
       if (env.FAKE_HANG_INIT !== undefined) return
       if (env.FAKE_INIT_READY !== undefined && env.FAKE_INIT_GO !== undefined) {
@@ -193,6 +283,28 @@ reader.on('line', (line) => {
       }
       respond({ serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } })
       return
+    case 'session/resume':
+      if (env.FAKE_RESUME_ERROR !== undefined) {
+        write({ jsonrpc: '2.0', id: frame.id, error: { code: -32603, message: 'session not found' } })
+      } else {
+        respond({})
+      }
+      return
+    case 'session/working-directory/get':
+    case 'session/working-directory/set': {
+      if (env.FAKE_MALFORMED_DIRECTORY !== undefined) {
+        respond({ cwd: 17 })
+        return
+      }
+      const sessionId = sessionIdOf(frame.params)
+      const previous = workingDirectories.get(sessionId) ?? originCwd
+      const cwd = frame.method === 'session/working-directory/set'
+        ? resolve(previous, String(frame.params?.path))
+        : previous
+      workingDirectories.set(sessionId, cwd)
+      respond({ cwd })
+      return
+    }
     case 'session/prompt': {
       const sessionId = sessionIdOf(frame.params)
       const messageId = `fake-user-${seq}`
@@ -208,8 +320,30 @@ reader.on('line', (line) => {
       })
       notify('session.status', { sessionId, status: 'running' })
       if (env.FAKE_STREAM_THEN_MALFORMED !== undefined) {
-        event(sessionId, 'assistant/chunk', { turn: 0, step: 0, chunk: { type: 'text-delta', index: 0, text: 'streamed then cut short' } })
+        event(sessionId, 'assistant/attempt', {
+          turn: 0,
+          step: 0,
+          stream: textStream('streamed then cut short'),
+        })
         respond({})
+        return
+      }
+      if (env.FAKE_EXIT_DURING_PROMPT !== undefined) {
+        const partial = env.FAKE_TEXT ?? 'partial before exit'
+        respond({ messageId })
+        event(sessionId, 'assistant/message', {
+          turn: 0,
+          step: 0,
+          message: {
+            id: `fake-partial-${seq}`,
+            role: 'assistant',
+            content: [{ type: 'text', text: partial }],
+            source: { kind: 'model', provider: 'fake', model: 'fake' },
+          },
+          stream: textStream(partial),
+          interrupted: true,
+        })
+        setImmediate(() => { process.exit(17) })
         return
       }
       if (env.FAKE_HANG_PROMPT !== undefined) return
@@ -219,9 +353,13 @@ reader.on('line', (line) => {
       }
       runTurn(sessionId)
       notify('session.status', { sessionId, status: 'idle' })
+      settledSessions.add(sessionId)
       respond({ messageId })
       return
     }
+    case 'session/wait':
+      if (settledSessions.has(sessionIdOf(frame.params))) respond({})
+      return
     case 'shutdown':
       respond({})
       // An EOF-ignoring fake also refuses the protocol exit, so the client's

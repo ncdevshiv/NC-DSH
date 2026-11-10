@@ -54,7 +54,8 @@ export function apply(ctx: Context, config: Config) {
 `stream()` yields chunks using this protocol:
 
 ```ts
-import { CallId, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { StreamChunk, ToolCallId } from '@deepseek-ai/dsh-llm'
 
 async function* exampleChunks(): AsyncIterable<StreamChunk> {
   // 1. Start each content block with block-start.
@@ -76,7 +77,7 @@ async function* exampleChunks(): AsyncIterable<StreamChunk> {
   yield {
     type: 'tool-call-delta',
     index: 1,
-    id: CallId('call-123'),
+    id: brandString<ToolCallId>('call-123'),
     name: 'bash',
     argumentsDelta: '{"command":"ls"}',
   }
@@ -85,7 +86,7 @@ async function* exampleChunks(): AsyncIterable<StreamChunk> {
     index: 1,
     block: {
       type: 'tool-call',
-      id: CallId('call-123'),
+      id: brandString<ToolCallId>('call-123'),
       name: 'bash',
       arguments: '{"command":"ls"}',
     },
@@ -145,14 +146,14 @@ The first argument lists provider routes handled by the adapter. `GenerateOption
 
 The repository contains complete implementations:
 
-- `packages/llm/llm-ai-sdk/` — the shipped adapter: every configured provider route through one `ai-sidecar` child process
-- `packages/test-support/llm-replay/` — a minimal in-process keyless adapter for snapshot tests
+- `packages/llm/llm-deepseek/` — DeepSeek adapter using the Messages API
+- `packages/llm/llm-pi-ai/` — Pi AI adapter using a different API format
 
-Read the shipped adapter for production structure and the replay adapter for the smallest contract-satisfying skeleton.
+Compare the two shipped adapters to see the same harness contract implemented over different provider SDKs.
 
 ## Error handling
 
-Adapters throw transport and protocol failures as `LlmError` values with stable codes. The agent loop preserves the error and code for diagnostics and policy; it does not convert an ordinary `Error` automatically. An adapter that owns its HTTP headers merges `attributionHeaders()` on every request and forwards `options.signal`; a transport driven by a separate process carries that process's identity instead.
+Adapters throw transport and protocol failures as `LlmError` values with stable codes. The agent loop preserves the error and code for diagnostics and policy; it does not convert an ordinary `Error` automatically. Every provider HTTP request must also merge `attributionHeaders()` and forward `options.signal`.
 
 ```ts
 import {

@@ -21,19 +21,16 @@
       "path": "../../../vendor/group"
     },
     {
-      "path": "../../../vendor/hmr"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
-    },
-    {
-      "path": "../../core/system-prompt"
-    },
-    {
       "path": "../../util/launch-environment"
     },
     {
       "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../util/package-manifest"
+    },
+    {
+      "path": "../../util/atomic-write"
     }
   ]
 }

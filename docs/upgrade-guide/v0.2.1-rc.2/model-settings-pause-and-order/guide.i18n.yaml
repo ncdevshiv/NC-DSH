@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   bun run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.2/model-settings-pause-and-order/guide.md
+/:
+  en: b4ce6041d3b19779
+  zh: 0e159d792b5ec3ec
+/model-settings-pause-and-order-providers-and-directory-labels-become-product-names:
+  en: fb8368f5287075df
+  zh: 7be9ed91966f6979
+/model-settings-pause-and-order-providers-and-directory-labels-become-product-names/change:
+  en: 51c46bfa486597bf
+  zh: 104b8eb8e45f9570
+/model-settings-pause-and-order-providers-and-directory-labels-become-product-names/migration:
+  en: e527f248e1542306
+  zh: b9cb88575f5cad13

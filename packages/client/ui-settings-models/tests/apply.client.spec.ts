@@ -1,10 +1,14 @@
 /** Models section registration: slot declaration injection, the locale-following label thunk, and HMR recovery. */
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import Schema from '@deepseek-ai/schemastery'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { remoteDefaultResponses } from '@deepseek-ai/dsh-client-test-runtime/src/assembly/remote-default-responses.ts'
+import { ok, RemoteMock } from '@deepseek-ai/dsh-remote-mock'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject, refreshIfLoaded } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import {
@@ -13,29 +17,41 @@ import {
 import { ModelsSection } from '../src/client/ModelsSection.tsx'
 import { DeepSeekOnboardingDialog } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from '../src/client/WelcomeNotice.tsx'
+import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
+import * as hostPlugin from '../src/index.ts'
+import { ONBOARDING_CONFIG_GLOBAL } from '../src/onboarding-config.ts'
+
+afterEach(() => { vi.unstubAllGlobals() })
 
 // These specs assert the shipped Chinese copy. The lane has no jsdom `window`,
 // so browser-language detection never runs and a fresh LocaleRuntime opens on
 // FALLBACK_LOCALE (en); bench stages zh explicitly on the locale instead.
 
-async function bench(isLoopback = true, settings?: object, services: object = {}) {
+async function bench(mock = RemoteMock.create().load(remoteDefaultResponses), services: object = {}) {
+  onTestFinished(() => { mock.assertNoUnmatched() })
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
-  // The plugins inject `remote`; forwarded events reach them through the
-  // same `$dispatch` handoff the connection sink makes.
-  new TestRemote(ctx)
-  // Without a settings face the mirror's reads fail and stay contained; the
-  // Models join itself never fetches until a section actually loads. The real
-  // ui-settings apply also provides the settingsSchema service.
-  ctx.provide('connection', {
-    api: settings === undefined ? services : { ...services, settings },
-    isLoopback,
-  } as never)
+  const remote = new TestRemote(ctx, {
+    credentials: {
+      describe: vi.fn(() => Promise.resolve({ ok: true, value: {} })),
+      set: vi.fn(),
+      unset: vi.fn(),
+    },
+    llm: {
+      listProviders: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
+      listConfigurableProviders: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
+      discoverModels: vi.fn(() => Promise.resolve({ ok: true, value: [] })),
+      testModel: vi.fn(() => Promise.resolve({ ok: true, value: { ok: true, model: 'test', latencyMs: 1 } })),
+      ...services,
+    },
+    settings: mock.remote.settings,
+    session: { initializeDefaultModel: vi.fn(async () => ({ ok: true, value: undefined })) },
+  })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, remote }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -52,8 +68,50 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-settings-models apply', () => {
+  it('keeps manual credential onboarding available when the native shell owns automatic onboarding', async () => {
+    const { ctx, slots } = await bench()
+    declare(slots)
+    try {
+      const host = ctx.plugin(hostPlugin, { credentialOnboarding: false })
+      await host.await()
+      const rows: IndexInjection[] = []
+      ctx.emit('webserver/index-inject', rows)
+      expect(rows).toEqual([{ kind: 'global', name: ONBOARDING_CONFIG_GLOBAL, value: { credentialOnboarding: false } }])
+      for (const row of rows) if (row.kind === 'global') vi.stubGlobal(row.name, row.value)
+      const plugin = ctx.plugin({ inject: [...inject], apply })
+      await plugin.await()
+      expect(slots.entries('settings.onboarding').map(entry => entry.options.id)).toEqual(['welcome-notice', 'deepseek-official'])
+      const onboarding = slots.entries('settings.onboarding').find(entry => entry.options.id === 'deepseek-official')!
+      expect((onboarding.inject as () => { automatic: boolean })().automatic).toBe(false)
+      expect(slots.entries('settings.section').map(entry => entry.options.id)).toEqual(['models'])
+      await plugin.dispose()
+      expect(slots.entries('settings.onboarding')).toEqual([])
+      await host.dispose()
+      const after: IndexInjection[] = []
+      ctx.emit('webserver/index-inject', after)
+      expect(after).toEqual([])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('defaults to browser onboarding and rejects malformed bootstrap options', async () => {
+    expect(hostPlugin.Config({})).toEqual({ credentialOnboarding: true })
+    expect(hostPlugin.Config['~standard'].validate({ credentialOnboarding: 'false' })).toHaveProperty('issues')
+    const { ctx } = await bench()
+    try {
+      vi.stubGlobal(ONBOARDING_CONFIG_GLOBAL, { credentialOnboarding: 'false' })
+      expect(() => { apply(ctx) }).toThrow()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope', 'settingsSchema'])
+    expect(inject).toEqual([
+      'slots', 'locale', 'remote', 'remote.credentials', 'remote.llm', 'remote.settings', 'remote.session',
+      'configForms', 'settingsSchema',
+    ])
   })
 
   it('registers the models nav entry for declarations before or after apply', async () => {
@@ -63,6 +121,9 @@ describe('ui-settings-models apply', () => {
     const entry = before.slots.entries('settings.section')[0]!
     expect(entry.component).toBe(ModelsSection)
     expect(entry.options).toMatchObject({ id: 'models', order: 10 })
+    // The section claims its two extension seats in the same registration.
+    expect(before.slots.spec('settings.models.provider-card')).toMatchObject({ kind: 'keyed', scope: 'root' })
+    expect(before.slots.spec('settings.models.footer')).toMatchObject({ kind: 'list', scope: 'root' })
     // The nav label is a locale-following thunk; owners resolve at read time.
     expect(resolveSlotLabel(entry.options.label)).toBe('模型')
     const injected = (entry.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected)()
@@ -70,7 +131,7 @@ describe('ui-settings-models apply', () => {
     expect(injected.t('deleteTitle')).toBe('删除 {provider}？')
     expect(typeof injected.controller.load).toBe('function')
     expect(injected.hooks.snapshot).toBe(injected.controller.store)
-    expect(injected.api).toBeDefined()
+    expect(typeof injected.operations.writeSettings).toBe('function')
     const onboarding = before.slots.entries('settings.onboarding')
     expect(onboarding).toHaveLength(2)
     expect(onboarding.find(entry => entry.options.id === 'welcome-notice')).toMatchObject({
@@ -79,12 +140,18 @@ describe('ui-settings-models apply', () => {
     })
     const deepSeek = onboarding.find(entry => entry.options.id === 'deepseek-official')!
     expect(deepSeek.component).toBe(DeepSeekOnboardingDialog)
+    const analytics = (deepSeek.inject!() as object) as import('../src/client/DeepSeekOnboardingDialog.tsx').DeepSeekOnboardingInjected
+    analytics.track?.('api_key_save_click', {})
+    const track = vi.fn()
+    before.ctx.provide('productAnalytics', { track } as never)
+    analytics.track?.('api_key_save_click', {})
+    expect(track).toHaveBeenCalledWith('api_key_save_click', {})
     expect(deepSeek.options).toMatchObject({ id: 'deepseek-official', order: 0 })
     const deepSeekInjected = (
       deepSeek.inject as unknown as () => import('../src/client/DeepSeekOnboardingDialog.tsx').DeepSeekOnboardingInjected
     )()
     expect(deepSeekInjected.hooks.models).toBe(injected.controller.store)
-    expect(deepSeekInjected.api).toBeDefined()
+    expect(typeof deepSeekInjected.operations.storeCredential).toBe('function')
 
     const after = await bench()
     await after.ctx.plugin({ inject: [...inject], apply }).await()
@@ -139,6 +206,28 @@ describe('ui-settings-models apply', () => {
     b.locale.setLocale('zh')
   })
 
+  it('accepts extension entries under the declared seats and cascades them with the declarer', async () => {
+    const b = await bench()
+    declare(b.slots)
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    // A keyed card extension and a footer entry register through the ordinary
+    // ledger once the section's registration declared the seats.
+    const disposeCard = b.slots.register(
+      { name: 'settings.models.provider-card', key: 'llm-pi-ai' } as never,
+      () => null,
+    )
+    b.slots.register({ name: 'settings.models.footer', id: 'extra', order: 0 } as never, () => null)
+    expect(b.slots.entries('settings.models.provider-card')).toHaveLength(1)
+    expect(b.slots.entries('settings.models.footer')).toHaveLength(1)
+    // Extension-side HMR safety: its own disposer removes the entry.
+    disposeCard()
+    expect(b.slots.entries('settings.models.provider-card')).toHaveLength(0)
+    // Declarer unload cascades whatever extension entries remain.
+    await fiber.dispose()
+    expect(b.slots.entries('settings.models.footer')).toHaveLength(0)
+  })
+
   it('registers the zh/en nav dictionaries and disposes everything with the fiber', async () => {
     const b = await bench()
     declare(b.slots)
@@ -152,22 +241,6 @@ describe('ui-settings-models apply', () => {
     expect(() => b.locale.register('settings.models', 'zh', {})).not.toThrow()
     expect(() => b.locale.register('settings.models', 'en', {})).not.toThrow()
   })
-
-  it('keeps remote-browser acknowledgement in process memory', async () => {
-    const b = await bench(false)
-    declare(b.slots)
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
-    const entry = b.slots.entries('settings.onboarding')
-      .find(candidate => candidate.options.id === 'welcome-notice')!
-    const injected = (
-      entry.inject as unknown as () => import('../src/client/WelcomeNotice.tsx').WelcomeNoticeInjected
-    )()
-
-    await injected.controller.load()
-    expect(injected.controller.store.getSnapshot()).toEqual({
-      status: 'ready', acknowledged: false, error: null,
-    })
-  })
 })
 
 describe('pushed invalidations', () => {
@@ -176,9 +249,9 @@ describe('pushed invalidations', () => {
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     // The fake wire face has no methods: a fetch attempt would throw.
-    b.ctx.remote.$dispatch('settings/document-updated', ['llm-ai-sdk', 1])
-    b.ctx.remote.$dispatch('credentials/updated', ['OPENAI_API_KEY'])
-    b.ctx.remote.$dispatch('llm/adapters-updated', [])
+    b.remote.emit('settings/document-updated', ['llm-pi-ai', 1])
+    b.remote.emit('credentials/reference-updated', ['OPENAI_API_KEY'])
+    b.remote.emit('llm/adapters-updated', [])
     b.ctx.emit('connection/reset')
   })
 
@@ -188,13 +261,13 @@ describe('pushed invalidations', () => {
       store: { getSnapshot: () => ({ status: 'ready' }) },
       load: () => { loads.push(1); return Promise.resolve() },
     }
-    refreshIfLoaded(controller as unknown as import('../src/client/store.ts').ModelsSettingsStore)
+    refreshIfLoaded(controller as import('../src/client/store.ts').ModelsSettingsStore)
     expect(loads).toHaveLength(1)
     const idle = {
       store: { getSnapshot: () => ({ status: 'idle' }) },
       load: () => { loads.push(2); return Promise.resolve() },
     }
-    refreshIfLoaded(idle as unknown as import('../src/client/store.ts').ModelsSettingsStore)
+    refreshIfLoaded(idle as import('../src/client/store.ts').ModelsSettingsStore)
     expect(loads).toHaveLength(1)
   })
 
@@ -210,35 +283,25 @@ describe('pushed invalidations', () => {
     )()
     injected.controller.store.update((state) => { state.status = 'ready' })
     const load = vi.spyOn(injected.controller, 'load').mockResolvedValue()
-    b.ctx.remote.$dispatch('credentials/updated', ['DEEPSEEK_API_KEY'])
+    b.remote.emit('credentials/reference-updated', ['DEEPSEEK_API_KEY'])
     expect(load).toHaveBeenCalledTimes(1)
   })
 
   it('welcome state follows the shared mirror across document commits', async () => {
     // The welcome notice derives from its settings scope: a document commit
     // reaches it through the mirror's one refresh, with no routing here.
-    const acknowledgement = { current: undefined as string | undefined }
-    const settings = {
-      describe: vi.fn(() => Promise.resolve({
-        rpcId: 'apply-welcome' as never,
-        result: {
-          ok: true as const,
-          value: {
-            writable: true,
-            hasDocument: false,
-            namespaces: [{
-              ns: WELCOME_NOTICE_SETTINGS_NAMESPACE,
-              schema: {},
-              value: acknowledgement.current === undefined ? {} : { [WELCOME_NOTICE_ACK_FIELD]: acknowledgement.current },
-              applies: 'live' as const,
-              secrets: [],
-              revision: 0,
-            }],
-          },
-        },
-      })),
+    const mock = RemoteMock.create().load(remoteDefaultResponses)
+    const namespace = {
+      ns: WELCOME_NOTICE_SETTINGS_NAMESPACE,
+      schema: JSON.parse(JSON.stringify(Schema.object({ [WELCOME_NOTICE_ACK_FIELD]: Schema.string() }).toJSON())) as JsonValue,
+      value: {},
+      autoGenerate: true, applies: 'live' as const,
+      secrets: [],
+      revision: 0,
     }
-    const b = await bench(true, settings)
+    const document = { writable: true, hasDocument: false, namespaces: [namespace] }
+    mock.remote.settings.describe.mockResolvedValue(ok(document))
+    const b = await bench(mock)
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const entry = b.slots.entries('settings.onboarding')
@@ -251,38 +314,24 @@ describe('pushed invalidations', () => {
     await vi.waitFor(() => {
       expect(injected.hooks.welcome.getSnapshot()).toMatchObject({ status: 'ready', acknowledged: false })
     })
-    acknowledgement.current = WELCOME_NOTICE_VERSION
-    b.ctx.remote.$dispatch('settings/document-updated', ['ui-onboarding', 1])
+    mock.remote.settings.describe.mockResolvedValue(ok({
+      ...document,
+      namespaces: [{ ...namespace, value: { [WELCOME_NOTICE_ACK_FIELD]: WELCOME_NOTICE_VERSION }, revision: 1 }],
+    }))
+    b.remote.emit('settings/document-updated', ['ui-settings-general', 1])
     await vi.waitFor(() => {
       expect(injected.hooks.welcome.getSnapshot()).toMatchObject({ status: 'ready', acknowledged: true })
     })
   })
 
   it('joins the refreshed mirror view on a settings invalidation', async () => {
-    let revision = 1
-    const describe = vi.fn(() => Promise.resolve({
-      rpcId: `apply-models-${revision}` as never,
-      result: {
-        ok: true as const,
-        value: {
-          writable: true,
-          hasDocument: false,
-          namespaces: [{
-            ns: 'llm-test',
-            schema: {},
-            value: {},
-            applies: 'live' as const,
-            secrets: [],
-            revision,
-          }],
-        },
-      },
-    }))
-    const providers = vi.fn(() => Promise.resolve({
-      rpcId: 'apply-models-providers' as never,
-      result: { ok: true as const, value: { providers: [] } },
-    }))
-    const b = await bench(true, { describe }, { llm: { providers } })
+    const mock = RemoteMock.create().load(remoteDefaultResponses)
+    const namespace = { ns: 'llm-test', schema: {}, value: {}, autoGenerate: true, applies: 'live' as const, secrets: [], revision: 1 }
+    const document = { writable: true, hasDocument: false, namespaces: [namespace] }
+    const describe = mock.remote.settings.describe
+    describe.mockResolvedValue(ok(document))
+    const listProviders = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }))
+    const b = await bench(mock, { listProviders })
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const entry = b.slots.entries('settings.section')
@@ -294,8 +343,8 @@ describe('pushed invalidations', () => {
     await injected.controller.load()
     expect(injected.hooks.snapshot.getSnapshot().namespaces.get('llm-test')?.revision).toBe(1)
 
-    revision = 2
-    b.ctx.remote.$dispatch('settings/document-updated', ['llm-test', revision])
+    describe.mockResolvedValue(ok({ ...document, namespaces: [{ ...namespace, revision: 2 }] }))
+    b.remote.emit('settings/document-updated', ['llm-test', 2])
 
     await vi.waitFor(() => {
       expect(injected.hooks.snapshot.getSnapshot().namespaces.get('llm-test')?.revision).toBe(2)

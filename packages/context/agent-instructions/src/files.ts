@@ -8,15 +8,20 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { FileSystem, FsInfo, FsTarget, FsVersion } from '@deepseek-ai/dsh-fs'
-import { assertNever } from '@deepseek-ai/dsh-llm'
-import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
-import { resolveConfig, resolveDiscoveryConfig, type ResolvedConfig } from './config.ts'
+import { agentsHomeDisplay, dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
+import { resolveConfig, resolveDiscoveryConfig, type ResolvedConfig, type ResolvedDiscoveryConfig } from './config.ts'
 import { trimmedInstructionDigest } from './digest.ts'
 import {
+  AGENTS_GLOBAL_DIRECTORY,
   decodeScopeKey,
-  renderWorkspaceInstructionSet,
-  type RenderedWorkspaceContext,
+  escapeProjectDisplayPath,
+  instructionCandidateGroup,
+  renderAgentInstructionSet,
+  scopeForDisplayPath,
+  type RenderedAgentInstructions,
   USER_GLOBAL_DIRECTORY,
+  USER_GLOBAL_DIRECTORIES,
   USER_GLOBAL_FILE,
 } from './render.ts'
 
@@ -48,12 +53,52 @@ export interface ProbedInstructionFile extends InstructionFile {
 
 interface DiscoverOptions {
   cwd: string
+  /**
+   * Already-resolved harness home. The plugin resolves it once at mount and
+   * passes it down so reconciliation and baseline loading cannot disagree.
+   */
   dshHome?: string
+  /**
+   * Already-resolved shared agents root. The plugin resolves it once at mount
+   * and passes it down so reconciliation and baseline loading cannot disagree.
+   */
+  agentsHome?: string
   projectRootMarkers?: string[]
   instructionFileCandidates?: string[]
   localInstructionFileCandidates?: string[]
   projectRoot?: string
   signal?: AbortSignal
+}
+
+interface UserGlobalRoot {
+  /** Logical scope directory used in reconciliation keys. */
+  directory: string
+  /** Absolute directory holding the candidate file. */
+  home: string
+  /** Model-facing directory label. */
+  display: string
+}
+
+/**
+ * Ordered user-global instruction roots: the harness home, then the shared
+ * agents root. Both contribute the fixed {@link USER_GLOBAL_FILE} candidate and
+ * form one candidate group, so a file that matches the harness-home content
+ * renders once.
+ * @param config - normalized discovery configuration.
+ * @returns the roots in model precedence order.
+ */
+function userGlobalRoots(config: ResolvedDiscoveryConfig): UserGlobalRoot[] {
+  return USER_GLOBAL_DIRECTORIES.map((directory) => {
+    switch (directory) {
+      case USER_GLOBAL_DIRECTORY:
+        return { directory, home: config.dshHome, display: dshHomeDisplay(config.dshHome) }
+      case AGENTS_GLOBAL_DIRECTORY:
+        return { directory, home: config.agentsHome, display: agentsHomeDisplay(config.agentsHome) }
+      /* v8 ignore next -- USER_GLOBAL_DIRECTORIES is closed; this arm only makes adding a label a compile error. */
+      default:
+        return assertNever(directory, 'user-global directory')
+    }
+  })
 }
 
 interface LoadOptions extends DiscoverOptions {
@@ -64,9 +109,15 @@ interface LoadOptions extends DiscoverOptions {
 
 /** Rendered baseline plus the successfully read and byte-budget-retained files. */
 export interface RenderedInstructionSet {
-  rendered: RenderedWorkspaceContext
+  rendered: RenderedAgentInstructions
   /** Successfully read candidates before content deduplication and byte budgeting. */
   observed: LoadedInstructionFile[]
+  /**
+   * Candidates dropped as content duplicates of an earlier candidate in their
+   * group. Duplicates of budget-retained content remain eligible for probing,
+   * because deleting or changing the retained candidate can make them visible.
+   */
+  deduped: LoadedInstructionFile[]
   /** Candidates retained by content deduplication and byte budgeting. */
   included: LoadedInstructionFile[]
 }
@@ -93,6 +144,10 @@ function signalOptions(signal?: AbortSignal): { signal: AbortSignal } | undefine
 
 function isMissingPathError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+}
+
+function isMissingProviderPathError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'FS_NOT_FOUND'
 }
 
 async function nodeStatFile(path: string, signal?: AbortSignal): Promise<StatFileProbe> {
@@ -147,11 +202,10 @@ async function existsAsMarker(path: string, fileSystem?: FileSystem, signal?: Ab
     try {
       const target = await fileSystem.resolve(path, signalOptions(signal))
       return await fileSystem.stat(target, signal) !== undefined
-    } catch {
+    } catch (error: unknown) {
       signal?.throwIfAborted()
-      // TODO(root-marker-unavailable): preserve provider failure separately from
-      // absence and stop discovery; continuing upward can cross into an ancestor project.
-      return false
+      if (isMissingProviderPathError(error)) return false
+      throw error
     }
   }
   try {
@@ -159,9 +213,10 @@ async function existsAsMarker(path: string, fileSystem?: FileSystem, signal?: Ab
     await stat(path)
     signal?.throwIfAborted()
     return true
-  } catch {
+  } catch (error: unknown) {
     signal?.throwIfAborted()
-    return false
+    if (isMissingPathError(error)) return false
+    throw error
   }
 }
 
@@ -172,6 +227,7 @@ async function existsAsMarker(path: string, fileSystem?: FileSystem, signal?: Ab
  * @param fileSystem - optional provider used instead of host filesystem probes.
  * @param signal - cancellation for provider and host probes.
  * @returns the discovered project root, or `cwd` when no marker exists.
+ * @throws the original marker metadata error or cancellation reason when a probe is unavailable.
  */
 export async function findProjectRoot(
   cwd: string,
@@ -213,7 +269,7 @@ export function ancestorChain(root: string, cwd: string): string[] {
 
 /**
  * Find descendant directories crossed between a cwd and a touched file.
- * @param root - session cwd that bounds nested discovery.
+ * @param root - current working directory that bounds nested discovery.
  * @param touchedPath - absolute path or path relative to `root`.
  * @returns descendant directories from shallowest through the touched file's parent.
  */
@@ -227,13 +283,13 @@ export function descendantDirsBetween(root: string, touchedPath: string): string
 }
 
 /**
- * Convert an absolute instruction path to its project-root-relative display form.
+ * Convert an absolute instruction path to its project display path.
  * @param root - project root used as the display base.
  * @param path - absolute path to display.
- * @returns the root-relative path.
+ * @returns the collision-free root-relative path.
  */
 export function relativeDisplay(root: string, path: string): string {
-  return relative(root, path)
+  return escapeProjectDisplayPath(relative(root, path))
 }
 
 async function allExistingInstructionFiles(
@@ -277,22 +333,24 @@ async function discoverInstructionFiles(
     files.push(file)
   }
 
-  const userGlobal = join(config.dshHome, USER_GLOBAL_FILE)
-  const userGlobalProbe = await statFile(userGlobal, fileSystem, options.signal)
-  switch (userGlobalProbe.kind) {
-    case 'present':
-      addFile({
-        absolutePath: userGlobal,
-        displayPath: userGlobalDisplayPath(config.dshHome),
-        ...userGlobalProbe.info,
-      })
-      break
-    case 'absent':
-    case 'unavailable':
-      break
-    /* v8 ignore next 2 -- StatFileProbe is closed; this arm only makes adding a kind a compile error. */
-    default:
-      assertNever(userGlobalProbe, 'StatFileProbe')
+  for (const root of userGlobalRoots(config)) {
+    const absolutePath = join(root.home, USER_GLOBAL_FILE)
+    const probe = await statFile(absolutePath, fileSystem, options.signal)
+    switch (probe.kind) {
+      case 'present':
+        addFile({
+          absolutePath,
+          displayPath: `${root.display}/${USER_GLOBAL_FILE}`,
+          ...probe.info,
+        })
+        continue
+      case 'absent':
+      case 'unavailable':
+        continue
+      /* v8 ignore next 2 -- StatFileProbe is closed; this arm only makes adding a kind a compile error. */
+      default:
+        assertNever(probe, 'StatFileProbe')
+    }
   }
 
   const cwd = resolve(options.cwd)
@@ -312,8 +370,10 @@ async function discoverInstructionFiles(
  * Discover host-visible user-global and root-to-cwd instruction candidates.
  * All present candidates in each directory are returned; trimmed-content
  * duplicates are collapsed later, once content is read.
- * @param options - cwd, home, root marker, and candidate configuration.
+ * @param options - cwd, resolved harness home, root marker, and candidate configuration.
  * @returns path-deduplicated instruction candidates in model precedence order.
+ * @throws the original root-marker metadata error or cancellation reason when
+ * discovery cannot identify the project root.
  */
 export async function discoverBaselineInstructionFiles(options: DiscoverOptions): Promise<InstructionFile[]> {
   return (await discoverInstructionFiles(options)).map(({ absolutePath, displayPath }) => ({ absolutePath, displayPath }))
@@ -357,23 +417,25 @@ async function readBounded(
 }
 
 /**
- * Drop later candidates whose trimmed content duplicates an earlier sibling in
- * the same directory. Different directories never collapse even when identical;
- * within one directory the earliest candidate in discovery order is kept and its
- * original bytes are rendered. A candidate that symlinks a sibling resolves to
- * the same content and collapses here like any byte-identical real file.
+ * Drop later candidates whose trimmed content duplicates an earlier candidate in
+ * the same candidate group. Different groups never collapse even when identical;
+ * within one group the earliest candidate in discovery order is kept and its
+ * original bytes are rendered. The two user-global roots form one group, so a
+ * shared file matching the harness-home content collapses behind it. A candidate
+ * that symlinks a sibling resolves to the same content and collapses here like
+ * any byte-identical real file.
  * @param files - loaded files in discovery order.
  * @returns the retained files in the same order.
  */
-export function dedupInstructionFilesByDirectory(files: LoadedInstructionFile[]): LoadedInstructionFile[] {
-  const keptDigestsByDir = new Map<string, Set<string>>()
+export function dedupInstructionFilesByCandidateGroup(files: LoadedInstructionFile[]): LoadedInstructionFile[] {
+  const keptDigestsByGroup = new Map<string, Set<string>>()
   const kept: LoadedInstructionFile[] = []
   for (const file of files) {
-    const dir = dirname(file.displayPath)
-    let digests = keptDigestsByDir.get(dir)
+    const group = instructionCandidateGroup(scopeForDisplayPath(file.displayPath))
+    let digests = keptDigestsByGroup.get(group)
     if (digests === undefined) {
       digests = new Set()
-      keptDigestsByDir.set(dir, digests)
+      keptDigestsByGroup.set(group, digests)
     }
     const digest = trimmedInstructionDigest(file.content)
     if (digests.has(digest)) continue
@@ -388,11 +450,13 @@ export function dedupInstructionFilesByDirectory(files: LoadedInstructionFile[])
  * @param options - discovery, source-size, byte-budget, and cancellation configuration.
  * @param fileSystem - optional provider used instead of host filesystem reads.
  * @returns rendered baseline context, or undefined when nothing can be loaded.
+ * @throws the original root-marker metadata error or cancellation reason when
+ * discovery cannot identify the project root.
  */
 export async function loadBaselineInstructions(
   options: LoadOptions,
   fileSystem?: FileSystem,
-): Promise<RenderedWorkspaceContext | undefined> {
+): Promise<RenderedAgentInstructions | undefined> {
   return (await loadBaselineInstructionSet(options, fileSystem))?.rendered
 }
 
@@ -422,20 +486,22 @@ export async function loadBaselineInstructionSet(
       })
     }
   }
-  const deduped = dedupInstructionFilesByDirectory(loaded)
-  if (deduped.length === 0) {
+  const kept = dedupInstructionFilesByCandidateGroup(loaded)
+  if (kept.length === 0) {
     if (options.replacePreviousBaseline !== true) return undefined
-    const { rendered, included } = renderWorkspaceInstructionSet([], {
+    const { rendered, included } = renderAgentInstructionSet([], {
       maxBytes: config.maxBytes,
       replacePreviousBaseline: true,
     })
     return {
       rendered,
       observed: [],
+      deduped: [],
       included,
     }
   }
-  const { rendered, included } = renderWorkspaceInstructionSet(deduped, {
+  const keptPaths = new Set(kept.map(file => file.absolutePath))
+  const { rendered, included } = renderAgentInstructionSet(kept, {
     maxBytes: config.maxBytes,
     ...options.replacePreviousBaseline === undefined
       ? {}
@@ -444,7 +510,31 @@ export async function loadBaselineInstructionSet(
   return {
     rendered,
     observed: loaded,
+    deduped: loaded.filter(file => !keptPaths.has(file.absolutePath)),
     included,
+  }
+}
+
+/**
+ * Resolve the file and display paths for one logical instruction candidate.
+ * @param scope - candidate scope key containing its directory and file name.
+ * @param projectRoot - root used for project-relative candidates.
+ * @param resolved - normalized homes used for user-global candidates.
+ * @returns the absolute and model-facing paths for the candidate.
+ * @internal
+ */
+export function scopeInstructionFile(
+  scope: string,
+  projectRoot: string,
+  resolved: ResolvedDiscoveryConfig,
+): InstructionFile {
+  const { directory, candidateName } = decodeScopeKey(scope)
+  const globalRoot = userGlobalRoots(resolved).find(root => root.directory === directory)
+  const dir = globalRoot?.home ?? (directory === '.' ? projectRoot : join(projectRoot, directory))
+  const absolutePath = join(dir, candidateName)
+  return {
+    absolutePath,
+    displayPath: globalRoot === undefined ? relativeDisplay(projectRoot, absolutePath) : `${globalRoot.display}/${candidateName}`,
   }
 }
 
@@ -464,18 +554,14 @@ export async function probeScopeInstruction(
   fileSystem: FileSystem,
   signal?: AbortSignal,
 ): Promise<ScopeInstructionProbe> {
-  const { directory, candidateName } = decodeScopeKey(scope)
-  const dir = directory === USER_GLOBAL_DIRECTORY
-    ? resolved.dshHome
-    : directory === '.' ? projectRoot : join(projectRoot, directory)
-  const absolutePath = join(dir, candidateName)
+  const candidate = scopeInstructionFile(scope, projectRoot, resolved)
   // resolve() follows a final-component symlink; stat then classifies the target.
   // A non-file target (missing, or a link to a directory) is a confirmed absence;
   // only a provider exception is reported as unavailable.
   let target: FsTarget
   let info: FsInfo | undefined
   try {
-    target = await fileSystem.resolve(absolutePath, signalOptions(signal))
+    target = await fileSystem.resolve(candidate.absolutePath, signalOptions(signal))
     info = await fileSystem.stat(target, signal)
   } catch {
     signal?.throwIfAborted()
@@ -483,8 +569,7 @@ export async function probeScopeInstruction(
   }
   if (info?.type !== 'file') return { kind: 'absent' }
   const file: ProbedInstructionFile = {
-    absolutePath,
-    displayPath: directory === USER_GLOBAL_DIRECTORY ? userGlobalDisplayPath(resolved.dshHome) : relativeDisplay(projectRoot, absolutePath),
+    ...candidate,
     target,
     version: info.version,
     ...info.size === undefined ? {} : { size: info.size },
@@ -514,8 +599,4 @@ export async function readScopeInstruction(
     content,
     version: file.version,
   }
-}
-
-function userGlobalDisplayPath(dshHome: string): string {
-  return `${dshHomeDisplay(dshHome)}/AGENTS.md`
 }

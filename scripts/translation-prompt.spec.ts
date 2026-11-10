@@ -16,7 +16,7 @@ const document = readFileSync(join(root, 'docs/i18n/translation-prompt.md'), 'ut
 const terminology = '| English | 中文 |\n|---|---|\n| agent | agent |'
 
 const retainedExamples = [
-  ['### Colloquial verb → Professional verb', 'The repo pins bun@1.4.0 in package.json', '该仓库在 package.json 中固定使用 bun@1.4.0'],
+  ['### Colloquial verb → Professional verb', 'The repo pins bun@11.7.0 in package.json', '该仓库在 package.json 中固定使用 bun@11.7.0'],
   ['### Run-on sentence → Natural phrasing with pause', 'Read docs/architecture.md before changing anything under packages/.', '在修改 packages/ 目录下的任何内容之前，请先阅读 docs/architecture.md。'],
   ['### Stiff passive voice → Active and natural', 'a green gate means the pair was confirmed consistent at these exact contents, not that the confirmation was sound.', '门禁通过意味着这组文档在当前内容上的一致性得到了确认，不代表确认本身正确可靠。'],
   ['### Invented word → Natural expression', 'A sidecar record of both blob hashes makes consistency checkable', '伴随记录保存两侧 blob hash，使一致性可检查'],
@@ -58,6 +58,10 @@ describe('translation prompt rendering', () => {
     expect(rendered).toContain('Markdown emphasis markers do not create a word boundary')
     expect(rendered).toContain('Never invent responsibility merely to avoid a passive construction')
     expect(rendered).toContain('Never vary a terminology-table form, defined concept, or contract verb merely for stylistic variety')
+    expect(rendered).toContain('Chinese output uses its `.zh.md` path')
+    expect(rendered).toContain('belongs to the active bilingual corpus')
+    expect(rendered).toContain('a missing counterpart in that corpus is an error')
+    expect(rendered).toContain('exact query/fragment suffix')
     expect(rendered).toContain('Return exactly three raw XML sections')
   })
 

@@ -1,0 +1,39 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../core/system-prompt"
+    },
+    {
+      "path": "../../util/timeout"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../session/working-directory"
+    },
+    {
+      "path": "../retrieval"
+    }
+  ]
+}

@@ -1,8 +1,15 @@
 /** Read-only Host plugin inventory registered into Web Settings. */
 
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type {} from '@deepseek-ai/dsh-client-modules/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: pulls the 'settings.agentPreset' LocaleNamespaceMap merge, whose
+// dictionaries the shipped-preset name resolution below reads.
+import type {} from '@deepseek-ai/dsh-client-ui-agent-preset/client'
+// Inline-safe shared fold: shipped ids map to dictionary keys in one home.
+import { presetDisplayText } from '@deepseek-ai/dsh-agent-preset-registry/display'
 import { PluginInventorySettingsTab, type PluginInventorySettingsTabInjected } from './PluginInventorySettingsTab.tsx'
 import { en, zh, type PluginInventoryLocaleKey } from './locales.ts'
 
@@ -20,7 +27,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const NS = 'settings.pluginInventory'
 
 /** Services required by the Settings registration and generated Remote face. */
-export const inject = ['slots', 'locale', 'remote', 'remote.pluginInventory']
+export const inject = ['slots', 'locale', 'remote', 'remote.pluginInventory', 'modules']
 
 /** Contribute the lazy inventory tab to the Plugins settings section. */
 export function apply(ctx: ClientContext): void {
@@ -34,17 +41,17 @@ export function apply(ctx: ClientContext): void {
     }
     return result.value
   }
-  const setEnabled: PluginInventorySettingsTabInjected['setEnabled'] = async (entryId, enabled) => {
-    const remote = ctx.remote.pluginInventory as unknown as {
-      setEnabled: (id: string, en: boolean) => Promise<{ ok: boolean; value: { ok: boolean; message?: string }; error: { code: string; message: string } }>
-    }
-    const result = await remote.setEnabled(entryId, enabled)
-    if (!result.ok) {
-      return { ok: false, message: `${result.error.code}: ${result.error.message}` }
-    }
-    return result.value as { ok: boolean; message?: string }
-  }
-  const injected = (): PluginInventorySettingsTabInjected => ({ list, setEnabled })
+  // Resolved per call over ui-agent-preset's dictionaries, so a language
+  // switch re-resolves shipped names; user-authored metadata passes through.
+  const agentPresetCopy = ctx.locale.bind('settings.agentPreset')
+  const presetName: PluginInventorySettingsTabInjected['presetName'] = preset =>
+    presetDisplayText(preset, agentPresetCopy).name
+  const injected = (): PluginInventorySettingsTabInjected => ({
+    list, presetName,
+    resolveText: text => ctx.locale.resolveText(text),
+    hooks: { clientSync: ctx.modules.entries.state },
+    retryClient: () => { void ctx.modules.entries.retry().catch((error: unknown) => { ctx.logger.error(error) }) },
+  })
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
